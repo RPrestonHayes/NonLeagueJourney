@@ -34,7 +34,7 @@ const leagueTableContainer = document.getElementById('leagueTable');
 const fixturesListContainer = document.getElementById('fixturesList');
 const committeeListContainer = document.getElementById('committeeList');
 const clubHistoryListContainer = document.getElementById('clubHistoryList');
-const financeBalanceDisplay = document.getElementById('financeBalanceDisplay');
+const financeBalanceDisplay = document.getElementById('financeBalanceDisplay'); // Corrected ID reference
 const opponentListCustomization = document.getElementById('opponentListCustomization');
 
 
@@ -45,8 +45,11 @@ const opponentListCustomization = document.getElementById('opponentListCustomiza
  */
 export function renderGameScreen(screenId) {
     // Hide all game screens and modals first
-    gameScreens.forEach(screen => screen.style.display = 'none');
-    modalOverlay.style.display = 'none'; // Ensure generic modal is hidden
+    gameScreens.forEach(screen => {
+        screen.style.display = 'none';
+        screen.classList.remove('active'); // IMPORTANT: Remove 'active' class from all screens
+    });
+    modalOverlay.style.display = 'none';
     newGameModal.style.display = 'none';
     opponentCustomizationModal.style.display = 'none';
     loadingScreen.style.display = 'none';
@@ -55,6 +58,8 @@ export function renderGameScreen(screenId) {
     const targetScreen = document.getElementById(screenId);
     if (targetScreen) {
         targetScreen.style.display = 'block';
+        targetScreen.classList.add('active'); // IMPORTANT: Add 'active' class to the target screen
+
         // Add active class to nav button if it corresponds to a main screen
         document.querySelectorAll('.nav-btn').forEach(btn => {
             if (btn.dataset.screen + 'Screen' === screenId) {
@@ -72,11 +77,15 @@ export function renderGameScreen(screenId) {
  * Shows the dedicated loading screen.
  */
 export function showLoadingScreen() {
-    gameScreens.forEach(screen => screen.style.display = 'none');
+    gameScreens.forEach(screen => {
+        screen.style.display = 'none';
+        screen.classList.remove('active'); // Ensure active is removed
+    });
     modalOverlay.style.display = 'none';
     newGameModal.style.display = 'none';
     opponentCustomizationModal.style.display = 'none';
     loadingScreen.style.display = 'flex';
+    loadingScreen.classList.add('active'); // Loading screen is also "active"
 }
 
 /**
@@ -84,6 +93,7 @@ export function showLoadingScreen() {
  */
 export function hideLoadingScreen() {
     loadingScreen.style.display = 'none';
+    loadingScreen.classList.remove('active'); // Remove active
 }
 
 
@@ -255,6 +265,7 @@ export function renderHomeScreen(gameState) {
  * @param {Array<object>} players - Array of player objects.
  */
 export function renderSquadScreen(players) {
+    console.log("DEBUG: renderSquadScreen received players:", players);
     let tableHTML = `
         <table class="data-table">
             <thead>
@@ -310,17 +321,16 @@ function calculateOverallPlayerRating(attributes) {
     let sum = 0;
     let count = 0;
     for (const key in attributes) {
-        if (attributes.hasOwnProperty(key)) { // Ensure it's own property
+        if (attributes.hasOwnProperty(key)) {
             if (key !== 'GK') {
                  sum += attributes[key];
                  count++;
             }
         }
     }
-    if (attributes.GK && count > 0) { // If it's a GK, prioritize GK attribute
-        // Basic weighting for GK, adjust sum and count
+    if (attributes.GK && count > 0) {
         return Math.round((attributes.GK * 3 + sum) / (count + 3));
-    } else if (attributes.GK && count === 0) { // If only GK attribute and no others
+    } else if (attributes.GK && count === 0) {
         return Math.round(attributes.GK);
     }
     return count > 0 ? Math.round(sum / count) : 0;
@@ -332,6 +342,7 @@ function calculateOverallPlayerRating(attributes) {
  * @param {object} facilities - The facilities object from playerClub.
  */
 export function renderFacilitiesScreen(facilities) {
+    console.log("DEBUG: renderFacilitiesScreen received facilities:", facilities);
     let tableHTML = `
         <table class="data-table">
             <thead>
@@ -369,7 +380,15 @@ export function renderFacilitiesScreen(facilities) {
  * @param {object} finances - The finances object from playerClub.
  */
 export function renderFinancesScreen(finances) {
-    financeBalanceDisplay.textContent = `£${finances.balance.toFixed(2)}`;
+    console.log("DEBUG: renderFinancesScreen received finances:", finances);
+    // Ensure the ID of the balance display is correct, it was `financeBalanceDisplay` in my previous HTML
+    const financeBalanceElement = document.getElementById('financeBalanceDisplay');
+    if (financeBalanceElement) {
+        financeBalanceElement.textContent = `£${finances.balance.toFixed(2)}`;
+    } else {
+        console.warn("DEBUG: financeBalanceDisplay element not found.");
+    }
+
 
     let tableHTML = `
         <table class="data-table">
@@ -385,7 +404,6 @@ export function renderFinancesScreen(finances) {
     `;
 
     if (finances.transactions && finances.transactions.length > 0) {
-        // Show most recent transactions first
         finances.transactions.slice().reverse().forEach(transaction => {
             tableHTML += `
                 <tr>
@@ -412,6 +430,7 @@ export function renderFinancesScreen(finances) {
  * @param {Array<object>} leagueTableData - Array of club objects with league stats.
  */
 export function renderLeagueScreen(leagueTableData) {
+    console.log("DEBUG: renderLeagueScreen received leagueTableData:", leagueTableData);
     let tableHTML = `
         <table class="data-table">
             <thead>
@@ -464,6 +483,7 @@ export function renderLeagueScreen(leagueTableData) {
  * @param {Array<object>} matchSchedule - Array of match objects.
  */
 export function renderFixturesScreen(matchSchedule) {
+    console.log("DEBUG: renderFixturesScreen received matchSchedule:", matchSchedule);
     let tableHTML = `
         <table class="data-table">
             <thead>
@@ -506,6 +526,7 @@ export function renderFixturesScreen(matchSchedule) {
  * @param {Array<object>} committeeMembers - Array of committee member objects.
  */
 export function renderCommitteeScreen(committeeMembers) {
+    console.log("DEBUG: renderCommitteeScreen received committeeMembers:", committeeMembers);
     let tableHTML = `
         <table class="data-table">
             <thead>
@@ -548,6 +569,7 @@ export function renderCommitteeScreen(committeeMembers) {
  * @param {Array<object>} clubHistory - Array of historical season summaries.
  */
 export function renderHistoryScreen(clubHistory) {
+    console.log("DEBUG: renderHistoryScreen received clubHistory:", clubHistory);
     let tableHTML = `
         <table class="data-table">
             <thead>
@@ -602,10 +624,7 @@ export function updateWeeklyTasksDisplay(tasks, availableHours) {
 
     if (tasks && tasks.length > 0) {
         tasks.forEach(task => {
-            // Task is now "all or nothing", represented by a button
             const listItem = document.createElement('li');
-            // Add a data-task-id to the button so eventHandlers can identify it
-            // Add a class for styling if button is active/inactive
             listItem.innerHTML = `
                 <span>${task.description} (${task.baseHours} hrs)</span>
                 <button class="complete-task-btn ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" ${task.completed || availableHours < task.baseHours ? 'disabled' : ''}>

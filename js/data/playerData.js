@@ -34,7 +34,7 @@ export function initializePlayerSquad(playerClubId) {
         player.currentClubId = playerClubId;
         currentSquad.push(player);
     }
-    console.log("Initial player squad generated:", currentSquad);
+    console.log("DEBUG: Initial player squad generated internally (in playerData):", currentSquad.length, currentSquad); // NEW DEBUG
     return [...currentSquad]; // Return a copy
 }
 
@@ -42,9 +42,9 @@ export function initializePlayerSquad(playerClubId) {
  * Sets the current squad. Used when loading a game or when a new squad array is generated.
  * @param {Array<object>} squad - The new squad array to set.
  */
-export function setSquad(squad) { // ADDED EXPORT KEYWORD HERE
-    currentSquad = [...squad]; // Ensure we're working with a new array reference
-    console.log("Squad set/updated in playerData module.");
+export function setSquad(squad) {
+    currentSquad = [...squad];
+    console.log("DEBUG: Squad set/updated in playerData module. Current internal squad size:", currentSquad.length, currentSquad); // NEW DEBUG
 }
 
 
@@ -57,7 +57,7 @@ export function setSquad(squad) { // ADDED EXPORT KEYWORD HERE
 export function addPlayer(player, playerClubId) {
     player.currentClubId = playerClubId;
     currentSquad = [...currentSquad, player];
-    console.log("Player added to squad:", player.name);
+    console.log("DEBUG: Player added to squad:", player.name); // NEW DEBUG
     return [...currentSquad];
 }
 
@@ -70,9 +70,9 @@ export function removePlayer(playerId) {
     const originalLength = currentSquad.length;
     currentSquad = currentSquad.filter(p => p.id !== playerId);
     if (currentSquad.length < originalLength) {
-        console.log(`Player ${playerId} removed from squad.`);
+        console.log(`DEBUG: Player ${playerId} removed from squad.`); // NEW DEBUG
     } else {
-        console.warn(`Player ${playerId} not found in squad for removal.`);
+        console.warn(`DEBUG: Player ${playerId} not found in squad for removal.`); // NEW DEBUG
     }
     return [...currentSquad];
 }
@@ -91,6 +91,7 @@ export function getPlayer(playerId) {
  * @returns {Array<object>} A copy of the current squad array.
  */
 export function getSquad() {
+    console.log("DEBUG: getSquad() called. Returning squad of size:", currentSquad.length, currentSquad); // NEW DEBUG
     return [...currentSquad];
 }
 
@@ -103,17 +104,17 @@ export function getSquad() {
 export function updatePlayerStats(playerId, updates) {
     const playerIndex = currentSquad.findIndex(p => p.id === playerId);
     if (playerIndex === -1) {
-        console.warn(`Player ${playerId} not found for stats update.`);
+        console.warn(`DEBUG: Player ${playerId} not found for stats update.`); // NEW DEBUG
         return [...currentSquad];
     }
 
     const updatedSquad = [...currentSquad];
-    const playerToUpdate = { ...updatedSquad[playerIndex] }; // Shallow copy for modification
+    const playerToUpdate = { ...updatedSquad[playerIndex] };
 
     for (const key in updates) {
         if (playerToUpdate.currentSeasonStats.hasOwnProperty(key)) {
             playerToUpdate.currentSeasonStats[key] += updates[key];
-        } else if (playerToUpdate.status.hasOwnProperty(key)) { // For status updates like fitness, morale directly
+        } else if (playerToUpdate.status.hasOwnProperty(key)) {
             playerToUpdate.status[key] = updates[key];
         }
     }
@@ -135,7 +136,7 @@ export function updatePlayerMorale(playerId, change) {
     const updatedSquad = [...currentSquad];
     const playerToUpdate = { ...updatedSquad[playerIndex] };
 
-    playerToUpdate.status.morale = Math.max(0, Math.min(100, playerToUpdate.status.morale + change)); // Cap between 0 and 100
+    playerToUpdate.status.morale = Math.max(0, Math.min(100, playerToUpdate.status.morale + change));
     updatedSquad[playerIndex] = playerToUpdate;
     currentSquad = updatedSquad;
     return [...currentSquad];
@@ -159,14 +160,14 @@ export function resetPlayerSeasonStats() {
         },
         status: {
             ...player.status,
-            fitness: 100, // Players regain full fitness in off-season
+            fitness: 100,
             injuryStatus: 'Fit',
             injuryReturnDate: null,
             suspended: false,
             suspensionGames: 0
         }
     }));
-    console.log("Player season stats reset.");
+    console.log("DEBUG: Player season stats reset."); // NEW DEBUG
     return [...currentSquad];
 }
 
@@ -174,8 +175,4 @@ export function resetPlayerSeasonStats() {
 function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
-
-// NOTE: This module does NOT manage the global `gameState`.
-// Its functions return updated arrays/objects that `main.js` will assign to `gameState.playerClub.squad`.
-// This design promotes modularity and avoids circular dependencies or unexpected state changes.
 

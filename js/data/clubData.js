@@ -63,13 +63,10 @@ const BASE_FACILITIES_PROPERTIES = {
         maintenanceCost: 2,
         capacityContribution: 0 // Enables controlled entry for tickets
     }
-    // More facilities can be added here as the game progresses (e.g., SEATED_STAND, FLOODLIGHTS)
 };
 
-// --- Player Club State (Internal representation) ---
-// This module will operate on an object passed to its functions, not maintain a global internal state.
-// The functions will return modified objects for Main.gameState to update.
-
+// Internal reference for the club's committee
+let currentCommittee = [];
 
 // --- Club Creation ---
 /**
@@ -78,23 +75,21 @@ const BASE_FACILITIES_PROPERTIES = {
  * @returns {object} The newly created player club object.
  */
 export function createPlayerClub(details) {
-    const clubId = dataGenerator.generateUniqueId('PC'); // Player Club ID
+    const clubId = dataGenerator.generateUniqueId('PC');
 
-    // Initialize facilities based on BASE_FACILITIES_PROPERTIES
     const initialFacilities = {};
     for (const key in BASE_FACILITIES_PROPERTIES) {
-        initialFacilities[key] = { ...BASE_FACILITIES_PROPERTIES[key] }; // Deep copy
-        // Calculate initial upgrade cost based on current level (initially level 1 cost for new facilities)
+        initialFacilities[key] = { ...BASE_FACILITIES_PROPERTIES[key] };
         initialFacilities[key].currentUpgradeCost = calculateUpgradeCost(initialFacilities[key].baseUpgradeCost, initialFacilities[key].level);
     }
 
-    // Initialize committee members
     const initialCommittee = [
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.SEC),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.TREAS),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.GRNDS),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.SOC)
     ];
+    currentCommittee = initialCommittee; // Set internal state on creation
 
     return {
         id: clubId,
@@ -107,16 +102,18 @@ export function createPlayerClub(details) {
         },
         finances: {
             balance: Constants.DEFAULT_STARTING_BALANCE,
-            transactions: [] // Empty transaction log initially
+            transactions: []
         },
         facilities: initialFacilities,
-        committee: initialCommittee,
-        reputation: 10, // Initial reputation for grassroots club
-        fanbase: 0, // Very small initial fanbase
-        customizationHistory: { // Track if initial free changes used
+        committee: initialCommittee, // Stored directly in club object for consistency
+        reputation: 10,
+        fanbase: 0,
+        customizationHistory: {
             nameChanges: 0,
             colorChanges: 0
-        }
+        },
+        leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }, // Initialize here
+        finalLeaguePosition: null
     };
 }
 
@@ -157,8 +154,7 @@ export function addTransaction(currentFinances, amount, type, description) {
  * @returns {number} The calculated upgrade cost.
  */
 function calculateUpgradeCost(baseCost, currentLevel) {
-    // Example: cost increases by 50% for each level
-    return baseCost * Math.pow(1.5, currentLevel - 1); // currentLevel - 1 because baseCost is for level 1->2
+    return baseCost * Math.pow(1.5, currentLevel - 1);
 }
 
 /**
@@ -176,18 +172,19 @@ export function upgradeFacility(currentFacilities, facilityKey) {
         console.error(`Facility key "${facilityKey}" not found.`);
         return null;
     }
-    if (facility.level >= facility.maxLevel) {
+    // Assume maxLevel is defined per facility in BASE_FACILITIES_PROPERTIES if needed,
+    // otherwise use a generic max like 5 or adjust logic.
+    // For now, level < 4 is max check in committeeLogic.js
+    if (facility.level >= 5) { // Generic max level for now
         console.warn(`${facility.name} is already at max level.`);
         return null;
     }
 
-    // Create a deep copy to ensure immutability
     const updatedFacilities = JSON.parse(JSON.stringify(currentFacilities));
     const updatedFacility = updatedFacilities[facilityKey];
 
     updatedFacility.level++;
     updatedFacility.status = getFacilityStatusByLevel(facilityKey, updatedFacility.level);
-    // Recalculate upgrade cost for the *next* level
     updatedFacility.currentUpgradeCost = calculateUpgradeCost(updatedFacility.baseUpgradeCost, updatedFacility.level);
 
     return updatedFacilities;
@@ -220,14 +217,33 @@ export function getFacilityStatusByLevel(facilityKey, level) {
 
 // --- Committee Management ---
 /**
+ * Sets the current committee. Used when loading a game.
+ * @param {Array<object>} committee - The new committee array to set.
+ */
+export function setCommittee(committee) { // ADDED EXPORT KEYWORD HERE
+    currentCommittee = [...committee];
+    console.log("Committee set/updated in clubData module.");
+}
+
+/**
+ * Retrieves the current committee.
+ * @returns {Array<object>} A copy of the current committee array.
+ */
+export function getCommittee() { // Added this export for renderers to get data
+    return [...currentCommittee];
+}
+
+/**
  * Adds a new committee member to the club's committee.
  * Returns a new committee array.
- * @param {Array<object>} currentCommittee - The current array of committee members.
+ * @param {Array<object>} currentCommitteeArray - The current array of committee members (from gameState.playerClub.committee).
  * @param {object} memberObject - The committee member object to add.
  * @returns {Array<object>} A new array with the added committee member.
  */
-export function addCommitteeMember(currentCommittee, memberObject) {
-    return [...currentCommittee, memberObject];
+export function addCommitteeMember(currentCommitteeArray, memberObject) {
+    // Note: currentCommitteeArray is passed from gameState, ensuring updates
+    currentCommittee = [...currentCommitteeArray, memberObject];
+    return currentCommittee; // Return the updated internal state
 }
 
 // --- Club Identity Management ---
@@ -272,13 +288,11 @@ export function updateClubKitColors(currentPlayerClub, newPrimaryColor, newSecon
  */
 export function calculateTotalCapacity(facilities) {
     let totalCapacity = 0;
-    // Initial basic standing capacity even without specific stands
     totalCapacity += 50; // Base capacity for a field
 
     if (facilities[Constants.FACILITIES.COVERED_STAND] && facilities[Constants.FACILITIES.COVERED_STAND].level > 0) {
         totalCapacity += facilities[Constants.FACILITIES.COVERED_STAND].capacityContribution * facilities[Constants.FACILITIES.COVERED_STAND].level;
     }
-    // Add other facilities like seated stands here later
     return totalCapacity;
 }
 
@@ -291,9 +305,8 @@ export function calculateTotalMaintenanceCost(facilities) {
     let totalCost = 0;
     for (const key in facilities) {
         const facility = facilities[key];
-        // Only count maintenance for built facilities (level > 0)
         if (facility.level > 0) {
-            totalCost += facility.maintenanceCost * facility.level; // Cost increases with level
+            totalCost += facility.maintenanceCost * facility.level;
         }
     }
     return totalCost;
@@ -308,20 +321,16 @@ export function calculateTotalMaintenanceCost(facilities) {
 export function calculateMatchDayRevenue(facilities, currentFanbase) {
     let revenue = 0;
 
-    // Revenue from snack bar
     if (facilities[Constants.FACILITIES.SNACKBAR] && facilities[Constants.FACILITIES.SNACKBAR].level > 0) {
-        // Base revenue per match + bonus based on level and fanbase
         revenue += facilities[Constants.FACILITIES.SNACKBAR].revenuePerMatch * facilities[Constants.FACILITIES.SNACKBAR].level;
-        revenue += (currentFanbase / 10) * facilities[Constants.FACILITIES.SNACKBAR].level; // Example: more fans, more revenue
+        revenue += (currentFanbase / 10) * facilities[Constants.FACILITIES.SNACKBAR].level;
     }
 
-    // Revenue from tickets (only if turnstiles exist)
     if (facilities[Constants.FACILITIES.TURNSTILES] && facilities[Constants.FACILITIES.TURNSTILES].level > 0) {
-        const ticketPrice = 3; // Example ticket price
+        const ticketPrice = 3;
         revenue += Math.min(currentFanbase, calculateTotalCapacity(facilities)) * ticketPrice;
     }
 
     return revenue;
 }
-
 
