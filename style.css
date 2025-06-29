@@ -273,6 +273,7 @@ body {
     justify-content: center;
     align-items: center;
     z-index: 1000; /* Ensure it's on top */
+    overflow-y: auto; /* Allow scrolling for the entire overlay if needed, though modal-content should handle it */
 }
 
 .modal-content {
@@ -284,6 +285,10 @@ body {
     max-width: 500px; /* Max width for larger screens */
     box-sizing: border-box;
     position: relative;
+
+    /* --- NEW: Modal Content Scrolling --- */
+    max-height: 90vh; /* Max height relative to viewport height */
+    overflow-y: auto; /* Enable vertical scrolling */
 }
 
 .modal-content h3 {
@@ -383,5 +388,82 @@ body {
     .modal-content {
         padding: 24px;
     }
+}
+
+/* --- Loading Screen Specific Styles --- */
+.loading-screen-overlay {
+    position: fixed; /* Fixed to cover the whole viewport */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8); /* Darker overlay for loading */
+    color: var(--surface-color);
+    display: none; /* Hidden by default, JS will show/hide */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001; /* Higher than other modals */
+    text-align: center;
+}
+
+.loading-content {
+    background-color: rgba(0, 0, 0, 0.7); /* Slightly lighter background for the content box */
+    padding: 30px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.loading-content p {
+    font-size: 1.2em;
+    margin-top: 20px;
+    color: var(--secondary-color);
+}
+
+/* Spinner Animation */
+.spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid var(--accent-color); /* Use accent color for spinner */
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- Opponent Customization Specific Styles --- */
+.opponent-custom-item {
+    background-color: var(--background-color);
+    padding: var(--padding-md);
+    border-radius: var(--border-radius);
+    margin-bottom: var(--margin-md);
+    border: 1px solid var(--border-color);
+}
+
+.opponent-custom-item h4 {
+    margin-top: 0;
+    margin-bottom: var(--padding-md);
+    color: var(--primary-color);
+}
+
+.opponent-custom-item .color-pickers {
+    display: flex;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.opponent-custom-item .color-pickers > div {
+    flex: 1; /* Make color pickers take equal space */
+}
+
+.opponent-custom-item input[type="color"] {
+    width: 100%; /* Fill available space */
 }
 

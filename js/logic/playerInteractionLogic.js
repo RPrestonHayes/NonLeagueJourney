@@ -9,7 +9,7 @@ import * as Constants from '../utils/constants.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
 // Import Main to update game state after interaction if necessary, or trigger UI update
-import * * as Main from '../main.js';
+import * as Main from '../main.js';
 
 // --- Helper Functions ---
 function getRandomInt(min, max) {

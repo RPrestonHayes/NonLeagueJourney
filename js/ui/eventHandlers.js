@@ -9,6 +9,9 @@
 import * as Main from '../main.js';
 // Import rendering functions to interact with UI
 import * as renderers from './renderers.js';
+// Import Constants to access task types
+import * as Constants from '../utils/constants.js';
+
 
 // --- Cached DOM Elements ---
 const navButtons = document.querySelectorAll('.nav-btn');
@@ -80,12 +83,12 @@ export function initGlobalListeners() {
         saveOpponentCustomizationBtn.addEventListener('click', handleSaveOpponentCustomization);
     }
 
-    // --- Weekly Tasks Input Listener (using event delegation) ---
-    // Listen on the parent element (weeklyTasksList) for changes on its children inputs
+    // --- Weekly Tasks Button Listener (using event delegation) ---
+    // Listen on the parent element (weeklyTasksList) for clicks on its children buttons
     if (weeklyTasksList) {
-        weeklyTasksList.addEventListener('input', (event) => {
-            if (event.target.classList.contains('task-hours-input')) {
-                handleTaskHoursInput(event.target);
+        weeklyTasksList.addEventListener('click', (event) => {
+            if (event.target.classList.contains('complete-task-btn')) {
+                handleCompleteTask(event.target);
             }
         });
     }
@@ -108,12 +111,12 @@ function handleCreateGame() {
     const secondaryColor = secondaryColorInput.value;
 
     if (!hometown || !clubName || !clubNickname) {
-        renderers.showModal('Input Error', 'Please fill in all club details: Hometown, Club Name, and Nickname.');
+        renderers.showModal('Input Error', 'Please fill in all club details: Hometown, Club Name, and Nickname.', [{ text: 'OK', action: renderers.hideModal }]);
         return;
     }
 
     if (primaryColor === secondaryColor) {
-        renderers.showModal('Kit Color Error', 'Primary and Secondary kit colors cannot be the same. Please choose different colors.');
+        renderers.showModal('Kit Color Error', 'Primary and Secondary kit colors cannot be the same. Please choose different colors.', [{ text: 'OK', action: renderers.hideModal }]);
         return;
     }
 
@@ -126,9 +129,8 @@ function handleCreateGame() {
     };
 
     console.log("Player club details captured:", playerClubDetails);
-    renderers.renderGameScreen('loadingScreen'); // Optional: show loading screen
     Main.startNewGame(playerClubDetails); // Calls the main game initialization logic
-    renderers.hideModal(newGameModal.id); // Hide the new game modal (now handled by Main.startNewGame)
+    // The new game modal will be hidden by Main.startNewGame
 }
 
 /**
@@ -139,12 +141,13 @@ function handleSaveOpponentCustomization() {
     const customizedOpponents = [];
     const opponentItems = opponentListCustomization.querySelectorAll('.opponent-custom-item');
 
+    let isValid = true; // Flag to track overall validity
     opponentItems.forEach(item => {
-        const clubId = item.querySelector('input[id^="opponentName_"]').id.replace('opponentName_', '');
-        const nameInput = item.querySelector(`#opponentName_${clubId}`);
-        const nicknameInput = item.querySelector(`#opponentNickname_${clubId}`);
-        const primaryColorInput = item.querySelector(`#opponentPrimaryColor_${clubId}`);
-        const secondaryColorInput = item.querySelector(`#opponentSecondaryColor_${clubId}`);
+        const clubId = item.querySelector('input[data-field="name"]').dataset.clubId; // Get club ID from data attribute
+        const nameInput = item.querySelector(`input[data-field="name"][data-club-id="${clubId}"]`);
+        const nicknameInput = item.querySelector(`input[data-field="nickname"][data-club-id="${clubId}"]`);
+        const primaryColorInput = item.querySelector(`input[data-field="primaryColor"][data-club-id="${clubId}"]`);
+        const secondaryColorInput = item.querySelector(`input[data-field="secondaryColor"][data-club-id="${clubId}"]`);
 
         const newName = nameInput.value.trim();
         const newNickname = nicknameInput.value.trim();
@@ -152,12 +155,14 @@ function handleSaveOpponentCustomization() {
         const newSecondaryColor = secondaryColorInput.value;
 
         if (!newName || !newNickname) {
-            renderers.showModal('Input Error', `Please fill in name and nickname for ${nameInput.placeholder || 'an opponent club'}.`);
-            return; // Stop processing and show error
+            renderers.showModal('Input Error', `Please fill in name and nickname for an opponent club.`, [{ text: 'OK', action: renderers.hideModal }]);
+            isValid = false;
+            return; // Exit forEach early (only for this iteration)
         }
         if (newPrimaryColor === newSecondaryColor) {
-             renderers.showModal('Kit Color Error', `Primary and Secondary kit colors for ${newName} cannot be the same.`);
-             return;
+             renderers.showModal('Kit Color Error', `Primary and Secondary kit colors for ${newName} cannot be the same.`, [{ text: 'OK', action: renderers.hideModal }]);
+             isValid = false;
+             return; // Exit forEach early
         }
 
         customizedOpponents.push({
@@ -171,57 +176,37 @@ function handleSaveOpponentCustomization() {
         });
     });
 
-    if (customizedOpponents.length === opponentItems.length) {
-        // If all inputs are valid, process the customization
-        console.log("Opponents customized:", customizedOpponents);
-        // Update game state with customized opponent data
-        Main.gameState.leagues.forEach(league => {
-            league.clubs.forEach(club => {
-                const custom = customizedOpponents.find(c => c.id === club.id);
-                if (custom) {
-                    club.name = custom.name;
-                    club.nickname = custom.nickname;
-                    club.kitColors = custom.kitColors;
-                }
-            });
-        });
-        Main.gameState.opponentClubsCustomized = true; // Mark as done
-
-        renderers.hideOpponentCustomizationModal();
-        renderers.displayMessage('Rivals Customized!', 'Your league opponents are now set for the journey ahead.');
-        renderers.renderGameScreen('homeScreen'); // Go to home screen after customization
-        Main.updateUI(); // Update UI with new club names
-        Main.saveGame(); // Save after customization
+    if (isValid && customizedOpponents.length === opponentItems.length) {
+        Main.applyOpponentCustomization(customizedOpponents); // Pass to main logic
     }
 }
 
 /**
- * Handles input changes for task hours, updating the available hours display.
- * This is a placeholder for actual task assignment logic.
- * @param {HTMLInputElement} inputElement - The input element that changed.
+ * Handles the "Do Task" button click for weekly tasks.
+ * @param {HTMLButtonElement} buttonElement - The button that was clicked.
  */
-function handleTaskHoursInput(inputElement) {
-    const taskId = inputElement.dataset.taskId;
-    const assignedHours = parseInt(inputElement.value, 10);
+function handleCompleteTask(buttonElement) {
+    const taskId = buttonElement.dataset.taskId;
+    const task = Main.gameState.weeklyTasks.find(t => t.id === taskId);
 
-    // Get the current game state's available hours and tasks
-    let currentAvailableHours = Main.gameState.availableHours;
-    const taskToUpdate = Main.gameState.weeklyTasks.find(task => task.id === taskId);
+    if (task && !task.completed) {
+        if (Main.gameState.availableHours >= task.baseHours) {
+            // Deduct hours
+            Main.gameState.availableHours -= task.baseHours;
+            // Mark task as completed (handled in gameLoop.processPlayerTasks)
+            // We need to mark it here temporarily so the UI updates before advanceWeek
+            task.assignedHours = task.baseHours; // Mark as assigned
+            task.completed = true; // Mark as completed for UI state this week
 
-    if (taskToUpdate) {
-        const oldAssignedHours = taskToUpdate.assignedHours || 0;
-        const hoursDifference = assignedHours - oldAssignedHours;
-
-        if (currentAvailableHours - hoursDifference >= 0) {
-            taskToUpdate.assignedHours = assignedHours;
-            Main.gameState.availableHours -= hoursDifference;
             renderers.updateWeeklyTasksDisplay(Main.gameState.weeklyTasks, Main.gameState.availableHours);
-            // In a real scenario, you might want to save the state or update it more frequently
-            console.log(`Task ${taskId} assigned ${assignedHours} hours. Remaining: ${Main.gameState.availableHours}`);
+            renderers.displayMessage('Task Completed', `${task.description} done!`);
+            // Disable the button to prevent re-clicking
+            buttonElement.disabled = true;
+            buttonElement.textContent = 'Completed';
+            buttonElement.classList.add('completed');
+            Main.saveGame(); // Save state immediately after a task is done
         } else {
-            // Revert input value if not enough hours
-            inputElement.value = oldAssignedHours;
-            renderers.showModal('Not Enough Hours', `You only have ${currentAvailableHours} hours remaining!`);
+            renderers.showModal('Not Enough Hours', `You need ${task.baseHours} hours for this task, but only have ${Main.gameState.availableHours} remaining!`, [{ text: 'OK', action: renderers.hideModal }]);
         }
     }
 }

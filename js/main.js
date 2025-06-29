@@ -1,31 +1,50 @@
 // js/main.js
 
+console.log("DEBUG: main.js started execution.");
+
 // --- Module Imports ---
-// Import utility for managing Local Storage saves
+console.log("DEBUG: Attempting to import localStorageManager...");
 import * as localStorageManager from './utils/localStorageManager.js';
-// Import utility for generating initial game data (used indirectly via data modules now)
-// import * as dataGenerator from './utils/dataGenerator.js'; // No direct use in main.js
-// Import UI rendering functions
+console.log("DEBUG: localStorageManager imported successfully.");
+
+console.log("DEBUG: Attempting to import dataGenerator...");
+import * as dataGenerator from './utils/dataGenerator.js';
+console.log("DEBUG: dataGenerator imported successfully.");
+
+console.log("DEBUG: Attempting to import renderers...");
 import * as renderers from './ui/renderers.js';
-// Import UI event handling functions
+console.log("DEBUG: renderers imported successfully.");
+
+console.log("DEBUG: Attempting to import eventHandlers...");
 import * as eventHandlers from './ui/eventHandlers.js';
-// Import club data management
+console.log("DEBUG: eventHandlers imported successfully.");
+
+console.log("DEBUG: Attempting to import clubData...");
 import * as clubData from './data/clubData.js';
-// Import player data management
+console.log("DEBUG: clubData imported successfully.");
+
+console.log("DEBUG: Attempting to import playerData...");
 import * as playerData from './data/playerData.js';
-// Import opponent data management
+console.log("DEBUG: playerData imported successfully.");
+
+console.log("DEBUG: Attempting to import opponentData...");
 import * as opponentData from './data/opponentData.js';
-// Import league data management
+console.log("DEBUG: opponentData imported successfully.");
+
+console.log("DEBUG: Attempting to import leagueData...");
 import * as leagueData from './data/leagueData.js';
-// Import game loop logic (will be implemented next)
+console.log("DEBUG: leagueData imported successfully.");
+
+console.log("DEBUG: Attempting to import gameLoop...");
 import * as gameLoop from './logic/gameLoop.js';
-// Import constants for various game values (e.g., player positions, event types)
+console.log("DEBUG: gameLoop imported successfully.");
+
+console.log("DEBUG: Attempting to import Constants...");
 import * as Constants from './utils/constants.js';
+console.log("DEBUG: Constants imported successfully.");
 
 
 // --- Global Game State Object ---
-// This object will hold all the dynamic data for the current game session.
-// It will be serialized and saved to Local Storage.
 export let gameState = {
     playerClub: null,           // Object for the player's club
     leagues: [],                // Array of league objects, including opponent clubs (structural data)
@@ -33,14 +52,15 @@ export let gameState = {
     currentWeek: 1,             // Current week within the season
     availableHours: 0,          // Hours player has for tasks this week
     weeklyTasks: [],            // Tasks available for the player to assign hours to
-    // matchSchedule is now part of the league object
     clubHistory: [],            // Array of past season summaries for player's club
     messages: [],               // Game messages/news feed (chronological log)
     gamePhase: Constants.GAME_PHASE.SETUP, // Current phase: SETUP, WEEKLY_PLANNING, MATCH_DAY, END_OF_SEASON
-    // Flags for one-time customizations
     playerClubCustomized: false, // Player has completed initial club setup
     opponentClubsCustomized: false, // Opponent clubs in league have been customized
 };
+
+console.log("DEBUG: gameState object initialized.");
+
 
 // --- Core Game Functions ---
 
@@ -49,46 +69,37 @@ export let gameState = {
  * Attempts to load a saved game; otherwise, starts the new game setup process.
  */
 function initGame() {
-    console.log("Initializing game...");
+    console.log("DEBUG: initGame() called.");
 
-    // Set up global UI event listeners first, so UI is interactive from start
+    // Set up global UI event listeners first
+    console.log("DEBUG: Calling eventHandlers.initGlobalListeners()...");
     eventHandlers.initGlobalListeners();
+    console.log("DEBUG: eventHandlers.initGlobalListeners() returned.");
 
-    // Try to load a saved game
+    console.log("DEBUG: Attempting to load game...");
+    renderers.showLoadingScreen(); // Show loading screen while trying to load
     const loadedState = localStorageManager.loadGame();
     if (loadedState) {
-        // If a save exists, restore the gameState
+        console.log("DEBUG: Game loaded from localStorage.");
         gameState = loadedState;
-        console.log("Game loaded successfully!", gameState);
-        renderers.displayMessage('Game Loaded!', 'Continue your journey to glory.');
-
-        // Re-initialize internal data module states from loaded gameState
-        playerData.setSquad(gameState.playerClub.squad);
-        clubData.setCommittee(gameState.playerClub.committee);
-        // Opponent structural data is within gameState.leagues[0].allClubsData
-        // (Assuming single league for now, will expand later for multiple leagues)
-        opponentData.setAllOpponentClubs(gameState.leagues[0]?.allClubsData.filter(c => c.id !== gameState.playerClub.id) || []);
-
-
-        updateUI(); // Render the loaded game state to the UI
-
-        // Determine which screen to show after load
-        if (gameState.gamePhase === Constants.GAME_PHASE.SETUP && !gameState.playerClubCustomized) {
-            renderers.renderGameScreen('newGameModal');
-        } else if (gameState.gamePhase === Constants.GAME_PHASE.SETUP && !gameState.opponentClubsCustomized) {
-            renderers.renderOpponentCustomizationModal(opponentData.getAllOpponentClubs());
-        } else {
-            renderers.renderGameScreen('homeScreen'); // Default to home screen
+        renderers.displayMessage('DEBUG: Game Loaded!', 'From local storage.');
+        // Re-initialize module states from loaded gameState
+        if (gameState.playerClub) {
+            playerData.setSquad(gameState.playerClub.squad || []);
+            clubData.setCommittee(gameState.playerClub.committee || []);
+            opponentData.setAllOpponentClubs(gameState.leagues[0]?.allClubsData.filter(c => c.id !== gameState.playerClub.id) || []);
         }
-
+        updateUI();
+        renderers.hideLoadingScreen(); // Hide loading screen
+        renderers.renderGameScreen('homeScreen'); // Always go to home after load
     } else {
-        // If no save, start the new game process
-        console.log("No save game found. Starting new game setup.");
+        console.log("DEBUG: No save game found. Rendering new game modal.");
+        renderers.hideLoadingScreen(); // Hide loading screen
         renderers.renderNewGameModal(); // Show the new game setup modal
-        renderers.displayMessage('Welcome, Gaffer!', 'Time to create your club and start your Non-League Journey.');
-        // Set initial game phase
+        renderers.displayMessage('DEBUG: Welcome!', 'Please set up a new game.');
         gameState.gamePhase = Constants.GAME_PHASE.SETUP;
     }
+    console.log("DEBUG: initGame() finished.");
 }
 
 /**
@@ -97,15 +108,18 @@ function initGame() {
  * @param {object} playerClubDetails - Object containing hometown, clubName, nickname, primaryColor, secondaryColor.
  */
 export function startNewGame(playerClubDetails) {
-    console.log("Starting new game with details:", playerClubDetails);
+    console.log("DEBUG: startNewGame() called with details:", playerClubDetails);
+
+    renderers.showLoadingScreen(); // Show loading screen during game creation
 
     // 1. Initialize Player's Club
     gameState.playerClub = clubData.createPlayerClub(playerClubDetails);
-    gameState.playerClubCustomized = true; // Mark player club setup as complete
+    gameState.playerClubCustomized = true;
 
     // 2. Initialize Player Squad and attach to playerClub
-    gameState.playerClub.squad = playerData.initializePlayerSquad(gameState.playerClub.id);
-    playerData.setSquad(gameState.playerClub.squad); // Update playerData's internal state
+    const initialSquad = playerData.initializePlayerSquad(gameState.playerClub.id);
+    gameState.playerClub.squad = initialSquad; // Assign to gameState
+    playerData.setSquad(initialSquad); // Ensure playerData's internal state is also updated
 
     // 3. Generate initial league structure and opponent clubs
     const { leagues, clubs } = leagueData.generateInitialLeagues(
@@ -113,26 +127,29 @@ export function startNewGame(playerClubDetails) {
         gameState.playerClub.id,
         gameState.playerClub.name
     );
-    gameState.leagues = leagues; // Contains league metadata and all clubs in 'allClubsData' property
-    opponentData.setAllOpponentClubs(clubs.filter(c => c.id !== gameState.playerClub.id)); // Set opponents in their module
+    gameState.leagues = leagues;
+    opponentData.setAllOpponentClubs(clubs.filter(c => c.id !== gameState.playerClub.id));
 
     // 4. Set Initial Game State & Phase
     gameState.currentSeason = 1;
     gameState.currentWeek = 1;
     gameState.availableHours = Constants.WEEKLY_BASE_HOURS;
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
-    gameState.clubHistory = []; // Ensure empty for new game
+    gameState.clubHistory = [];
     gameState.messages = [{ week: 0, text: 'Welcome to your Non-League Journey!' }];
-    gameState.gamePhase = Constants.GAME_PHASE.OPPONENT_CUSTOMIZATION; // Transition to opponent customization phase
+    gameState.gamePhase = Constants.GAME_PHASE.OPPONENT_CUSTOMIZATION;
 
     // Save initial game state before opponent customization
     saveGame();
 
     // Render opponent customization modal
+    renderers.hideLoadingScreen();
     renderers.hideModal(); // Hide new game modal
     renderers.renderOpponentCustomizationModal(opponentData.getAllOpponentClubs());
     renderers.displayMessage('Your club is born!', 'Now, customize your league rivals before the season kicks off.');
+    console.log("DEBUG: startNewGame() finished.");
 }
+
 
 /**
  * Applies customization changes to opponent clubs and transitions to pre-season.
@@ -140,7 +157,9 @@ export function startNewGame(playerClubDetails) {
  * @param {Array<object>} customizedOpponents - Array of objects with id, name, nickname, kitColors for customized opponents.
  */
 export function applyOpponentCustomization(customizedOpponents) {
-    console.log("Applying opponent customization:", customizedOpponents);
+    console.log("DEBUG: applyOpponentCustomization() called with:", customizedOpponents);
+
+    renderers.showLoadingScreen(); // Show loading screen during processing
 
     // Update the league's allClubsData with customized opponent details
     const currentLeague = gameState.leagues[0]; // Assuming one league for now
@@ -148,12 +167,16 @@ export function applyOpponentCustomization(customizedOpponents) {
         currentLeague.allClubsData.forEach(club => {
             const custom = customizedOpponents.find(c => c.id === club.id);
             if (custom) {
-                club.name = custom.name;
-                club.nickname = custom.nickname;
-                club.kitColors = custom.kitColors;
+                // Update the club object in allClubsData directly
+                Object.assign(club, {
+                    name: custom.name,
+                    nickname: custom.nickname,
+                    kitColors: custom.kitColors
+                });
             }
         });
         // Also update the opponentData module's internal state
+        // Filter out playerClub from allClubsData before setting opponents
         opponentData.setAllOpponentClubs(currentLeague.allClubsData.filter(c => c.id !== gameState.playerClub.id));
     }
 
@@ -163,24 +186,26 @@ export function applyOpponentCustomization(customizedOpponents) {
     // Re-generate weekly tasks to reflect any potential changes based on game phase
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
 
+    renderers.hideLoadingScreen();
     renderers.hideOpponentCustomizationModal();
     renderers.displayMessage('Rivals Customized!', 'Your league opponents are now set for the journey ahead. Welcome to pre-season!');
     renderers.renderGameScreen('homeScreen'); // Go to home screen
-    updateUI(); // Update UI with new club names and current game phase
+    updateUI(); // Update UI with new club names
     saveGame(); // Save after customization
+    console.log("DEBUG: applyOpponentCustomization() finished.");
 }
 
 /**
  * Saves the current game state to Local Storage.
  */
 export function saveGame() {
-    console.log("Saving game...");
+    console.log("DEBUG: saveGame() called.");
     try {
         localStorageManager.saveGame(gameState);
         renderers.displayMessage('Game Saved!', 'Your progress has been secured.');
-        console.log("Game saved successfully.");
+        console.log("DEBUG: Game saved successfully.");
     } catch (error) {
-        console.error("Failed to save game:", error);
+        console.error("DEBUG: Failed to save game:", error);
         renderers.displayMessage('Save Failed!', 'Could not save game. Check browser storage space.');
     }
 }
@@ -190,31 +215,34 @@ export function saveGame() {
  * This function should ideally be called once during initGame.
  */
 export function loadGame() {
-    console.log("Attempting to load game...");
+    console.log("DEBUG: Attempting to load game...");
+    renderers.showLoadingScreen();
     const loadedState = localStorageManager.loadGame();
     if (loadedState) {
         gameState = loadedState;
         renderers.displayMessage('Game Loaded!', 'Continue your journey to glory.');
-        console.log("Game loaded successfully:", gameState);
+        console.log("DEBUG: Game loaded successfully:", gameState);
 
         // Re-initialize internal data module states from loaded gameState
-        playerData.setSquad(gameState.playerClub.squad);
-        clubData.setCommittee(gameState.playerClub.committee);
-        // Assuming one league for simplicity now, update opponent data
-        opponentData.setAllOpponentClubs(gameState.leagues[0]?.allClubsData.filter(c => c.id !== gameState.playerClub.id) || []);
+        if (gameState.playerClub) {
+            playerData.setSquad(gameState.playerClub.squad || []);
+            clubData.setCommittee(gameState.playerClub.committee || []);
+            opponentData.setAllOpponentClubs(gameState.leagues[0]?.allClubsData.filter(c => c.id !== gameState.playerClub.id) || []);
+        }
 
-        updateUI(); // After loading, update the UI to reflect the loaded state
-        renderers.renderGameScreen('homeScreen'); // Go to home screen after loading
+        updateUI();
+        renderers.hideLoadingScreen();
+        renderers.renderGameScreen('homeScreen');
     } else {
         renderers.displayMessage('No Save Found!', 'Starting a new game instead.');
-        console.log("No game save found to load.");
-        // Clear any half-baked state if a load failed
+        console.log("DEBUG: No game save found to load.");
         gameState = {
             playerClub: null, leagues: [], currentSeason: 1, currentWeek: 1,
             availableHours: 0, weeklyTasks: [], clubHistory: [], messages: [],
             gamePhase: Constants.GAME_PHASE.SETUP, playerClubCustomized: false, opponentClubsCustomized: false,
         };
-        renderers.renderNewGameModal(); // Go to new game setup
+        renderers.hideLoadingScreen();
+        renderers.renderNewGameModal();
     }
 }
 
@@ -223,22 +251,20 @@ export function loadGame() {
  * Prompts user for confirmation.
  */
 export function newGameConfirm() {
-    // Implement a confirmation dialog using the generic game modal
+    console.log("DEBUG: newGameConfirm() called.");
     renderers.showModal(
         'Start New Game?',
         'Are you sure you want to start a new game? All unsaved progress will be lost.',
         [
             { text: 'Yes, Start New', action: () => {
-                localStorageManager.clearSave(); // Clear existing save
-                renderers.hideModal(); // Hide confirmation modal
-                // Reset gameState to initial blank state immediately
+                localStorageManager.clearSave();
+                renderers.hideModal();
                 gameState = {
                     playerClub: null, leagues: [], currentSeason: 1, currentWeek: 1,
                     availableHours: 0, weeklyTasks: [], clubHistory: [], messages: [],
                     gamePhase: Constants.GAME_PHASE.SETUP, playerClubCustomized: false, opponentClubsCustomized: false,
                 };
-                renderers.renderNewGameModal(); // Show new game setup modal
-                // Other initial setup will happen when startNewGame is called after modal input
+                renderers.renderNewGameModal();
             }, isPrimary: true },
             { text: 'No, Cancel', action: () => {
                 renderers.hideModal();
@@ -252,17 +278,17 @@ export function newGameConfirm() {
  * Delegates to the gameLoop module.
  */
 export function advanceWeek() {
-    console.log("Advancing week...");
-    // Check if player has allocated all hours (or enough for critical tasks)
-    if (gameState.availableHours < Constants.WEEKLY_BASE_HOURS * 0.25) { // Example: must use at least 75% of hours
-        // You can make this stricter (must use all, or only for critical tasks)
+    console.log("DEBUG: advanceWeek() called.");
+    if (gameState.availableHours < Constants.WEEKLY_BASE_HOURS * 0.25) {
         renderers.showModal('Allocate More Time!', 'You need to allocate more of your available hours before advancing the week. Try completing more tasks!');
         return;
     }
-    // Call the gameLoop module's advanceWeek function
+    renderers.showLoadingScreen();
     gameLoop.advanceWeek(gameState); // Pass current gameState for gameLoop to operate on
-    updateUI(); // Update UI after week advance
-    saveGame(); // Automatically save after each week
+    updateUI(); // Redundant update if gameLoop also updates, but safe for now
+    saveGame();
+    renderers.hideLoadingScreen();
+    console.log("DEBUG: advanceWeek() finished.");
 }
 
 /**
@@ -270,13 +296,12 @@ export function advanceWeek() {
  * This function will be called frequently after state changes.
  */
 export function updateUI() {
-    // Basic safety check for playerClub to avoid errors before it's initialized
+    console.log("DEBUG: updateUI() called. Current State:", gameState.currentSeason, gameState.currentWeek, gameState.gamePhase);
     if (!gameState.playerClub) {
-        console.warn("playerClub not yet initialized in gameState, skipping some UI updates.");
+        console.warn("DEBUG: playerClub not yet initialized in gameState, skipping some UI updates.");
         return;
     }
 
-    // Render core game stats (always visible)
     renderers.updateTopBarStats(
         gameState.currentSeason,
         gameState.currentWeek,
@@ -284,11 +309,9 @@ export function updateUI() {
     );
     renderers.updateClubNameDisplay(gameState.playerClub.name);
 
-    // Update the weekly tasks list on home screen (always relevant)
     renderers.updateWeeklyTasksDisplay(gameState.weeklyTasks, gameState.availableHours);
 
 
-    // Determine which main content screen is currently active and render its data
     const activeScreenElement = document.querySelector('.game-screen.active');
     if (activeScreenElement) {
         const screenId = activeScreenElement.id;
@@ -306,14 +329,15 @@ export function updateUI() {
                 renderers.renderFinancesScreen(gameState.playerClub.finances);
                 break;
             case 'leagueScreen':
-                // Assuming one league for now, pass all clubs for sorting
+                // Pass the correct league ID and the full list of clubs (player + opponents)
+                const currentLeague = gameState.leagues[0];
+                const allClubsForLeagueTable = currentLeague ? [gameState.playerClub, ...opponentData.getAllOpponentClubs()] : [];
                 renderers.renderLeagueScreen(
-                    leagueData.getLeagueTable(gameState.leagues[0].id, [gameState.playerClub, ...opponentData.getAllOpponentClubs()])
+                    leagueData.getLeagueTable(currentLeague?.id, allClubsForLeagueTable)
                 );
                 break;
             case 'fixturesScreen':
-                 // Assuming one league, get its fixtures
-                renderers.renderFixturesScreen(leagueData.getFixtures(gameState.leagues, gameState.leagues[0].id));
+                renderers.renderFixturesScreen(leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id));
                 break;
             case 'committeeScreen':
                 renderers.renderCommitteeScreen(gameState.playerClub.committee);
@@ -321,19 +345,18 @@ export function updateUI() {
             case 'historyScreen':
                 renderers.renderHistoryScreen(gameState.clubHistory);
                 break;
-            // No default for other screens (modals) as they are handled explicitly
         }
     }
 
-    // Always update messages/news
     if (gameState.messages.length > 0) {
         renderers.updateNewsFeed(gameState.messages[gameState.messages.length - 1].text);
     }
+    console.log("DEBUG: updateUI() finished.");
 }
 
 
 // --- Event Listener for Page Load ---
-// This ensures the game initializes only after the DOM is fully loaded.
+console.log("DEBUG: Adding DOMContentLoaded listener.");
 document.addEventListener('DOMContentLoaded', initGame);
-
+console.log("DEBUG: main.js finished loading.");
 

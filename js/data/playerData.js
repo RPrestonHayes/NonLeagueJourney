@@ -39,6 +39,16 @@ export function initializePlayerSquad(playerClubId) {
 }
 
 /**
+ * Sets the current squad. Used when loading a game or when a new squad array is generated.
+ * @param {Array<object>} squad - The new squad array to set.
+ */
+export function setSquad(squad) { // ADDED EXPORT KEYWORD HERE
+    currentSquad = [...squad]; // Ensure we're working with a new array reference
+    console.log("Squad set/updated in playerData module.");
+}
+
+
+/**
  * Adds a new player to the squad.
  * @param {object} player - The player object to add.
  * @param {string} playerClubId - The ID of the player's club.

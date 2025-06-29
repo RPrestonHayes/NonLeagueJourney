@@ -356,7 +356,7 @@ export function generateWeeklyTasks(clubFacilities, committeeMembers) {
         if (staff) {
             // Placeholder for staff efficiency calculation
             // Max reduction of 50% for now based on max work ethic
-            const reductionFactor = staff.skills.workEthic / Constants.ATTRIBUTE_MAX_VALUE; // Assuming ATTRIBUTE_MAX_VALUE for skills
+            const reductionFactor = staff.skills.workEthic / Constants.ATTRIBUTE_MAX; // Use Constants.ATTRIBUTE_MAX
             task.baseHours = Math.max(1, Math.round(task.baseHours * (1 - reductionFactor * 0.5)));
             task.description += ` (Assisted by ${staff.name})`;
         }
@@ -508,7 +508,4 @@ function possibleNearbyTowns(centerTown) {
     const genericVillages = ['Newton', 'Kingston', 'Charlton', 'Stanton', 'Hinton', 'Morton', 'Burton', 'Oakley', 'Ashley', 'Bradley'];
     return [...new Set([...specificNearby, ...genericVillages.slice(0, getRandomInt(3, 7))])]; // Add a few generic ones too
 }
-
-// Set a global max for attribute values for consistency with reductions
-Constants.ATTRIBUTE_MAX_VALUE = 20; // Ensure this is defined in constants.js as well
 

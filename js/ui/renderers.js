@@ -15,6 +15,7 @@ const modalCloseBtn = document.getElementById('modalCloseBtn');
 
 const newGameModal = document.getElementById('newGameModal');
 const opponentCustomizationModal = document.getElementById('opponentCustomizationModal');
+const loadingScreen = document.getElementById('loadingScreen');
 
 const clubNameDisplay = document.getElementById('clubNameDisplay');
 const currentSeasonDisplay = document.getElementById('currentSeasonDisplay');
@@ -45,9 +46,10 @@ const opponentListCustomization = document.getElementById('opponentListCustomiza
 export function renderGameScreen(screenId) {
     // Hide all game screens and modals first
     gameScreens.forEach(screen => screen.style.display = 'none');
-    modalOverlay.style.display = 'none';
+    modalOverlay.style.display = 'none'; // Ensure generic modal is hidden
     newGameModal.style.display = 'none';
     opponentCustomizationModal.style.display = 'none';
+    loadingScreen.style.display = 'none';
 
     // Show the requested screen/modal
     const targetScreen = document.getElementById(screenId);
@@ -55,7 +57,7 @@ export function renderGameScreen(screenId) {
         targetScreen.style.display = 'block';
         // Add active class to nav button if it corresponds to a main screen
         document.querySelectorAll('.nav-btn').forEach(btn => {
-            if (btn.dataset.screen === screenId.replace('Screen', '')) {
+            if (btn.dataset.screen + 'Screen' === screenId) {
                 btn.classList.add('active-nav');
             } else {
                 btn.classList.remove('active-nav');
@@ -65,6 +67,25 @@ export function renderGameScreen(screenId) {
         console.error(`Attempted to render non-existent screen: ${screenId}`);
     }
 }
+
+/**
+ * Shows the dedicated loading screen.
+ */
+export function showLoadingScreen() {
+    gameScreens.forEach(screen => screen.style.display = 'none');
+    modalOverlay.style.display = 'none';
+    newGameModal.style.display = 'none';
+    opponentCustomizationModal.style.display = 'none';
+    loadingScreen.style.display = 'flex';
+}
+
+/**
+ * Hides the dedicated loading screen.
+ */
+export function hideLoadingScreen() {
+    loadingScreen.style.display = 'none';
+}
+
 
 // --- Top Bar & News Updates ---
 /**
@@ -95,9 +116,32 @@ export function updateNewsFeed(message) {
     newsContent.textContent = message;
 }
 
-// --- Generic Modal Display ---
+/**
+ * Displays a short, temporary message (e.g., "Game Saved!").
+ * Uses the generic modal but hides choices and close button for quick info.
+ * @param {string} title - The message title.
+ * @param {string} message - The message content.
+ */
+export function displayMessage(title, message) {
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modalChoices.innerHTML = ''; // Clear choices
+    modalChoices.style.display = 'none'; // Hide choices
+    modalCloseBtn.style.display = 'none'; // Hide close button for auto-disappearing message
+
+    modalOverlay.style.display = 'flex'; // Show modal
+
+    // Automatically hide after a few seconds
+    setTimeout(() => {
+        hideModal();
+    }, 3000); // 3 seconds
+}
+
+
+// --- Generic Modal Display (for confirmations, events with choices) ---
 /**
  * Shows a generic modal with a title, message, and optional action choices.
+ * This is for interactive modals, unlike displayMessage for quick info.
  * @param {string} title - The modal title.
  * @param {string} message - The modal message/description.
  * @param {Array<object>} choices - Optional array of { text: string, action: function, isPrimary: boolean }
@@ -113,21 +157,21 @@ export function showModal(title, message, choices = []) {
         button.classList.add('modal-choice-btn', choice.isPrimary ? 'primary-btn' : 'secondary-btn');
         button.onclick = () => {
             choice.action();
-            hideModal(); // Hide modal after action, unless action explicitly prevents it
+            // hideModal(); // Modals with choices often hide via the action itself, or based on specific logic
+            // Commenting out hideModal here. The action itself should call hideModal if needed.
         };
         modalChoices.appendChild(button);
     });
 
-    // Show/hide choice container based on if choices exist
     if (choices.length > 0) {
         modalChoices.style.display = 'flex';
-        modalCloseBtn.style.display = 'none'; // If choices, typically don't need a separate close button
+        modalCloseBtn.style.display = 'none';
     } else {
-        modalChoices.style.display = 'none';
-        modalCloseBtn.style.display = 'block'; // If no choices, show close button
+        modalChoices.style.display = 'block';
+        modalCloseBtn.style.display = 'block';
     }
 
-    modalOverlay.style.display = 'flex'; // Use flex to center the modal
+    modalOverlay.style.display = 'flex';
 }
 
 /**
@@ -146,7 +190,7 @@ export function hideModal() {
  * This is called at game start if no save is found.
  */
 export function renderNewGameModal() {
-    renderGameScreen('newGameModal'); // Shows the modal by its ID
+    renderGameScreen('newGameModal');
 }
 
 // --- Opponent Customization Modal ---
@@ -164,27 +208,27 @@ export function renderOpponentCustomizationModal(opponentClubs) {
             <h4>${club.name}</h4>
             <div class="form-group">
                 <label for="opponentName_${club.id}">Name:</label>
-                <input type="text" id="opponentName_${club.id}" value="${club.name}">
+                <input type="text" id="opponentName_${club.id}" data-club-id="${club.id}" data-field="name" value="${club.name}">
             </div>
             <div class="form-group">
                 <label for="opponentNickname_${club.id}">Nickname:</label>
-                <input type="text" id="opponentNickname_${club.id}" value="${club.nickname || ''}">
+                <input type="text" id="opponentNickname_${club.id}" data-club-id="${club.id}" data-field="nickname" value="${club.nickname || ''}">
             </div>
             <div class="form-group color-pickers">
                 <div>
                     <label for="opponentPrimaryColor_${club.id}">Primary Kit:</label>
-                    <input type="color" id="opponentPrimaryColor_${club.id}" value="${club.kitColors.primary}">
+                    <input type="color" id="opponentPrimaryColor_${club.id}" data-club-id="${club.id}" data-field="primaryColor" value="${club.kitColors.primary}">
                 </div>
                 <div>
                     <label for="opponentSecondaryColor_${club.id}">Secondary Kit:</label>
-                    <input type="color" id="opponentSecondaryColor_${club.id}" value="${club.kitColors.secondary}">
+                    <input type="color" id="opponentSecondaryColor_${club.id}" data-club-id="${club.id}" data-field="secondaryColor" value="${club.kitColors.secondary}">
                 </div>
             </div>
         `;
         opponentListCustomization.appendChild(div);
     });
 
-    renderGameScreen('opponentCustomizationModal'); // Shows the modal
+    renderGameScreen('opponentCustomizationModal');
 }
 
 /**
@@ -195,17 +239,14 @@ export function hideOpponentCustomizationModal() {
 }
 
 
-// --- Screen-Specific Renderers (Placeholders for now, will render data tables) ---
+// --- Screen-Specific Renderers ---
 
 /**
  * Renders the Home Screen content.
  * @param {object} gameState - The current gameState object.
  */
 export function renderHomeScreen(gameState) {
-    // Already updated by updateTopBarStats, newsContent. Just ensure structure is there.
-    // Additional dynamic elements for home screen can be added here
-    updateWeeklyTasksDisplay(gameState.weeklyTasks, gameState.availableHours);
-    updateNewsFeed(gameState.messages[gameState.messages.length - 1]?.text || 'No new news.');
+    // No direct rendering needed here as elements are updated by other renderers.
 }
 
 
@@ -234,7 +275,7 @@ export function renderSquadScreen(players) {
 
     if (players && players.length > 0) {
         players.forEach(player => {
-            const overallRating = calculateOverallPlayerRating(player.attributes); // Helper function needed
+            const overallRating = calculateOverallPlayerRating(player.attributes);
             tableHTML += `
                 <tr>
                     <td>${player.name}</td>
@@ -266,17 +307,21 @@ export function renderSquadScreen(players) {
  * @returns {number} Overall rating.
  */
 function calculateOverallPlayerRating(attributes) {
-    // A very basic average for overall rating. Will need more sophisticated logic later.
     let sum = 0;
     let count = 0;
     for (const key in attributes) {
-        if (key !== 'GK') { // Exclude GK if not a GK to prevent skewed rating
-             sum += attributes[key];
-             count++;
+        if (attributes.hasOwnProperty(key)) { // Ensure it's own property
+            if (key !== 'GK') {
+                 sum += attributes[key];
+                 count++;
+            }
         }
     }
-    if (attributes.GK) { // If it's a GK, prioritize GK attribute
+    if (attributes.GK && count > 0) { // If it's a GK, prioritize GK attribute
+        // Basic weighting for GK, adjust sum and count
         return Math.round((attributes.GK * 3 + sum) / (count + 3));
+    } else if (attributes.GK && count === 0) { // If only GK attribute and no others
+        return Math.round(attributes.GK);
     }
     return count > 0 ? Math.round(sum / count) : 0;
 }
@@ -307,7 +352,7 @@ export function renderFacilitiesScreen(facilities) {
                 <td>${facility.name}</td>
                 <td>${facility.level}</td>
                 <td>${facility.status}</td>
-                <td>£${facility.upgradeCost.toFixed(2)}</td>
+                <td>£${facility.currentUpgradeCost ? facility.currentUpgradeCost.toFixed(2) : 'N/A'}</td>
             </tr>
         `;
     }
@@ -557,10 +602,15 @@ export function updateWeeklyTasksDisplay(tasks, availableHours) {
 
     if (tasks && tasks.length > 0) {
         tasks.forEach(task => {
+            // Task is now "all or nothing", represented by a button
             const listItem = document.createElement('li');
+            // Add a data-task-id to the button so eventHandlers can identify it
+            // Add a class for styling if button is active/inactive
             listItem.innerHTML = `
                 <span>${task.description} (${task.baseHours} hrs)</span>
-                <input type="number" min="0" max="${availableHours}" value="${task.assignedHours}" data-task-id="${task.id}" class="task-hours-input">
+                <button class="complete-task-btn ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" ${task.completed || availableHours < task.baseHours ? 'disabled' : ''}>
+                    ${task.completed ? 'Completed' : 'Do Task'}
+                </button>
             `;
             weeklyTasksList.appendChild(listItem);
         });
