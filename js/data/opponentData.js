@@ -8,25 +8,23 @@
 
 import * as Constants from '../utils/constants.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
+// Import specific functions needed from dataGenerator
+import { getRandomInt, getRandomElement } from '../utils/dataGenerator.js'; // NEW: Import specific helper functions
 
-// Internal collection of all clubs' structural data (including player's for consistency, but filtered when returned)
-let allClubsInGameWorld = []; // Renamed from allOpponentClubs for clarity
+// Internal collection of all clubs' structural data (including player's for consistency, but filtered when returned as 'opponents')
+let allClubsInGameWorld = [];
 
 /**
- * Initializes the list of all clubs (player and opponents) at the start of a new game.
+ * Initializes the list of opponent clubs at the start of a new game.
  * Only structural data is stored here. Player lists are seasonal.
  * This is called from leagueData.js initially.
  * @param {string} playerClubLocation - The player's chosen hometown.
- * @param {string} playerClubId - The ID of the player's club.
  * @returns {Array<object>} An array of opponent club structural data.
  */
-export function initializeOpponentClubs(playerClubLocation, playerClubId) {
-    // This function will now generate just the opponent clubs.
-    // The player's club is added to the league structure in leagueData.js.
-    const generatedOpponents = dataGenerator.generateInitialOpponentClubs(playerClubLocation, playerClubId);
+export function initializeOpponentClubs(playerClubLocation) {
+    const generatedOpponents = dataGenerator.generateInitialOpponentClubs(playerClubLocation);
     console.log("Initial opponent clubs generated:", generatedOpponents.map(c => c.name));
-    // Do not set allClubsInGameWorld here, as leagueData.js handles the full collection.
-    return [...generatedOpponents]; // Return a copy of generated opponents
+    return [...generatedOpponents];
 }
 
 /**
@@ -34,7 +32,7 @@ export function initializeOpponentClubs(playerClubLocation, playerClubId) {
  * This is called from main.js after leagues are generated or game is loaded.
  * @param {Array<object>} clubs - The array of ALL club objects.
  */
-export function setAllOpponentClubs(clubs) { // Renamed from setAllOpponentClubs to setAllClubsInGameWorld for conceptual clarity if you wish
+export function setAllOpponentClubs(clubs) {
     allClubsInGameWorld = clubs;
     console.log("All clubs in game world set in opponentData:", allClubsInGameWorld.map(c => c.name));
 }
@@ -51,13 +49,13 @@ export function getOpponentClub(clubId) {
 /**
  * Retrieves the full list of all *opponent* clubs' structural data.
  * This function filters out the player's club ID.
+ * @param {string|null} playerClubId - The ID of the player's club to exclude from the list. If null, returns all clubs.
  * @returns {Array<object>} A copy of the allOpponentClubs array.
  */
-export function getAllOpponentClubs(playerClubId = null) { // Added optional playerClubId
+export function getAllOpponentClubs(playerClubId = null) {
     if (playerClubId) {
         return allClubsInGameWorld.filter(c => c.id !== playerClubId);
     }
-    // If no playerClubId provided, assume we want all (e.g., for direct internal use by leagueData)
     return [...allClubsInGameWorld];
 }
 
@@ -71,13 +69,12 @@ export function getAllOpponentClubs(playerClubId = null) { // Added optional pla
  */
 export function generateSeasonalOpponentPlayers(clubId, qualityTier) {
     const players = [];
-    const numPlayers = getRandomInt(14, 20); // Typical squad size for grassroots
+    const numPlayers = getRandomInt(14, 20); // Uses imported getRandomInt
     const positions = Object.values(Constants.PLAYER_POSITIONS);
 
     for (let i = 0; i < numPlayers; i++) {
-        const player = dataGenerator.generatePlayer(getRandomElement(positions), qualityTier);
+        const player = dataGenerator.generatePlayer(getRandomElement(positions), qualityTier); // Uses imported getRandomElement
         player.currentClubId = clubId;
-        // Simplify opponent player stats to only what's needed for simulation/match report
         player.currentSeasonStats = {
             appearances: 0,
             goals: 0,
@@ -85,12 +82,11 @@ export function generateSeasonalOpponentPlayers(clubId, qualityTier) {
             yellowCards: 0,
             redCards: 0,
             manOfTheMatchAwards: 0,
-            averageRating: 0 // Will be calculated post-match
+            averageRating: 0
         };
-        // Simplify opponent player status
         player.status = {
-            morale: getRandomInt(50, 90),
-            fitness: getRandomInt(80, 100),
+            morale: getRandomInt(50, 90), // Uses imported getRandomInt
+            fitness: getRandomInt(80, 100), // Uses imported getRandomInt
             injuryStatus: 'Fit',
             injuryReturnDate: null,
             suspended: false,
@@ -120,10 +116,9 @@ export function updateOpponentLeagueStats(clubId, played, won, drawn, lost, goal
         return [...allClubsInGameWorld];
     }
 
-    const updatedClubs = [...allClubsInGameWorld]; // Create shallow copy for immutability
+    const updatedClubs = [...allClubsInGameWorld];
     const clubToUpdate = updatedClubs[clubIndex];
 
-    // Initialize stats if they don't exist (e.g., start of season)
     if (!clubToUpdate.leagueStats) {
         clubToUpdate.leagueStats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
     }
@@ -137,9 +132,7 @@ export function updateOpponentLeagueStats(clubId, played, won, drawn, lost, goal
     clubToUpdate.leagueStats.goalDifference = clubToUpdate.leagueStats.goalsFor - clubToUpdate.leagueStats.goalsAgainst;
     clubToUpdate.leagueStats.points += (won * 3) + (drawn * 1);
 
-    // No need to set allOpponentClubs = updatedClubs; it's a shallow copy of the reference from gameState
-    // allClubsInGameWorld is directly modified by reference here.
-    return updatedClubs; // Return the shallow copy for gameState to update
+    return updatedClubs;
 }
 
 
@@ -157,9 +150,6 @@ export function resetOpponentSeasonalStats() {
     return [...allClubsInGameWorld];
 }
 
-
-// Helper to get a random element (not directly exposed, used internally)
-function getRandomElement(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
+// NOTE: getRandomInt and getRandomElement are now imported, no longer defined internally.
+// Ensure dataGenerator.js exports them.
 

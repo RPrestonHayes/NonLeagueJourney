@@ -9,11 +9,12 @@ import * as Constants from './constants.js';
 import * as clubData from '../data/clubData.js'; // Import clubData to get club name dynamically
 
 // --- Helper Functions for Randomness ---
-function getRandomInt(min, max) {
+// EXPORT these functions so other modules can use them
+export function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function getRandomElement(arr) {
+export function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
@@ -337,7 +338,6 @@ export function generateWeeklyTasks(clubFacilities, committeeMembers) {
     });
 
     // Dynamically adjust tasks based on facilities, committee, etc.
-    // Example: If changing rooms are bad, add a "Clean Changing Rooms" task
     if (clubFacilities && clubFacilities[Constants.FACILITIES.CHGRMS] && clubFacilities[Constants.FACILITIES.CHGRMS].level < 2) {
         tasks.push({
             id: generateUniqueId('T'),
@@ -354,13 +354,16 @@ export function generateWeeklyTasks(clubFacilities, committeeMembers) {
     tasks.forEach(task => {
         const staff = committeeMembers.find(cm => cm.role === task.requiresStaff);
         if (staff) {
-            // Placeholder for staff efficiency calculation
-            // Max reduction of 50% for now based on max work ethic
-            const reductionFactor = staff.skills.workEthic / Constants.ATTRIBUTE_MAX; // Use Constants.ATTRIBUTE_MAX
+            const reductionFactor = staff.skills.workEthic / Constants.ATTRIBUTE_MAX;
             task.baseHours = Math.max(1, Math.round(task.baseHours * (1 - reductionFactor * 0.5)));
             task.description += ` (Assisted by ${staff.name})`;
         }
     });
+
+    // Filter tasks based on the new 10-hour limit. If a task is > 10, it's impossible.
+    // For now, let's assume generated tasks fit within reasonable bounds of the WEEKLY_BASE_HOURS.
+    // This can be refined later if specific tasks become too long.
+
 
     return tasks;
 }
@@ -383,16 +386,11 @@ export function generateMatchSchedule(playerClubId, allLeagueClubs, season) {
     }
 
     let currentMatchWeek = 1;
-    // Simple double round-robin fixture generation (home and away)
-    // This is a simplified version and would be improved by a proper fixture generator
-    // to ensure realistic week distribution.
-
     for (let i = 0; i < allLeagueClubs.length; i++) {
         for (let j = i + 1; j < allLeagueClubs.length; j++) {
             const homeTeam = allLeagueClubs[i];
             const awayTeam = allLeagueClubs[j];
 
-            // Match 1: Home vs Away
             schedule.push({
                 id: generateUniqueId('M'),
                 week: currentMatchWeek,
@@ -406,10 +404,9 @@ export function generateMatchSchedule(playerClubId, allLeagueClubs, season) {
                 played: false
             });
 
-            // Match 2: Away vs Home (return fixture)
             schedule.push({
                 id: generateUniqueId('M'),
-                week: currentMatchWeek + 1, // Simple increment, real fixture gen is complex
+                week: currentMatchWeek + 1,
                 season: season,
                 homeTeamId: awayTeam.id,
                 homeTeamName: awayTeam.name,
@@ -419,10 +416,9 @@ export function generateMatchSchedule(playerClubId, allLeagueClubs, season) {
                 result: null,
                 played: false
             });
-            currentMatchWeek += 2; // Increment for the next pair of matches
+            currentMatchWeek += 2;
         }
     }
-    // Sort schedule by week
     schedule.sort((a, b) => a.week - b.week);
     return schedule;
 }
@@ -432,15 +428,13 @@ export function generateMatchSchedule(playerClubId, allLeagueClubs, season) {
  * Generates initial opponent clubs for a league based on the player's hometown.
  * These will only contain structural data and basic quality for efficiency.
  * @param {string} playerClubLocation - The player's club location to help generate relevant opponent names.
- * @param {string} playerClubId - The ID of the player's club to exclude it.
  * @returns {Array<object>} An array of opponent club objects (structural data).
  */
-export function generateInitialOpponentClubs(playerClubLocation, playerClubId) {
+export function generateInitialOpponentClubs(playerClubLocation) {
     const opponentClubs = [];
-    // Ensure the player's hometown is not directly used for opponent names unless it's a "reserve" team
-    const baseLocationsPool = [...possibleNearbyTowns(playerClubLocation), playerClubLocation]; // Include hometown for "reserve" names
+    const baseLocationsPool = [...possibleNearbyTowns(playerClubLocation), playerClubLocation];
 
-    for (let i = 0; i < Constants.DEFAULT_LEAGUE_SIZE - 1; i++) { // -1 because player's club is one team
+    for (let i = 0; i < Constants.DEFAULT_LEAGUE_SIZE - 1; i++) {
         const id = generateUniqueId('C');
         let location = getRandomElement(baseLocationsPool);
         let identity = generateClubIdentity(location);
@@ -448,11 +442,10 @@ export function generateInitialOpponentClubs(playerClubLocation, playerClubId) {
         let nickname = identity.nickname;
         const kitColors = generateKitColors();
 
-        // Introduce a chance for "Reserve" or "Development" teams from larger nearby towns
-        if (getRandomInt(1, 100) < 30) { // 30% chance for a reserve/dev team
+        if (getRandomInt(1, 100) < 30) {
             const majorTown = getRandomElement(['Loughborough', 'Leicester', 'Melton Mowbray', 'Nottingham', 'Derby']);
             name = `${majorTown} ${getRandomElement(['Reserves', 'Development', 'U23s'])}`;
-            location = majorTown; // Set their actual location to the major town
+            location = majorTown;
             nickname = getRandomElement(['The Young Guns', 'The Future', 'The Reserves']);
         }
 
@@ -463,8 +456,8 @@ export function generateInitialOpponentClubs(playerClubLocation, playerClubId) {
             location: location,
             nickname: nickname,
             kitColors: kitColors,
-            overallTeamQuality: getRandomInt(5, 10), // Low quality for grassroots
-            currentLeagueId: null, // This will be set by leagueData after creation
+            overallTeamQuality: getRandomInt(5, 10),
+            currentLeagueId: null,
             finalLeaguePosition: null
         });
     }
@@ -492,20 +485,18 @@ export function generateInitialLeagueName(playerClubLocation) {
 
 // --- Internal helper for plausible nearby towns (can be expanded) ---
 function possibleNearbyTowns(centerTown) {
-    // This is a simplified list. In a full game, you'd have a more robust database.
     const nearbyMap = {
         'Sileby': ['Loughborough', 'Mountsorrel', 'Rothley', 'Syston', 'Barrow upon Soar', 'Quorn', 'Anstey', 'Thurmaston', 'Melton Mowbray', 'Leicester'],
         'Loughborough': ['Sileby', 'Shepshed', 'Quorn', 'Kegworth', 'Mountsorrel', 'Hathern'],
         'Melton Mowbray': ['Asfordby', 'Wymondham', 'Somerby', 'Oakham', 'Syston'],
         'Leicester': ['Oadby', 'Wigston', 'Blaby', 'Enderby', 'Braunstone', 'Anstey', 'Thurmaston', 'Glenfield'],
-        'Nottingham': ['Long Eaton', 'Beeston', 'West Bridgford', 'Arnold', 'Hucknall', 'Carlton'], // Example for potential wider region
-        'Derby': ['Long Eaton', 'Ilkeston', 'Alfreton', 'Belper', 'Ripley'] // Example for potential wider region
+        'Nottingham': ['Long Eaton', 'Beeston', 'West Bridgford', 'Arnold', 'Hucknall', 'Carlton'],
+        'Derby': ['Long Eaton', 'Ilkeston', 'Alfreton', 'Belper', 'Ripley']
     };
 
     const specificNearby = nearbyMap[centerTown] || [];
 
-    // Add some general common village/town names that could be anywhere in the UK
     const genericVillages = ['Newton', 'Kingston', 'Charlton', 'Stanton', 'Hinton', 'Morton', 'Burton', 'Oakley', 'Ashley', 'Bradley'];
-    return [...new Set([...specificNearby, ...genericVillages.slice(0, getRandomInt(3, 7))])]; // Add a few generic ones too
+    return [...new Set([...specificNearby, ...genericVillages.slice(0, getRandomInt(3, 7))])];
 }
 

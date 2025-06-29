@@ -61,7 +61,7 @@ export function initGlobalListeners() {
         advanceWeekBtn.addEventListener('click', Main.advanceWeek);
     }
     if (saveGameBtn) {
-        saveGameBtn.addEventListener('click', Main.saveGame);
+        saveGameBtn.addEventListener('click', () => Main.saveGame(true)); // Explicitly show message for manual save
     }
     if (loadGameBtn) {
         loadGameBtn.addEventListener('click', Main.loadGame);
@@ -84,7 +84,6 @@ export function initGlobalListeners() {
     }
 
     // --- Weekly Tasks Button Listener (using event delegation) ---
-    // Listen on the parent element (weeklyTasksList) for clicks on its children buttons
     if (weeklyTasksList) {
         weeklyTasksList.addEventListener('click', (event) => {
             if (event.target.classList.contains('complete-task-btn')) {
@@ -92,9 +91,6 @@ export function initGlobalListeners() {
             }
         });
     }
-
-    // Initial check for game state to potentially open correct modal/screen
-    // This part is handled by main.js's initGame, but listeners must be ready.
 }
 
 // --- Specific Event Handlers ---
@@ -129,8 +125,7 @@ function handleCreateGame() {
     };
 
     console.log("Player club details captured:", playerClubDetails);
-    Main.startNewGame(playerClubDetails); // Calls the main game initialization logic
-    // The new game modal will be hidden by Main.startNewGame
+    Main.startNewGame(playerClubDetails);
 }
 
 /**
@@ -141,9 +136,9 @@ function handleSaveOpponentCustomization() {
     const customizedOpponents = [];
     const opponentItems = opponentListCustomization.querySelectorAll('.opponent-custom-item');
 
-    let isValid = true; // Flag to track overall validity
+    let isValid = true;
     opponentItems.forEach(item => {
-        const clubId = item.querySelector('input[data-field="name"]').dataset.clubId; // Get club ID from data attribute
+        const clubId = item.querySelector('input[data-field="name"]').dataset.clubId;
         const nameInput = item.querySelector(`input[data-field="name"][data-club-id="${clubId}"]`);
         const nicknameInput = item.querySelector(`input[data-field="nickname"][data-club-id="${clubId}"]`);
         const primaryColorInput = item.querySelector(`input[data-field="primaryColor"][data-club-id="${clubId}"]`);
@@ -157,12 +152,12 @@ function handleSaveOpponentCustomization() {
         if (!newName || !newNickname) {
             renderers.showModal('Input Error', `Please fill in name and nickname for an opponent club.`, [{ text: 'OK', action: renderers.hideModal }]);
             isValid = false;
-            return; // Exit forEach early (only for this iteration)
+            return;
         }
         if (newPrimaryColor === newSecondaryColor) {
              renderers.showModal('Kit Color Error', `Primary and Secondary kit colors for ${newName} cannot be the same.`, [{ text: 'OK', action: renderers.hideModal }]);
              isValid = false;
-             return; // Exit forEach early
+             return;
         }
 
         customizedOpponents.push({
@@ -177,36 +172,40 @@ function handleSaveOpponentCustomization() {
     });
 
     if (isValid && customizedOpponents.length === opponentItems.length) {
-        Main.applyOpponentCustomization(customizedOpponents); // Pass to main logic
+        Main.applyOpponentCustomization(customizedOpponents);
     }
 }
 
 /**
  * Handles the "Do Task" button click for weekly tasks.
+ * STRICT "ALL OR NOTHING" implementation: Requires full task hours available.
  * @param {HTMLButtonElement} buttonElement - The button that was clicked.
  */
 function handleCompleteTask(buttonElement) {
     const taskId = buttonElement.dataset.taskId;
+    // Find the task object within the current gameState's weeklyTasks
     const task = Main.gameState.weeklyTasks.find(t => t.id === taskId);
 
     if (task && !task.completed) {
+        // Strict check: available hours must be >= task's baseHours
         if (Main.gameState.availableHours >= task.baseHours) {
-            // Deduct hours
+            // Deduct hours from availableHours
             Main.gameState.availableHours -= task.baseHours;
-            // Mark task as completed (handled in gameLoop.processPlayerTasks)
-            // We need to mark it here temporarily so the UI updates before advanceWeek
-            task.assignedHours = task.baseHours; // Mark as assigned
-            task.completed = true; // Mark as completed for UI state this week
+            // Mark task as completed for this week's processing
+            task.assignedHours = task.baseHours; // Mark as assigned for gameLoop to process
+            task.completed = true; // Mark as completed for UI state
 
             renderers.updateWeeklyTasksDisplay(Main.gameState.weeklyTasks, Main.gameState.availableHours);
             renderers.displayMessage('Task Completed', `${task.description} done!`);
+
             // Disable the button to prevent re-clicking
             buttonElement.disabled = true;
             buttonElement.textContent = 'Completed';
             buttonElement.classList.add('completed');
-            Main.saveGame(); // Save state immediately after a task is done
+
+            Main.saveGame(false); // Save state silently after a task is done
         } else {
-            renderers.showModal('Not Enough Hours', `You need ${task.baseHours} hours for this task, but only have ${Main.gameState.availableHours} remaining!`, [{ text: 'OK', action: renderers.hideModal }]);
+            renderers.showModal('Not Enough Hours', `You need exactly ${task.baseHours} hours for this task, but only have ${Main.gameState.availableHours} remaining! You cannot do this task partially.`, [{ text: 'OK', action: renderers.hideModal }]);
         }
     }
 }

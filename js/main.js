@@ -46,20 +46,79 @@ console.log("DEBUG: Constants imported successfully.");
 
 // --- Global Game State Object ---
 export let gameState = {
-    playerClub: null,           // Object for the player's club
-    leagues: [],                // Array of league objects, including opponent clubs (structural data)
-    currentSeason: 1,           // Current season number
-    currentWeek: 1,             // Current week within the season
-    availableHours: 0,          // Hours player has for tasks this week
-    weeklyTasks: [],            // Tasks available for the player to assign hours to
-    clubHistory: [],            // Array of past season summaries for player's club
-    messages: [],               // Game messages/news feed (chronological log)
-    gamePhase: Constants.GAME_PHASE.SETUP, // Current phase: SETUP, WEEKLY_PLANNING, MATCH_DAY, END_OF_SEASON
-    playerClubCustomized: false, // Player has completed initial club setup
-    opponentClubsCustomized: false, // Opponent clubs in league have been customized
+    playerClub: null,
+    leagues: [],
+    currentSeason: 1,
+    currentWeek: 1,
+    availableHours: 0,
+    weeklyTasks: [],
+    clubHistory: [],
+    messages: [],
+    gamePhase: Constants.GAME_PHASE.SETUP,
+    playerClubCustomized: false,
+    opponentClubsCustomized: false,
 };
 
 console.log("DEBUG: gameState object initialized.");
+
+
+// --- Helper for Calendar Conversion (FINAL REVISION) ---
+/**
+ * Converts a game week number into a formatted calendar string (e.g., "August Week 1 (Pre-Season)").
+ * Handles pre-season, regular season, and off-season phases.
+ * @param {number} weekNum - The 1-indexed game week number (e.g., 1 to 52).
+ * @returns {string} Formatted calendar string.
+ */
+function getCalendarWeekString(weekNum) {
+    if (weekNum <= 0) {
+        return "Invalid Week";
+    }
+
+    // Handle Pre-Season (Weeks 1 to Constants.PRE_SEASON_WEEKS)
+    if (weekNum <= Constants.PRE_SEASON_WEEKS) {
+        return `${Constants.MONTH_NAMES[Constants.SEASON_START_MONTH_INDEX]} Week ${weekNum} (Pre-Season)`;
+    }
+
+    // Handle Regular Season (Weeks after PRE_SEASON_WEEKS up to TOTAL_LEAGUE_WEEKS)
+    if (weekNum <= Constants.TOTAL_LEAGUE_WEEKS) {
+        const weekInSeasonBlock = weekNum - Constants.PRE_SEASON_WEEKS; // Week number relative to start of regular season block (1-indexed)
+        let cumulativeWeeksPassed = 0;
+
+        for (let i = 0; i < Constants.GAME_WEEK_TO_MONTH_MAP.length; i++) {
+            const monthBlock = Constants.GAME_WEEK_TO_MONTH_MAP[i];
+            const weeksInThisMonthBlock = monthBlock.weeks;
+
+            // Check if weekInSeasonBlock falls within the current month block
+            if (weekInSeasonBlock > cumulativeWeeksPassed && weekInSeasonBlock <= cumulativeWeeksPassed + weeksInThisMonthBlock) {
+                const monthIndex = (Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12;
+                const weekInMonth = weekInSeasonBlock - cumulativeWeeksPassed;
+                return `${Constants.MONTH_NAMES[monthIndex]} Week ${weekInMonth}`;
+            }
+            cumulativeWeeksPassed += weeksInThisMonthBlock;
+        }
+        // Fallback for regular season if loop didn't catch it (shouldn't happen with correct map)
+        return `Regular Season Week ${weekNum}`;
+    }
+
+    // Handle Off-Season (Weeks after TOTAL_LEAGUE_WEEKS up to TOTAL_GAME_WEEKS_IN_YEAR)
+    if (weekNum <= Constants.TOTAL_GAME_WEEKS_IN_YEAR) {
+        const offSeasonStartWeek = Constants.TOTAL_LEAGUE_WEEKS + 1;
+        const offSeasonWeekNum = weekNum - offSeasonStartWeek + 1; // 1-indexed week within off-season
+
+        // Determine off-season month based on offSeasonWeekNum
+        // Assumes June and July are off-season (each 4 weeks)
+        if (offSeasonWeekNum <= 4) {
+            return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 10) % 12]} Week ${offSeasonWeekNum} (Off-Season)`; // June
+        } else if (offSeasonWeekNum <= 8) {
+            return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 11) % 12]} Week ${offSeasonWeekNum - 4} (Off-Season)`; // July
+        } else {
+            return `Off-Season Week ${offSeasonWeekNum}`; // Generic if extending past known months
+        }
+    }
+    
+    // Fallback for weeks beyond a full year cycle (e.g., if debugging far into game)
+    return `Unknown Period Week ${weekNum}`;
+}
 
 
 // --- Core Game Functions ---
@@ -77,38 +136,34 @@ function initGame() {
     console.log("DEBUG: eventHandlers.initGlobalListeners() returned.");
 
     console.log("DEBUG: Attempting to load game...");
-    renderers.showLoadingScreen(); // Show loading screen while trying to load
+    renderers.showLoadingScreen();
     const loadedState = localStorageManager.loadGame();
     if (loadedState) {
         console.log("DEBUG: Game loaded from localStorage.");
         gameState = loadedState;
-        renderers.displayMessage('DEBUG: Game Loaded!', 'From local storage.');
-        // Re-initialize module states from loaded gameState
+        renderers.displayMessage('Game Loaded!', 'Continue your journey to glory.');
         if (gameState.playerClub) {
             playerData.setSquad(gameState.playerClub.squad || []);
             clubData.setCommittee(gameState.playerClub.committee || []);
-            // Correctly set allClubsData for leagueData, including player club
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                 opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData); // Set ALL clubs in game world (player + opponents)
-                 // Also ensure playerClub itself in gameState has the latest leagueStats if loaded from leagueData's allClubsData
+                 opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
                  const playerClubFromLeague = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
                  if (playerClubFromLeague) {
-                     // Shallow copy leagueStats and finalLeaguePosition
                      gameState.playerClub.leagueStats = { ...playerClubFromLeague.leagueStats };
                      gameState.playerClub.finalLeaguePosition = playerClubFromLeague.finalLeaguePosition;
                  }
             } else {
-                 opponentData.setAllOpponentClubs([]); // No opponent data if no leagues yet
+                 opponentData.setAllOpponentClubs([]);
             }
         }
-        renderers.hideLoadingScreen(); // Hide loading screen
-        updateUI(); // Render the loaded game state to the UI
-        renderers.renderGameScreen('homeScreen'); // Always go to home after load
+        renderers.hideLoadingScreen();
+        updateUI();
+        renderers.renderGameScreen('homeScreen');
     } else {
         console.log("DEBUG: No save game found. Rendering new game modal.");
-        renderers.hideLoadingScreen(); // Hide loading screen
-        renderers.renderNewGameModal(); // Show the new game setup modal
-        renderers.displayMessage('DEBUG: Welcome!', 'Please set up a new game.');
+        renderers.hideLoadingScreen();
+        renderers.renderNewGameModal();
+        renderers.displayMessage('Welcome, Gaffer!', 'Please set up a new game.');
         gameState.gamePhase = Constants.GAME_PHASE.SETUP;
     }
     console.log("DEBUG: initGame() finished.");
@@ -122,7 +177,7 @@ function initGame() {
 export function startNewGame(playerClubDetails) {
     console.log("DEBUG: startNewGame() called with details:", playerClubDetails);
 
-    renderers.showLoadingScreen(); // Show loading screen during game creation
+    renderers.showLoadingScreen();
 
     // 1. Initialize Player's Club
     gameState.playerClub = clubData.createPlayerClub(playerClubDetails);
@@ -130,8 +185,8 @@ export function startNewGame(playerClubDetails) {
 
     // 2. Initialize Player Squad and attach to playerClub
     const initialSquad = playerData.initializePlayerSquad(gameState.playerClub.id);
-    gameState.playerClub.squad = initialSquad; // Assign to gameState.playerClub
-    playerData.setSquad(initialSquad); // Update playerData's internal state
+    gameState.playerClub.squad = initialSquad;
+    playerData.setSquad(initialSquad);
 
     // 3. Generate initial league structure and opponent clubs
     const { leagues, clubs } = leagueData.generateInitialLeagues(
@@ -140,7 +195,6 @@ export function startNewGame(playerClubDetails) {
         gameState.playerClub.name
     );
     gameState.leagues = leagues;
-    // Set all clubs (including player's and opponents) in opponentData for broader module access
     opponentData.setAllOpponentClubs(clubs);
 
 
@@ -148,20 +202,19 @@ export function startNewGame(playerClubDetails) {
     gameState.currentSeason = 1;
     gameState.currentWeek = 1;
     gameState.availableHours = Constants.WEEKLY_BASE_HOURS;
-    // The initial weekly tasks depend on initialized facilities and committee, which are in playerClub
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
     gameState.clubHistory = [];
     gameState.messages = [{ week: 0, text: 'Welcome to your Non-League Journey!' }];
     gameState.gamePhase = Constants.GAME_PHASE.OPPONENT_CUSTOMIZATION;
 
     // Save initial game state before opponent customization
-    saveGame(false); // Do not show message
+    saveGame(false);
 
     // Render opponent customization modal
     renderers.hideLoadingScreen();
-    renderers.hideModal(); // Hide new game modal
+    renderers.hideModal();
     renderers.renderOpponentCustomizationModal(
-        opponentData.getAllOpponentClubs(gameState.playerClub.id) // Pass only actual opponents (excluding player's club)
+        opponentData.getAllOpponentClubs(gameState.playerClub.id)
     );
     renderers.displayMessage('Your club is born!', 'Now, customize your league rivals before the season kicks off.');
     console.log("DEBUG: startNewGame() finished.");
@@ -176,15 +229,14 @@ export function startNewGame(playerClubDetails) {
 export function applyOpponentCustomization(customizedOpponents) {
     console.log("DEBUG: applyOpponentCustomization() called with:", customizedOpponents);
 
-    renderers.showLoadingScreen(); // Show loading screen during processing
+    renderers.showLoadingScreen();
 
     // Update the league's allClubsData with customized opponent details
-    const currentLeague = gameState.leagues[0]; // Assuming one league for now
+    const currentLeague = gameState.leagues[0];
     if (currentLeague && currentLeague.allClubsData) {
         currentLeague.allClubsData.forEach(club => {
             const custom = customizedOpponents.find(c => c.id === club.id);
             if (custom) {
-                // Update the club object in allClubsData directly
                 Object.assign(club, {
                     name: custom.name,
                     nickname: custom.nickname,
@@ -192,22 +244,20 @@ export function applyOpponentCustomization(customizedOpponents) {
                 });
             }
         });
-        // Update opponentData module's internal state with the now-customized clubs
-        opponentData.setAllOpponentClubs(currentLeague.allClubsData); // Set ALL clubs (player + opponents)
+        opponentData.setAllOpponentClubs(currentLeague.allClubsData);
     }
 
-    gameState.opponentClubsCustomized = true; // Mark opponent customization as complete
-    gameState.gamePhase = Constants.GAME_PHASE.PRE_SEASON_PLANNING; // Transition to pre-season
+    gameState.opponentClubsCustomized = true;
+    gameState.gamePhase = Constants.GAME_PHASE.PRE_SEASON_PLANNING;
 
-    // Re-generate weekly tasks to reflect any potential changes based on game phase
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
 
     renderers.hideLoadingScreen();
     renderers.hideOpponentCustomizationModal();
     renderers.displayMessage('Rivals Customized!', 'Your league opponents are now set for the journey ahead. Welcome to pre-season!');
-    renderers.renderGameScreen('homeScreen'); // Go to home screen
-    updateUI(); // Update UI with new club names
-    saveGame(false); // Do not show message
+    renderers.renderGameScreen('homeScreen');
+    updateUI();
+    saveGame(false);
     console.log("DEBUG: applyOpponentCustomization() finished.");
 }
 
@@ -216,7 +266,7 @@ export function applyOpponentCustomization(customizedOpponents) {
  * @param {boolean} showMessage - If true, displays a "Game Saved!" message. Default is true.
  */
 export function saveGame(showMessage = true) {
-    console.log("DEBUG: saveGame() called.");
+    console.log("DEBUG: saveGame() called. showMessage:", showMessage);
     try {
         localStorageManager.saveGame(gameState);
         if (showMessage) {
@@ -244,15 +294,14 @@ export function loadGame() {
         renderers.displayMessage('Game Loaded!', 'Continue your journey to glory.');
         console.log("DEBUG: Game loaded successfully:", gameState);
 
-        // Re-initialize internal data module states from loaded gameState
         if (gameState.playerClub) {
             playerData.setSquad(gameState.playerClub.squad || []);
             clubData.setCommittee(gameState.playerClub.committee || []);
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                 opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData); // Set ALL clubs (player + opponents)
+                 opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
                  const playerClubFromLeague = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
                  if (playerClubFromLeague) {
-                     gameState.playerClub.leagueStats = playerClubFromLeague.leagueStats;
+                     gameState.playerClub.leagueStats = { ...playerClubFromLeague.leagueStats };
                      gameState.playerClub.finalLeaguePosition = playerClubFromLeague.finalLeaguePosition;
                  }
             } else {
@@ -309,41 +358,34 @@ export function newGameConfirm() {
  */
 export function advanceWeek() {
     console.log("DEBUG: advanceWeek() called.");
-    // This check uses `availableHours` directly from gameState.
-    // Ensure that if a task is "completed", its hours are deducted from `availableHours` in the UI immediately
-    // or that this check accounts for `assignedHours` of tasks.
-    const remainingHoursAfterAssignedTasks = Main.gameState.weeklyTasks.reduce((sum, task) => {
-        return sum - (task.completed ? task.baseHours : 0);
-    }, Constants.WEEKLY_BASE_HOURS);
+    const currentAvailableHours = gameState.availableHours;
+    const baseWeeklyHours = Constants.WEEKLY_BASE_HOURS;
+    const allocatedHours = baseWeeklyHours - currentAvailableHours;
 
-
-    if (Main.gameState.availableHours > 0 && Main.gameState.availableHours > (Constants.WEEKLY_BASE_HOURS * 0.25)) { // Check if too many hours are unallocated
+    const minimumAllocatedPercentage = 0.75;
+    if (allocatedHours < baseWeeklyHours * minimumAllocatedPercentage && currentAvailableHours > 0) {
         renderers.showModal('Allocate More Time!', 'You still have a lot of available hours. Consider completing more tasks before advancing the week!', [{ text: 'Advance Anyway', action: () => {
-            renderers.hideModal(); // Hide this modal
-            // Proceed with the week advance (re-call advanceWeek logic, but carefully to avoid double-deductions)
-            // A better pattern here is to pass a "force" flag, or just allow it if not critical.
-            // For now, let's allow it but warn. If the player clicks "Advance Anyway", we can skip this check.
+            renderers.hideModal();
             proceedAdvanceWeekLogic();
         }},
         { text: 'Allocate More', action: () => {
             renderers.hideModal();
-            // User stays on current week to allocate more
         }}
         ]);
-        return; // Prevent immediate advance, wait for user choice
+        return;
     }
 
-    // If the check passes (or is skipped by a 'force' action), proceed:
     proceedAdvanceWeekLogic();
 }
 
 // Internal function to encapsulate actual week advancing logic
 function proceedAdvanceWeekLogic() {
     renderers.showLoadingScreen();
-    gameLoop.advanceWeek(gameState); // Pass current gameState for gameLoop to operate on
-    // gameLoop.advanceWeek will call updateUI and saveGame(false) internally
-    renderers.hideLoadingScreen(); // Hide loading screen AFTER gameLoop finishes
-    console.log("DEBUG: proceedAdvanceWeekLogic() finished.");
+    setTimeout(() => {
+        gameLoop.advanceWeek(gameState);
+        renderers.hideLoadingScreen();
+        console.log("DEBUG: proceedAdvanceWeekLogic() finished.");
+    }, 50);
 }
 
 
@@ -358,9 +400,11 @@ export function updateUI() {
         return;
     }
 
+    // Convert week to month/week string
+    const calendarWeekString = getCalendarWeekString(gameState.currentWeek);
     renderers.updateTopBarStats(
         gameState.currentSeason,
-        gameState.currentWeek,
+        calendarWeekString, // Pass the formatted string
         gameState.playerClub.finances.balance
     );
     renderers.updateClubNameDisplay(gameState.playerClub.name);
@@ -368,15 +412,13 @@ export function updateUI() {
     renderers.updateWeeklyTasksDisplay(gameState.weeklyTasks, gameState.availableHours);
 
 
-    // Ensure we are selecting the currently active screen element
-    // The active class is managed by renderers.renderGameScreen
     const activeScreenElement = document.querySelector('.game-screen.active');
     if (activeScreenElement) {
         const screenId = activeScreenElement.id;
         console.log(`DEBUG: Rendering active screen: ${screenId}`);
         switch (screenId) {
             case 'homeScreen':
-                renderers.renderHomeScreen(gameState); // Now an empty function but keeps the structure
+                renderers.renderHomeScreen(gameState);
                 break;
             case 'squadScreen':
                 const squadData = playerData.getSquad();

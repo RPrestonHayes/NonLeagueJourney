@@ -8,8 +8,7 @@
 import * as Constants from '../utils/constants.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
-// Import Main to update game state after interaction if necessary, or trigger UI update
-import * as Main from '../main.js';
+import * as Main from '../main.js'; // Import Main to update game state after interaction if necessary, or trigger UI update
 
 // --- Helper Functions ---
 function getRandomInt(min, max) {
@@ -29,7 +28,7 @@ function getRandomElement(arr) {
 export function startPlayerConversation(player, interactionType) {
     let title = `Talking to ${player.name}`;
     let message = '';
-    let choices = [];
+    let choices = []; // Declare choices here
 
     switch (interactionType) {
         case 'motivate':
@@ -48,7 +47,8 @@ export function startPlayerConversation(player, interactionType) {
                         }
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
                         renderers.displayMessage('Player Morale', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
-                        Main.updateUI(); // Update UI after morale change
+                        Main.updateUI();
+                        renderers.hideModal(); // Hide modal after action taken
                     },
                     isPrimary: true
                 },
@@ -66,6 +66,7 @@ export function startPlayerConversation(player, interactionType) {
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
                         renderers.displayMessage('Player Morale', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
                         Main.updateUI();
+                        renderers.hideModal(); // Hide modal after action taken
                     }
                 }
             ];
@@ -78,29 +79,31 @@ export function startPlayerConversation(player, interactionType) {
                     text: 'Emphasize club’s future',
                     action: () => {
                         let moraleChange = 0;
+                        let feedback = '';
                         if (player.traits.commitmentLevel === 'Low') {
-                            message = `"${player.name} looks a bit sheepish, but promises to try harder. Commitment unchanged for now."`;
+                            feedback = `"${player.name} looks a bit sheepish, but promises to try harder. Commitment unchanged for now."`;
                         } else if (player.traits.commitmentLevel === 'Medium') {
-                            message = `"${player.name} confirms he's still invested. Commitment slightly reinforced."`;
+                            feedback = `"${player.name} confirms he's still invested. Commitment slightly reinforced."`;
                             moraleChange = 3;
                         } else {
-                            message = `"${player.name} reaffirms his dedication. Commitment already high."`;
+                            feedback = `"${player.name} reaffirms his dedication. Commitment already high."`;
                             moraleChange = 1;
                         }
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.displayMessage('Player Commitment', message);
+                        renderers.displayMessage('Player Commitment', feedback);
                         Main.updateUI();
+                        renderers.hideModal(); // Hide modal after action taken
                     },
                     isPrimary: true
                 },
                 {
                     text: 'Offer to help with issues (if any)',
                     action: () => {
-                        // This would be more complex if "issues" were tracked
                         message = `"${player.name} appreciates the offer, but says he's fine. Morale slightly up."`;
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, 2);
                         renderers.displayMessage('Player Support', message);
                         Main.updateUI();
+                        renderers.hideModal(); // Hide modal after action taken
                     }
                 }
             ];
@@ -123,6 +126,7 @@ export function startPlayerConversation(player, interactionType) {
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
                         renderers.displayMessage('Player Performance', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
                         Main.updateUI();
+                        renderers.hideModal(); // Hide modal after action taken
                     },
                     isPrimary: true
                 },
@@ -134,6 +138,7 @@ export function startPlayerConversation(player, interactionType) {
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
                         renderers.displayMessage('Player Performance', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
                         Main.updateUI();
+                        renderers.hideModal(); // Hide modal after action taken
                     }
                 }
             ];
@@ -155,9 +160,10 @@ export function startPlayerConversation(player, interactionType) {
 export function attemptRecruitment(newPlayer, playerClubId) {
     const title = `Recruiting ${newPlayer.name}`;
     let message = '';
-    let successChance = 50 + (Main.gameState.playerClub.reputation - newPlayer.traits.ambition * 2); // Simplified formula
+    let choices = []; // <-- ADD THIS LINE! Declare choices here
+    let successChance = 50 + (Main.gameState.playerClub.reputation - newPlayer.traits.ambition * 2);
 
-    successChance = Math.max(10, Math.min(90, successChance)); // Cap chance
+    successChance = Math.max(10, Math.min(90, successChance));
 
     message = `You approach ${newPlayer.name} to offer him a place at your club. His ambition is ${newPlayer.traits.ambition}/10. Your club's reputation is ${Main.gameState.playerClub.reputation}/20.`;
 
@@ -166,7 +172,8 @@ export function attemptRecruitment(newPlayer, playerClubId) {
             text: 'Offer a compelling vision',
             action: () => {
                 let outcomeMessage = '';
-                if (getRandomInt(1, 100) < successChance + 10) { // Slightly better chance
+                // Higher chance with compelling vision
+                if (getRandomInt(1, 100) < successChance + getRandomInt(5,15)) {
                     Main.gameState.playerClub.squad = playerData.addPlayer(newPlayer, playerClubId);
                     outcomeMessage = `${newPlayer.name} is impressed by your vision and agrees to join the club! Welcome aboard!`;
                     Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
@@ -175,6 +182,7 @@ export function attemptRecruitment(newPlayer, playerClubId) {
                 }
                 renderers.displayMessage('Recruitment Outcome', outcomeMessage);
                 Main.updateUI();
+                renderers.hideModal(); // Hide modal after action taken
             },
             isPrimary: true
         },
@@ -182,7 +190,11 @@ export function attemptRecruitment(newPlayer, playerClubId) {
             text: 'Emphasize local camaraderie',
             action: () => {
                 let outcomeMessage = '';
-                if (getRandomInt(1, 100) < successChance) {
+                // Standard chance with camaraderie, maybe slight bonus for loyalty trait
+                let actualChance = successChance;
+                if (newPlayer.traits.loyalty > 15) actualChance += getRandomInt(2, 5);
+
+                if (getRandomInt(1, 100) < actualChance) {
                     Main.gameState.playerClub.squad = playerData.addPlayer(newPlayer, playerClubId);
                     outcomeMessage = `${newPlayer.name} is swayed by the promise of local camaraderie and joins the club!`;
                     Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
@@ -191,6 +203,7 @@ export function attemptRecruitment(newPlayer, playerClubId) {
                 }
                 renderers.displayMessage('Recruitment Outcome', outcomeMessage);
                 Main.updateUI();
+                renderers.hideModal(); // Hide modal after action taken
             }
         }
     ];

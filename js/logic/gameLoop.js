@@ -35,27 +35,28 @@ function getRandomElement(arr) {
 export function advanceWeek(gameState) {
     console.log(`--- Advancing to Season ${gameState.currentSeason}, Week ${gameState.currentWeek} ---`);
 
-    // Ensure we are in a phase where weekly tasks and events are relevant
     if (gameState.gamePhase === Constants.GAME_PHASE.SETUP || gameState.gamePhase === Constants.GAME_PHASE.OPPONENT_CUSTOMIZATION) {
          renderers.showModal('Game Not Ready', 'Complete game setup and customization before advancing the week.');
          return;
     }
 
-    // 1. Process Player's Weekly Tasks
+    // 1. Process Player's Weekly Tasks (only those marked as assigned/completed)
     processPlayerTasks(gameState);
 
-    // 2. Apply Weekly Expenses (e.g., facility maintenance, player wages later)
+    // 2. Apply Weekly Expenses
     applyWeeklyExpenses(gameState);
 
     // 3. Check for Monthly Committee Meeting
-    // Assuming a meeting every 4 weeks, starting from week 1 (or end of pre-season)
-    if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS && (gameState.currentWeek - Constants.PRE_SEASON_WEEKS) % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 1) {
+    // Trigger meeting if current week is a multiple of frequency AND it's after pre-season (or a specific starting week)
+    // For example, if PRE_SEASON_WEEKS is 4, and freq is 4, meetings could be at week 4, 8, 12, etc.
+    // So, currentWeek % freq should be 0, or currentWeek - 1 % freq (if 0-indexed).
+    if (gameState.currentWeek > 0 && gameState.currentWeek % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 0) { // Meeting at end of every 4th week
         console.log("Monthly committee meeting scheduled.");
         committeeLogic.startCommitteeMeeting(gameState);
         gameState.messages.push({ week: gameState.currentWeek, text: `Monthly committee meeting held.` });
     }
 
-    // 4. Trigger Random Event (if in regular season/pre-season, not during setup phases)
+    // 4. Trigger Random Event
     if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS || gameState.gamePhase === Constants.GAME_PHASE.PRE_SEASON_PLANNING) {
         const triggeredEvent = eventLogic.triggerRandomEvent(gameState);
         if (triggeredEvent) {
@@ -63,12 +64,14 @@ export function advanceWeek(gameState) {
         }
     }
 
-
     // 5. Simulate Match (if a match is scheduled for this week AND it's a match week)
-    const currentLeague = gameState.leagues[0]; // Assuming one league for now
-    if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS && currentLeague) {
+    const currentLeague = gameState.leagues[0];
+    // Check if it's within match playing weeks (after pre-season, within total match weeks)
+    if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS && gameState.currentWeek <= Constants.TOTAL_LEAGUE_WEEKS && currentLeague) {
+        // Adjust the week for fixture lookup to be relative to league match start
+        const matchWeekIndex = gameState.currentWeek - Constants.PRE_SEASON_WEEKS;
         const weeklyMatch = currentLeague.currentSeasonFixtures.find(
-            match => match.week === (gameState.currentWeek - Constants.PRE_SEASON_WEEKS) && !match.played
+            match => match.week === matchWeekIndex && !match.played
         );
 
         if (weeklyMatch) {
@@ -79,11 +82,10 @@ export function advanceWeek(gameState) {
                 weeklyMatch.homeTeamId,
                 weeklyMatch.awayTeamId,
                 gameState.playerClub,
-                opponentData.getAllOpponentClubs(),
+                opponentData.getAllOpponentClubs(gameState.playerClub.id), // Ensure playerClubId is passed here for filtering
                 playerData.getSquad()
             );
 
-            // Update league table with match result
             gameState.leagues = leagueData.updateLeagueTable(
                 gameState.leagues,
                 currentLeague.id,
@@ -93,7 +95,6 @@ export function advanceWeek(gameState) {
                 matchResult.awayScore
             );
 
-            // Mark match as played and store result
             gameState.leagues = leagueData.updateMatchResult(
                 gameState.leagues,
                 currentLeague.id,
@@ -110,10 +111,10 @@ export function advanceWeek(gameState) {
 
             console.log("Match simulated. Result:", matchResult.homeScore, matchResult.awayScore);
         } else {
-            console.log(`No league match scheduled for current match-week index ${gameState.currentWeek - Constants.PRE_SEASON_WEEKS}.`);
+            console.log(`No league match scheduled for current match-week index ${matchWeekIndex}.`);
         }
     } else {
-        console.log(`Not yet in league match weeks (Current Week: ${gameState.currentWeek}, Pre-Season Weeks: ${Constants.PRE_SEASON_WEEKS}).`);
+        console.log(`Not within league match weeks (Current Week: ${gameState.currentWeek}, Pre-Season Weeks: ${Constants.PRE_SEASON_WEEKS}, Total League Weeks: ${Constants.TOTAL_LEAGUE_WEEKS}).`);
     }
 
     // 6. Update Player Fitness/Morale (Post-match/Weekly Decay)
@@ -126,7 +127,7 @@ export function advanceWeek(gameState) {
     // 8. Check for End of Season
     if (gameState.currentWeek > Constants.TOTAL_LEAGUE_WEEKS) {
         endSeason(gameState);
-        gameState.gamePhase = Constants.GAME_PHASE.END_OF_SEASON;
+        // Phase is set inside endSeason for END_OF_SEASON then OFF_SEASON
     } else {
         gameState.availableHours = Constants.WEEKLY_BASE_HOURS;
         gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
@@ -134,8 +135,8 @@ export function advanceWeek(gameState) {
     }
 
     console.log(`Advanced to Week ${gameState.currentWeek}, Season ${gameState.currentSeason}`);
-    Main.updateUI(); // Ensure UI is updated after all weekly processing
-    Main.saveGame(false); // Save game silently after each week processing
+    Main.updateUI();
+    Main.saveGame(false);
 }
 
 /**
@@ -145,14 +146,14 @@ export function advanceWeek(gameState) {
  */
 function processPlayerTasks(gameState) {
     console.log("Processing weekly tasks...");
-    const tasksToProcess = gameState.weeklyTasks.filter(task => task.assignedHours > 0 && !task.completed);
+    const tasksToProcess = gameState.weeklyTasks.filter(task => task.completed);
 
-    if (tasksToProcess.length === 0 && gameState.availableHours < Constants.WEEKLY_BASE_HOURS) {
-        console.warn("No tasks processed, or hours not fully allocated.");
+    if (tasksToProcess.length === 0 && (Constants.WEEKLY_BASE_HOURS - gameState.availableHours) > 0) {
+        console.warn("Player allocated time but no tasks were marked as completed.");
     }
 
     tasksToProcess.forEach(task => {
-        console.log(`Processing task: ${task.description} (${task.assignedHours} hours)`);
+        console.log(`Processing task: ${task.description} (Completed)`);
         let taskMessage = '';
 
         switch (task.type) {
@@ -188,7 +189,7 @@ function processPlayerTasks(gameState) {
                 taskMessage = `Club admin duties handled by the committee.`;
                 break;
             case Constants.WEEKLY_TASK_TYPES.SPONSOR_SEARCH:
-                if (getRandomInt(1, 100) <= (gameState.playerClub.reputation + task.assignedHours) / 2) {
+                if (getRandomInt(1, 100) <= (gameState.playerClub.reputation + task.baseHours) / 2) {
                     const sponsorAmount = getRandomInt(50, 250);
                     const sponsorName = `${dataGenerator.getRandomName('last')} Holdings`;
                     gameState.playerClub.finances = clubData.addTransaction(
@@ -209,8 +210,6 @@ function processPlayerTasks(gameState) {
         gameState.messages.push({ week: gameState.currentWeek, text: taskMessage });
     });
 
-    // Reset tasks for the next week's generation
-    // Tasks are regenerated at the end of advanceWeek, so just clear the assigned hours
     gameState.weeklyTasks.forEach(task => task.assignedHours = 0);
 }
 
@@ -244,13 +243,13 @@ function updatePlayerStatus(gameState) {
             updatedPlayer.status.fitness = Math.max(0, updatedPlayer.status.fitness - getRandomInt(2, 5));
         }
 
-        updatedPlayer.status.morale = Math.max(0, updatedPlayer.status.morale - getRandomInt(1, 3));
+        updatedPlayer.status.morale = Math.max(0, Math.min(100, updatedPlayer.status.morale - getRandomInt(1, 3)));
 
         if (updatedPlayer.status.injuryStatus !== 'Fit' && updatedPlayer.status.injuryReturnDate) {
             if (updatedPlayer.status.injuryReturnDate === "Next Week") {
                 updatedPlayer.status.injuryStatus = 'Fit';
                 updatedPlayer.status.injuryReturnDate = null;
-                Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${updatedPlayer.name} has recovered from injury.` });
+                Main.gameState.messages.push({ week: Main.currentWeek, text: `${updatedPlayer.name} has recovered from injury.` }); // Corrected Main.currentWeek to Main.gameState.currentWeek
             }
         }
         if (updatedPlayer.status.suspended && updatedPlayer.status.suspensionGames > 0) {
@@ -258,7 +257,7 @@ function updatePlayerStatus(gameState) {
             if (updatedPlayer.status.suspensionGames === 0) {
                 updatedPlayer.status.suspended = false;
                 updatedPlayer.status.injuryStatus = 'Fit';
-                Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${updatedPlayer.name}'s suspension has ended.` });
+                Main.gameState.messages.push({ week: Main.currentWeek, text: `${updatedPlayer.name}'s suspension has ended.` }); // Corrected Main.currentWeek to Main.gameState.currentWeek
             }
         }
 
@@ -275,7 +274,7 @@ function endSeason(gameState) {
     console.log(`--- End of Season ${gameState.currentSeason} ---`);
     gameState.gamePhase = Constants.GAME_PHASE.END_OF_SEASON;
 
-    const allClubsForLeague = [gameState.playerClub, ...opponentData.getAllOpponentClubs()];
+    const allClubsForLeague = [gameState.playerClub, ...opponentData.getAllOpponentClubs(gameState.playerClub.id)];
     gameState.leagues = leagueData.processEndOfSeason(gameState.leagues, allClubsForLeague);
 
     const playerClubInLeagueData = allClubsForLeague.find(c => c.id === gameState.playerClub.id);
@@ -324,7 +323,7 @@ function endSeason(gameState) {
 
     currentLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
         gameState.playerClub.id,
-        [gameState.playerClub, ...opponentData.getAllOpponentClubs()],
+        [gameState.playerClub, ...opponentData.getAllOpponentClubs(gameState.playerClub.id)],
         gameState.currentSeason
     );
     gameState.leagues[0] = currentLeague;
@@ -332,7 +331,7 @@ function endSeason(gameState) {
     gameState.availableHours = Constants.WEEKLY_BASE_HOURS * 2;
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
 
-    renderers.renderGameScreen('homeScreen'); // Go back to home after season end
+    renderers.renderGameScreen('homeScreen');
     renderers.displayMessage(`Season ${gameState.currentSeason - 1} Concluded!`, `Prepare for Season ${gameState.currentSeason}.`);
 }
 
