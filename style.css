@@ -1,0 +1,387 @@
+/* style.css */
+
+/* --- Base Styles --- */
+:root {
+    --primary-color: #004D40; /* Dark Teal - for accents, buttons */
+    --secondary-color: #B2DFDB; /* Light Teal - for highlights */
+    --background-color: #F0F2F5; /* Light Grey Blue - overall background */
+    --surface-color: #FFFFFF; /* White - for content cards/panels */
+    --text-color: #333333; /* Dark Grey - for general text */
+    --light-text-color: #666666; /* Medium Grey - for secondary text */
+    --border-color: #E0E0E0; /* Light Grey - for borders */
+    --accent-color: #FFC107; /* Amber - for warnings, highlights */
+    --font-family: 'Inter', sans-serif;
+    --border-radius: 8px;
+    --padding-md: 16px;
+    --margin-md: 16px;
+}
+
+body {
+    font-family: var(--font-family);
+    margin: 0;
+    padding: 0;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Ensure Inter font is loaded - for development, we can link it in HTML */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+/* --- Header & Navigation --- */
+.app-header {
+    background-color: var(--primary-color);
+    color: var(--surface-color);
+    padding: var(--padding-md);
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.app-header h1 {
+    margin: 0 0 10px 0;
+    font-size: 1.8em;
+    font-weight: 700;
+}
+
+.main-nav {
+    display: flex;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.nav-btn, .primary-btn, .secondary-btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 600;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.nav-btn {
+    background-color: var(--secondary-color);
+    color: var(--primary-color);
+}
+
+.nav-btn:hover {
+    background-color: #80CBC4; /* A slightly darker secondary */
+    transform: translateY(-1px);
+}
+
+.nav-btn.active-nav {
+    background-color: var(--accent-color);
+    color: var(--text-color);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+}
+
+/* --- Main Game Content Area --- */
+.game-main {
+    flex-grow: 1; /* Allows main content to fill available space */
+    padding: var(--padding-md);
+    max-width: 900px; /* Max width for larger screens */
+    margin: 0 auto; /* Center content */
+    width: 100%; /* Full width on smaller screens */
+    box-sizing: border-box; /* Include padding in width */
+}
+
+.game-screen {
+    background-color: var(--surface-color);
+    padding: var(--padding-md);
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: var(--margin-md);
+    display: none; /* Hidden by default, JavaScript will show active screen */
+}
+
+.game-screen.active {
+    display: block; /* Show the active screen */
+}
+
+.game-screen h2 {
+    color: var(--primary-color);
+    font-size: 1.5em;
+    margin-top: 0;
+    margin-bottom: var(--padding-md);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.info-box {
+    background-color: var(--background-color);
+    padding: var(--padding-md);
+    border-radius: var(--border-radius);
+    margin-bottom: var(--margin-md);
+    border: 1px solid var(--border-color);
+}
+
+.info-box h3 {
+    margin-top: 0;
+    color: var(--primary-color);
+    font-size: 1.2em;
+}
+
+.action-panel {
+    background-color: var(--surface-color);
+    padding: var(--padding-md);
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: var(--margin-md);
+    border: 1px solid var(--border-color);
+}
+
+.task-list {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0;
+}
+
+.task-list li {
+    background-color: var(--background-color);
+    margin-bottom: 8px;
+    padding: 10px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.task-list li button {
+    background-color: var(--primary-color);
+    color: var(--surface-color);
+    padding: 5px 10px;
+    font-size: 0.85em;
+}
+
+.task-list li button:hover {
+    background-color: #00695C; /* Darker primary */
+}
+
+/* --- Buttons --- */
+.primary-btn {
+    background-color: var(--primary-color);
+    color: var(--surface-color);
+    display: block; /* Makes it full width by default */
+    width: auto; /* Auto width based on content if not block */
+    margin: 15px 0 0; /* Top margin for spacing */
+    font-size: 1em;
+}
+
+.primary-btn:hover {
+    background-color: #00695C;
+    transform: translateY(-2px);
+}
+
+.secondary-btn {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+}
+
+.secondary-btn:hover {
+    background-color: #E0E0E0;
+    transform: translateY(-1px);
+}
+
+.export-btn {
+    margin-top: var(--margin-md);
+}
+
+/* --- Data Tables (General Styling) --- */
+.data-table-container {
+    width: 100%;
+    overflow-x: auto; /* Allows horizontal scrolling on small screens */
+    margin-bottom: var(--margin-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.02);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 500px; /* Ensure table is wide enough for columns on small screens */
+}
+
+.data-table th, .data-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table th {
+    background-color: var(--secondary-color);
+    color: var(--primary-color);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8em;
+}
+
+.data-table tbody tr:nth-child(even) {
+    background-color: #F8F8F8; /* Light stripe for readability */
+}
+
+.data-table tbody tr:hover {
+    background-color: #EFEFEF;
+}
+
+/* --- Forms --- */
+.form-group {
+    margin-bottom: var(--margin-md);
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--light-text-color);
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="color"],
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-size: 1em;
+    box-sizing: border-box; /* Include padding in width */
+}
+
+.form-group input[type="color"] {
+    height: 40px; /* Make color input more visible */
+    padding: 5px;
+}
+
+/* --- Modals --- */
+.modal-overlay {
+    display: none; /* Hidden by default */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black overlay */
+    justify-content: center;
+    align-items: center;
+    z-index: 1000; /* Ensure it's on top */
+}
+
+.modal-content {
+    background-color: var(--surface-color);
+    padding: var(--padding-md);
+    border-radius: var(--border-radius);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    width: 90%; /* Responsive width */
+    max-width: 500px; /* Max width for larger screens */
+    box-sizing: border-box;
+    position: relative;
+}
+
+.modal-content h3 {
+    color: var(--primary-color);
+    margin-top: 0;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end; /* Align buttons to the right */
+    gap: 10px;
+    margin-top: 20px;
+}
+
+#modalCloseBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: var(--light-text-color);
+}
+
+#modalCloseBtn:hover {
+    color: var(--text-color);
+}
+
+/* --- Footer --- */
+.app-footer {
+    background-color: var(--primary-color);
+    color: var(--surface-color);
+    padding: 10px var(--padding-md);
+    text-align: center;
+    margin-top: auto; /* Pushes footer to the bottom */
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.app-footer p {
+    margin: 0;
+    font-size: 0.8em;
+    color: var(--secondary-color);
+}
+
+.footer-btn {
+    padding: 8px 12px;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    background-color: var(--secondary-color);
+    color: var(--primary-color);
+    font-size: 0.85em;
+    font-weight: 600;
+    transition: background-color 0.2s ease;
+}
+
+.footer-btn:hover {
+    background-color: #80CBC4;
+}
+
+/* --- Responsive Adjustments --- */
+@media (min-width: 600px) {
+    .app-header h1 {
+        font-size: 2.2em;
+    }
+
+    .main-nav {
+        gap: 10px;
+    }
+
+    .nav-btn {
+        font-size: 1em;
+        padding: 12px 20px;
+    }
+
+    .game-main {
+        padding: 24px;
+    }
+
+    .game-screen {
+        padding: 24px;
+    }
+
+    .game-screen h2 {
+        font-size: 1.8em;
+    }
+
+    .modal-content {
+        padding: 24px;
+    }
+}
+

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Non-League Journey</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="app-header">
+        <h1 id="clubNameDisplay">Your Club Name</h1>
+        <nav class="main-nav">
+            <button class="nav-btn" data-screen="home">Home</button>
+            <button class="nav-btn" data-screen="squad">Squad</button>
+            <button class="nav-btn" data-screen="facilities">Facilities</button>
+            <button class="nav-btn" data-screen="finances">Finances</button>
+            <button class="nav-btn" data-screen="league">League</button>
+            <button class="nav-btn" data-screen="fixtures">Fixtures</button>
+            <button class="nav-btn" data-screen="committee">Committee</button>
+            <button class="nav-btn" data-screen="history">History</button>
+        </nav>
+    </header>
+
+    <main id="gameContent" class="game-main">
+        <!-- Game screens will be dynamically loaded here -->
+
+        <!-- Home Screen -->
+        <section id="homeScreen" class="game-screen active">
+            <h2>Season <span id="currentSeasonDisplay">1</span>, Week <span id="currentWeekDisplay">1</span></h2>
+            <p>Current Balance: <span id="currentBalanceDisplay">£0</span></p>
+            <div class="action-panel">
+                <h3>Weekly Actions</h3>
+                <p>Available Hours: <span id="availableHoursDisplay"></span></p>
+                <ul id="weeklyTasksList" class="task-list">
+                    <!-- Tasks will be dynamically added here -->
+                </ul>
+                <button id="advanceWeekBtn" class="primary-btn">Advance Week</button>
+            </div>
+            <div id="latestNews" class="info-box">
+                <h3>Latest News</h3>
+                <p id="newsContent">Welcome to your club's journey!</p>
+            </div>
+        </section>
+
+        <!-- Squad Screen -->
+        <section id="squadScreen" class="game-screen">
+            <h2>Your Squad</h2>
+            <div id="squadList" class="data-table-container">
+                <!-- Squad list will be rendered here -->
+            </div>
+            <button id="exportSquadBtn" class="secondary-btn export-btn">Export Squad CSV</button>
+        </section>
+
+        <!-- Facilities Screen -->
+        <section id="facilitiesScreen" class="game-screen">
+            <h2>Club Facilities</h2>
+            <div id="facilitiesList" class="data-table-container">
+                <!-- Facilities details will be rendered here -->
+            </div>
+            <button id="exportFacilitiesBtn" class="secondary-btn export-btn">Export Facilities CSV</button>
+        </section>
+
+        <!-- Finances Screen -->
+        <section id="financesScreen" class="game-screen">
+            <h2>Club Finances</h2>
+            <div id="currentFinances" class="info-box">
+                <p>Current Bank Balance: <span id="financeBalanceDisplay">£0</span></p>
+            </div>
+            <h3>Recent Transactions</h3>
+            <div id="transactionList" class="data-table-container">
+                <!-- Transaction list will be rendered here -->
+            </div>
+            <button id="exportFinancesBtn" class="secondary-btn export-btn">Export Finances CSV</button>
+        </section>
+
+        <!-- League Screen -->
+        <section id="leagueScreen" class="game-screen">
+            <h2>League Table</h2>
+            <div id="leagueTable" class="data-table-container">
+                <!-- League table will be rendered here -->
+            </div>
+            <button id="exportLeagueBtn" class="secondary-btn export-btn">Export League CSV</button>
+        </section>
+
+        <!-- Fixtures Screen -->
+        <section id="fixturesScreen" class="game-screen">
+            <h2>Fixtures & Results</h2>
+            <div id="fixturesList" class="data-table-container">
+                <!-- Fixtures and results will be rendered here -->
+            </div>
+            <button id="exportFixturesBtn" class="secondary-btn export-btn">Export Fixtures CSV</button>
+        </section>
+
+        <!-- Committee Screen -->
+        <section id="committeeScreen" class="game-screen">
+            <h2>Club Committee</h2>
+            <div id="committeeList" class="data-table-container">
+                <!-- Committee members will be rendered here -->
+            </div>
+            <button id="exportCommitteeBtn" class="secondary-btn export-btn">Export Committee CSV</button>
+        </section>
+
+        <!-- History Screen -->
+        <section id="historyScreen" class="game-screen">
+            <h2>Club History</h2>
+            <div id="clubHistoryList" class="data-table-container">
+                <!-- Club history will be rendered here -->
+            </div>
+            <button id="exportHistoryBtn" class="secondary-btn export-btn">Export History CSV</button>
+        </section>
+
+    </main>
+
+    <footer class="app-footer">
+        <button id="saveGameBtn" class="footer-btn">Save Game</button>
+        <button id="loadGameBtn" class="footer-btn">Load Game</button>
+        <button id="newGameBtn" class="footer-btn">New Game</button>
+        <p>&copy; 2025 Non-League Journey</p>
+    </footer>
+
+    <!-- Global Modals (will be hidden by default with CSS) -->
+
+    <!-- Event/Message Modal -->
+    <div id="gameModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modalTitle"></h3>
+            <p id="modalMessage"></p>
+            <div id="modalChoices" class="modal-actions"></div>
+            <button id="modalCloseBtn" class="secondary-btn">Close</button>
+        </div>
+    </div>
+
+    <!-- New Game Setup Modal -->
+    <div id="newGameModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Start a New Journey!</h3>
+            <div class="form-group">
+                <label for="hometownInput">Your Hometown:</label>
+                <input type="text" id="hometownInput" placeholder="e.g., Sileby, Loughborough, Melton Mowbray">
+            </div>
+            <div class="form-group">
+                <label for="clubNameInput">Club Name:</label>
+                <input type="text" id="clubNameInput" placeholder="e.g., Sileby Rovers, Red Lion FC">
+            </div>
+            <div class="form-group">
+                <label for="clubNicknameInput">Club Nickname:</label>
+                <input type="text" id="clubNicknameInput" placeholder="e.g., The Brewers, The Villagers">
+            </div>
+            <div class="form-group">
+                <label for="primaryColorInput">Primary Kit Color:</label>
+                <input type="color" id="primaryColorInput" value="#DC2626"> <!-- Example default red -->
+            </div>
+            <div class="form-group">
+                <label for="secondaryColorInput">Secondary Kit Color:</label>
+                <input type="color" id="secondaryColorInput" value="#1D4ED8"> <!-- Example default blue -->
+            </div>
+            <button id="createGameBtn" class="primary-btn">Create Club</button>
+        </div>
+    </div>
+
+    <!-- Opponent Customization Modal (appears once per game at start of season 1) -->
+    <div id="opponentCustomizationModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Customize Your Rivals (One Time!)</h3>
+            <p>You can adjust the names and colors of your league opponents. This is a one-time change for personalization.</p>
+            <div id="opponentListCustomization">
+                <!-- Opponent customization forms will be dynamically added here -->
+            </div>
+            <button id="saveOpponentCustomizationBtn" class="primary-btn">Save Opponent Customization</button>
+        </div>
+    </div>
+
+    <!-- LZ-String library for save file compression (now local) -->
+    <script src="js/libs/lzstring/lz-string.min.js"></script>
+
+    <!-- Load main JavaScript module -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
+
