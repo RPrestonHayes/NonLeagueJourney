@@ -43,7 +43,6 @@ console.log("DEBUG: Attempting to import Constants...");
 import * as Constants from './utils/constants.js';
 console.log("DEBUG: Constants imported successfully.");
 
-// NEW: Import color utility functions - CORRECTED PATH to coloursUtils.js
 import { getContrastingTextColor } from './utils/coloursUtils.js';
 
 
@@ -105,7 +104,6 @@ function applyThemeColors(primaryColor, secondaryColor) {
     root.style.setProperty('--primary-color', primaryColor);
     root.style.setProperty('--secondary-color', secondaryColor);
 
-    // Calculate contrasting text colors using the imported utility
     root.style.setProperty('--primary-text-on-bg', getContrastingTextColor(primaryColor));
     root.style.setProperty('--secondary-text-on-bg', getContrastingTextColor(secondaryColor));
 
@@ -133,7 +131,12 @@ function initGame() {
     if (loadedState) {
         console.log("DEBUG: Game loaded from localStorage.");
         gameState = loadedState;
-        renderers.displayMessage('Game Loaded!', 'Continue your journey to glory.');
+        // Fix: Action directly updates UI and navigates home
+        renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: () => {
+            renderers.hideModal();
+            renderers.renderGameScreen('homeScreen'); // Go to home screen
+            Main.updateUI(); // Update UI for loaded state
+        }, isPrimary: true }]);
         if (gameState.playerClub) {
             playerData.setSquad(gameState.playerClub.squad || []);
             clubData.setCommittee(gameState.playerClub.committee || []);
@@ -147,19 +150,19 @@ function initGame() {
             } else {
                  opponentData.setAllOpponentClubs([]);
             }
-            // Apply loaded club's theme colors
             applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
         renderers.hideLoadingScreen();
-        updateUI();
-        renderers.renderGameScreen('homeScreen');
     } else {
         console.log("DEBUG: No save game found. Rendering new game modal.");
         renderers.hideLoadingScreen();
         renderers.renderNewGameModal();
-        renderers.displayMessage('Welcome, Gaffer!', 'Please set up a new game.');
+        // Fix: Action directly updates UI and navigates home (or stays on modal)
+        renderers.showModal('Welcome, Chairman!', 'Please set up your club and begin your Non-League Journey.', [{ text: 'Continue', action: () => {
+            renderers.hideModal();
+            // After welcome, stay on newGameModal for input, no screen change needed here
+        }, isPrimary: true }]);
         gameState.gamePhase = Constants.GAME_PHASE.SETUP;
-        // Apply default theme colors if no game loaded
         applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
     }
     console.log("DEBUG: initGame() finished.");
@@ -179,7 +182,6 @@ export function startNewGame(playerClubDetails) {
     gameState.playerClub = clubData.createPlayerClub(playerClubDetails);
     gameState.playerClubCustomized = true;
 
-    // Apply initial custom theme colors immediately after club creation
     applyThemeColors(playerClubDetails.primaryColor, playerClubDetails.secondaryColor);
 
     // 2. Initialize Player Squad and attach to playerClub
@@ -211,11 +213,16 @@ export function startNewGame(playerClubDetails) {
 
     // Render opponent customization modal
     renderers.hideLoadingScreen();
-    renderers.hideModal();
+    renderers.hideModal(); // Hide new game modal
     renderers.renderOpponentCustomizationModal(
         opponentData.getAllOpponentClubs(gameState.playerClub.id)
     );
-    renderers.displayMessage('Your club is born!', 'Now, customize your league rivals before the season kicks off.');
+    // Fix: Explicit action for showModal
+    renderers.showModal('Your club is born!', 'Now, customize your league rivals before the season kicks off.', [{ text: 'Continue', action: () => {
+        renderers.hideModal(); // Hide this modal
+        renderers.renderGameScreen('homeScreen'); // Go to home screen
+        Main.updateUI(); // Update UI for the home screen
+    }, isPrimary: true }]);
     console.log("DEBUG: startNewGame() finished.");
 }
 
@@ -253,9 +260,12 @@ export function applyOpponentCustomization(customizedOpponents) {
 
     renderers.hideLoadingScreen();
     renderers.hideOpponentCustomizationModal();
-    renderers.displayMessage('Rivals Customized!', 'Your league opponents are now set for the journey ahead. Welcome to pre-season!');
-    renderers.renderGameScreen('homeScreen');
-    updateUI();
+    // Fix: Explicit action for showModal
+    renderers.showModal('Rivals Customized!', 'Your league opponents are now set for the journey ahead. Welcome to pre-season!', [{ text: 'Continue', action: () => {
+        renderers.hideModal();
+        renderers.renderGameScreen('homeScreen'); // Go to home screen
+        Main.updateUI(); // Update UI for the home screen
+    }, isPrimary: true }]);
     saveGame(false);
     console.log("DEBUG: applyOpponentCustomization() finished.");
 }
@@ -290,7 +300,12 @@ export function loadGame() {
     const loadedState = localStorageManager.loadGame();
     if (loadedState) {
         gameState = loadedState;
-        renderers.displayMessage('Game Loaded!', 'Continue your journey to glory.');
+        // Fix: Explicit action for showModal
+        renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: () => {
+            renderers.hideModal();
+            renderers.renderGameScreen('homeScreen'); // Go to home screen
+            Main.updateUI(); // Update UI for loaded state
+        }, isPrimary: true }]);
         console.log("DEBUG: Game loaded successfully:", gameState);
 
         if (gameState.playerClub) {
@@ -306,15 +321,17 @@ export function loadGame() {
             } else {
                  opponentData.setAllOpponentClubs([]);
             }
-            // Apply loaded club's theme colors
             applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
 
-        updateUI();
         renderers.hideLoadingScreen();
-        renderers.renderGameScreen('homeScreen');
     } else {
-        renderers.displayMessage('No Save Found!', 'Starting a new game instead.');
+        // Fix: Explicit action for showModal
+        renderers.showModal('No Save Found!', 'Starting a new game instead.', [{ text: 'Continue', action: () => {
+            renderers.hideModal();
+            renderers.renderNewGameModal(); // Go to new game setup
+            Main.updateUI(); // Update UI for the new game modal
+        }, isPrimary: true }]);
         console.log("DEBUG: No game save found to load.");
         gameState = {
             playerClub: null, leagues: [], currentSeason: 1, currentWeek: 1,
@@ -322,9 +339,6 @@ export function loadGame() {
             gamePhase: Constants.GAME_PHASE.SETUP, playerClubCustomized: false, opponentClubsCustomized: false,
         };
         renderers.hideLoadingScreen();
-        renderers.renderNewGameModal();
-        // Apply default theme colors if no game loaded
-        applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
     }
     console.log("DEBUG: initGame() finished.");
 }
@@ -348,11 +362,11 @@ export function newGameConfirm() {
                     gamePhase: Constants.GAME_PHASE.SETUP, playerClubCustomized: false, opponentClubsCustomized: false,
                 };
                 renderers.renderNewGameModal();
-                // Apply default theme colors for new game modal
                 applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
             }, isPrimary: true },
             { text: 'No, Cancel', action: () => {
                 renderers.hideModal();
+                Main.updateUI(); // Update UI if cancelled to refresh current screen
             }}
         ]
     );
@@ -360,7 +374,7 @@ export function newGameConfirm() {
 
 /**
  * Advances the game by one week. This is the core of the game loop.
- * Delegates to the gameLoop module.
+ * It now triggers the start of the week's event chain.
  */
 export function advanceWeek() {
     console.log("DEBUG: advanceWeek() called.");
@@ -370,28 +384,25 @@ export function advanceWeek() {
 
     const minimumAllocatedPercentage = 0.75;
     if (allocatedHours < baseWeeklyHours * minimumAllocatedPercentage && currentAvailableHours > 0) {
+        // Fix: Explicit actions for showModal, including week advancement logic
         renderers.showModal('Allocate More Time!', 'You still have a lot of available hours. Consider completing more tasks before advancing the week!', [{ text: 'Advance Anyway', action: () => {
-            renderers.hideModal();
-            proceedAdvanceWeekLogic();
-        }},
+            renderers.hideModal(); // Hide this modal
+            gameLoop.advanceWeek(Main.gameState); // Call gameLoop directly
+        }, isPrimary: true },
         { text: 'Allocate More', action: () => {
-            renderers.hideModal();
+            renderers.hideModal(); // Hide modal, stay on current week
+            Main.updateUI(); // Update UI to refresh current screen
         }}
         ]);
-        return;
+        return; // Stop execution, await user choice
     }
 
-    proceedAdvanceWeekLogic();
-}
+    gameLoop.advanceWeek(Main.gameState); // If check passes or skipped, proceed to week logic
 
-// Internal function to encapsulate actual week advancing logic
-function proceedAdvanceWeekLogic() {
-    renderers.showLoadingScreen();
-    setTimeout(() => {
-        gameLoop.advanceWeek(gameState);
-        renderers.hideLoadingScreen();
-        console.log("DEBUG: proceedAdvanceWeekLogic() finished.");
-    }, 50);
+
+    // updateUI() will be called by gameLoop.finalizeWeekProcessing
+    // saveGame(false) will be called by gameLoop.finalizeWeekProcessing
+    // renderers.renderGameScreen('homeScreen') will be called by gameLoop.finalizeWeekProcessing
 }
 
 
@@ -478,4 +489,3 @@ export function updateUI() {
 console.log("DEBUG: Adding DOMContentLoaded listener.");
 document.addEventListener('DOMContentLoaded', initGame);
 console.log("DEBUG: main.js finished loading.");
-

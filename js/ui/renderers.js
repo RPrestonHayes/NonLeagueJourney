@@ -5,7 +5,13 @@
  * Manages screen visibility, updates dynamic content, and displays modals.
  */
 
-// --- DOM Element References (Cache for performance) ---
+// --- Module Imports ---
+import * as Constants from '../utils/constants.js';
+// Removed all imports that cause circular dependencies.
+// renderers.js will NOT import Main or gameLoop.
+
+
+// --- DOM Element References (Cache for performance and correct ID access) ---
 const gameScreens = document.querySelectorAll('.game-screen');
 const modalOverlay = document.getElementById('gameModal');
 const modalTitle = document.getElementById('modalTitle');
@@ -48,7 +54,7 @@ export function renderGameScreen(screenId) {
         screen.style.display = 'none';
         screen.classList.remove('active');
     });
-    modalOverlay.style.display = 'none';
+    modalOverlay.style.display = 'none'; // Always hide generic modal when changing screens
     newGameModal.style.display = 'none';
     opponentCustomizationModal.style.display = 'none';
     loadingScreen.style.display = 'none';
@@ -124,8 +130,8 @@ export function updateNewsFeed(message) {
 }
 
 /**
- * Displays a short, temporary message (e.g., "Game Saved!").
- * Uses the generic modal but hides choices and close button for quick info.
+ * Displays a short, non-interactive message. It will auto-hide.
+ * Use for "Game Saved!" or very transient info. For anything the user needs to dismiss, use showModal.
  * @param {string} title - The message title.
  * @param {string} message - The message content.
  */
@@ -140,59 +146,73 @@ export function displayMessage(title, message) {
 
     setTimeout(() => {
         hideModal();
-    }, 3000);
+    }, 3000); // Auto-hide after 3 seconds
 }
 
 
-// --- Generic Modal Display ---
+// --- Generic Modal Display (for ALL modals that need user dismissal) ---
 /**
- * Shows a generic modal with a title, message, and optional action choices.
- * This is for interactive modals, unlike displayMessage for quick info.
+ * Shows a generic modal with a title, message, and action choices.
+ * This is the ONLY function that should be used for modals that require user dismissal.
+ *
  * @param {string} title - The modal title.
  * @param {string} message - The modal message/description.
- * @param {Array<object>} choices - Optional array of { text: string, action: function, isPrimary: boolean }
+ * @param {Array<object>} customChoices - Array of { text: string, action: function, isPrimary: boolean }.
+ * Each action MUST call renderers.hideModal() if it should close the modal.
+ * @param {string|null} dismissalContext - An optional context string for the caller's logic.
  */
-export function showModal(title, message, choices = []) {
+export function showModal(title, message, customChoices = [], dismissalContext = null) { // dismissalContext is passed to action function
     modalTitle.textContent = title;
     modalMessage.textContent = message;
-    modalChoices.innerHTML = '';
+    modalChoices.innerHTML = ''; // Clear previous choices
 
-    choices.forEach(choice => {
+    const choicesToRender = [...customChoices];
+
+    // If no custom choices were provided, add a default 'Continue' button
+    if (choicesToRender.length === 0) {
+        // Fix: Default 'Continue' now simply calls hideModal(). The caller's context determines next step.
+        choicesToRender.push({ text: 'Continue', action: () => { hideModal(); }, isPrimary: true }); 
+    }
+    
+    modalChoices.style.display = 'flex'; 
+    modalCloseBtn.style.display = 'none'; // Hide the general 'X' close button. Only generated buttons dismiss.
+
+    choicesToRender.forEach(choice => {
         const button = document.createElement('button');
         button.textContent = choice.text;
         button.classList.add('modal-choice-btn', choice.isPrimary ? 'primary-btn' : 'secondary-btn');
-        // The action should typically hide the modal if it's a 'continue' or final decision.
-        // We ensure hideModal is called here if the action function itself doesn't.
         button.onclick = () => {
-            choice.action();
-            // Check if modal is still open after action, if so, hide it.
-            // This is a safety measure if an action doesn't explicitly hide it.
-            if (modalOverlay.style.display === 'flex') {
-                hideModal();
-            }
+            // FIX: The action function is now responsible for:
+            // 1. Hiding the modal (if it's a custom action).
+            // 2. Triggering the next game logic step.
+            choice.action(dismissalContext); // Pass dismissalContext to the action callback
         };
         modalChoices.appendChild(button);
     });
-
-    if (choices.length > 0) {
-        modalChoices.style.display = 'flex';
-        modalCloseBtn.style.display = 'none';
-    } else {
-        modalChoices.style.display = 'block';
-        modalCloseBtn.style.display = 'block';
-    }
-
-    modalOverlay.style.display = 'flex';
+    
+    modalOverlay.style.display = 'flex'; // Show the modal overlay
 }
 
 /**
  * Hides the generic modal.
+ * This function now ONLY hides the modal and clears its content.
+ * It does NOT trigger screen changes or game state updates.
  */
 export function hideModal() {
     modalOverlay.style.display = 'none';
     modalTitle.textContent = '';
     modalMessage.textContent = '';
     modalChoices.innerHTML = '';
+    modalCloseBtn.onclick = null; // Reset click handler for safety
+}
+
+/**
+ * Returns the current display status of the generic modal.
+ * Used by other modules to check if a modal is already open.
+ * @returns {string} The CSS display property value (e.g., 'none', 'flex').
+ */
+export function getModalDisplayStatus() {
+    return modalOverlay.style.display;
 }
 
 // --- New Game Setup Modal ---
@@ -267,13 +287,12 @@ export function renderSquadScreen(players) {
 
     if (players && players.length > 0) {
         players.forEach(player => {
-            const overallRating = calculateOverallPlayerRating(player.attributes);
             tableHTML += `
                 <tr>
                     <td>${player.name}</td>
                     <td>${player.preferredPosition}</td>
                     <td>${player.age}</td>
-                    <td>${overallRating}</td>
+                    <td>${calculateOverallPlayerRating(player.attributes)}</td>
                     <td>${player.status.morale}%</td>
                     <td>${player.status.fitness}%</td>
                     <td>${player.traits.commitmentLevel}</td>
@@ -324,9 +343,9 @@ export function renderFacilitiesScreen(facilities) {
             <thead>
                 <tr>
                     <th>Facility</th>
-                    <th>Grade</th> <!-- CHANGED: Display Grade -->
-                    <th>Condition</th> <!-- NEW: Display Condition -->
-                    <th>Status</th> <!-- Changed from old Status, now descriptive condition -->
+                    <th>Grade</th>
+                    <th>Condition</th>
+                    <th>Status</th>
                     <th>Next Upgrade Cost</th>
                 </tr>
             </thead>
@@ -335,24 +354,22 @@ export function renderFacilitiesScreen(facilities) {
 
     for (const key in facilities) {
         const facility = facilities[key];
-        // Only render if level > 0 (facility exists or has been built)
-        if (facility.level > 0) {
+        if (facility.level > 0 || key === Constants.FACILITIES.PITCH || key === Constants.FACILITIES.CHGRMS) {
             tableHTML += `
                 <tr>
                     <td>${facility.name}</td>
-                    <td>${facility.grade || 'N/A'}</td> <!-- Display the grade -->
-                    <td>${facility.condition}%</td> <!-- Display the condition -->
-                    <td>${facility.isUsable ? 'Usable' : 'Unplayable'}</td> <!-- Show usability status -->
+                    <td>${facility.grade || 'N/A'}</td>
+                    <td>${facility.condition}%</td>
+                    <td>${facility.isUsable ? 'Usable' : 'Not Usable'}</td>
                     <td>£${facility.currentUpgradeCost ? facility.currentUpgradeCost.toFixed(2) : 'MAX'}</td>
                 </tr>
             `;
         } else if (facility.level === 0) {
-             // For facilities not yet built, display them with N/A or a build cost
              tableHTML += `
                 <tr>
                     <td>${facility.name}</td>
-                    <td>N/A</td>
-                    <td>0%</td>
+                    <td>${facility.grade || 'N/A'}</td>
+                    <td>${facility.condition}%</td>
                     <td>Not Built</td>
                     <td>£${facility.currentUpgradeCost ? facility.currentUpgradeCost.toFixed(2) : 'N/A'} (Build)</td>
                 </tr>
@@ -471,41 +488,42 @@ export function renderFixturesScreen(groupedMatchSchedule) {
 
     if (groupedMatchSchedule && groupedMatchSchedule.length > 0) {
         groupedMatchSchedule.forEach(weekBlock => {
-            // Only render week blocks that actually contain matches (excluding those with only BYEs if filtered)
-            if (weekBlock.matches.length > 0) {
-                htmlContent += `
-                    <div class="fixture-week-block">
-                        <h3>Week ${weekBlock.week}</h3>
-                        <table class="data-table fixture-table">
-                            <thead>
-                                <tr>
-                                    <th>Home Team</th>
-                                    <th>Score</th>
-                                    <th>Away Team</th>
-                                    <th>Comp</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-
-                weekBlock.matches.forEach(match => {
-                    const score = match.played && match.result ? match.result : 'vs';
-                    htmlContent += `
-                        <tr>
-                            <td>${match.homeTeamName}</td>
-                            <td>${score}</td>
-                            <td>${match.awayTeamName}</td>
-                            <td>${match.competition}</td>
-                        </tr>
-                    `;
-                });
-
-                htmlContent += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
+            if (weekBlock.matches.length === 0) {
+                return;
             }
+
+            htmlContent += `
+                <div class="fixture-week-block">
+                    <h3>Week ${weekBlock.week}</h3>
+                    <table class="data-table fixture-table">
+                        <thead>
+                            <tr>
+                                <th>Home Team</th>
+                                <th>Score</th>
+                                <th>Away Team</th>
+                                <th>Comp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            weekBlock.matches.forEach(match => {
+                const score = match.played && match.result ? match.result : 'vs';
+                htmlContent += `
+                    <tr>
+                        <td>${match.homeTeamName}</td>
+                        <td>${score}</td>
+                        <td>${match.awayTeamName}</td>
+                        <td>${match.competition}</td>
+                    </tr>
+                `;
+            });
+
+            htmlContent += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
         });
     } else {
         htmlContent += `<p>No fixtures scheduled for this season yet.</p>`;
@@ -610,8 +628,9 @@ export function updateWeeklyTasksDisplay(tasks, availableHours) {
     if (tasks && tasks.length > 0) {
         tasks.forEach(task => {
             const listItem = document.createElement('li');
+            const descriptionText = task.longDescription ? task.longDescription : task.description;
             listItem.innerHTML = `
-                <span>${task.description} (${task.baseHours} hrs)</span>
+                <span>${task.description} (${task.baseHours} hrs)<br><small>${descriptionText}</small></span>
                 <button class="complete-task-btn ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" ${task.completed || availableHours < task.baseHours ? 'disabled' : ''}>
                     ${task.completed ? 'Completed' : 'Do Task'}
                 </button>
@@ -622,4 +641,3 @@ export function updateWeeklyTasksDisplay(tasks, availableHours) {
         weeklyTasksList.innerHTML = `<li>No tasks available this week.</li>`;
     }
 }
-

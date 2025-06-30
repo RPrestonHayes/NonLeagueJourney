@@ -9,13 +9,8 @@ import * as Constants from '../utils/constants.js';
 import * as clubData from '../data/clubData.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
-// NEW: Import dataGenerator module
-import * as dataGenerator from '../utils/dataGenerator.js';
-
-
-// --- Helper Functions (moved here for module scope, or imported if external) ---
-// Note: getRandomInt and getRandomElement are now exported from dataGenerator, so use dataGenerator.getRandomInt
-// No need to define them locally here if imported.
+import * as Main from '../main.js';
+import * as dataGenerator from '../utils/dataGenerator.js'; // FIX: Import dataGenerator as a namespace
 
 
 /**
@@ -35,140 +30,152 @@ export function triggerRandomEvent(gameState) {
     const chosenEventType = dataGenerator.getRandomElement(eventTypes); // Use dataGenerator.getRandomElement
 
     let event = null;
+    let eventDisplayTitle = '';
+    let eventDisplayMessage = '';
+
     switch (chosenEventType) {
         case Constants.EVENT_TYPES.BAD_PITCH_DAMAGE:
+            const damageCost = dataGenerator.getRandomInt(50, 150);
+            gameState.playerClub.finances = clubData.addTransaction(
+                gameState.playerClub.finances,
+                -damageCost,
+                Constants.TRANSACTION_TYPE.OTHER_EXP,
+                'Pitch Damage Repair'
+            );
+            gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                gameState.playerClub.facilities, Constants.FACILITIES.PITCH, -dataGenerator.getRandomInt(20, 50)
+            );
+            eventDisplayTitle = 'Pitch Damaged!';
+            eventDisplayMessage = `A group of local youths (or perhaps wild animals) damaged the pitch overnight. It will cost £${damageCost.toFixed(2)} to start repairs, and its condition has dropped to ${gameState.playerClub.facilities[Constants.FACILITIES.PITCH].condition}%.`;
+            renderers.updateNewsFeed(eventDisplayTitle);
+
             event = {
-                title: 'Pitch Damaged!',
-                description: `A group of local youths (or perhaps wild animals) damaged the pitch overnight. It needs immediate attention!`,
-                effect: () => {
-                    const damageCost = dataGenerator.getRandomInt(50, 150); // Use dataGenerator.getRandomInt
-                    gameState.playerClub.finances = clubData.addTransaction(
-                        gameState.playerClub.finances,
-                        -damageCost,
-                        Constants.TRANSACTION_TYPE.OTHER_EXP,
-                        'Pitch Damage Repair'
-                    );
-                    gameState.playerClub.facilities[Constants.FACILITIES.PITCH].status = 'Damaged';
-                    gameState.messages.push({ week: gameState.currentWeek, text: `Pitch damaged, cost £${damageCost.toFixed(2)} to repair.` });
-                    renderers.updateNewsFeed(`Pitch damaged! Cost £${damageCost.toFixed(2)}.`);
-                },
-                choices: [{ text: 'Deal with it!', action: () => {} }]
+                title: eventDisplayTitle,
+                description: eventDisplayMessage,
+                choices: [{ text: 'Drat!', action: renderers.hideModal }]
             };
             break;
+
         case Constants.EVENT_TYPES.GOOD_VOLUNTEER:
             const volunteerName = `${dataGenerator.getRandomName('first')} ${dataGenerator.getRandomName('last')}`;
             const volunteerRole = dataGenerator.getRandomElement([Constants.COMMITTEE_ROLES.GRNDS, Constants.COMMITTEE_ROLES.SOC, Constants.COMMITTEE_ROLES.V_COORD]);
+            const newVolunteer = dataGenerator.generateCommitteeMember(volunteerRole);
+            newVolunteer.name = volunteerName;
+            gameState.playerClub.committee = clubData.addCommitteeMember(gameState.playerClub.committee, newVolunteer);
+            
+            eventDisplayTitle = 'New Volunteer!';
+            eventDisplayMessage = `${volunteerName} from the local community has offered to volunteer as a ${volunteerRole}! This is a great boost for the club.`;
+            renderers.updateNewsFeed(eventDisplayTitle);
+
             event = {
-                title: 'New Volunteer!',
-                description: `${volunteerName} from the local community has offered to volunteer as a ${volunteerRole}. What a boost!`,
-                effect: () => {
-                    const newVolunteer = dataGenerator.generateCommitteeMember(volunteerRole);
-                    newVolunteer.name = volunteerName; // Set specific name from event context
-                    gameState.playerClub.committee = clubData.addCommitteeMember(gameState.playerClub.committee, newVolunteer);
-                    gameState.messages.push({ week: gameState.currentWeek, text: `New volunteer: ${volunteerName} joins as ${volunteerRole}.` });
-                    renderers.updateNewsFeed(`New volunteer joins: ${volunteerName}!`);
-                },
-                choices: [{ text: 'Welcome them aboard!', action: () => {} }]
+                title: eventDisplayTitle,
+                description: eventDisplayMessage,
+                choices: [{ text: 'Welcome them aboard!', action: renderers.hideModal }]
             };
             break;
+
         case Constants.EVENT_TYPES.NEUTRAL_JOURNALIST:
+            eventDisplayTitle = 'Local Press Interest!';
+            eventDisplayMessage = 'A reporter from the local paper wants to do an article on your club. This is a chance for good PR!';
+            renderers.updateNewsFeed(eventDisplayTitle);
+
             event = {
-                title: 'Local Press Interest!',
-                description: 'A reporter from the local paper wants to do an article on your club. Good PR, but you need to be careful what you say!',
-                effect: () => {
-                    gameState.messages.push({ week: gameState.currentWeek, text: `Local journalist wants an interview.` });
-                },
+                title: eventDisplayTitle,
+                description: eventDisplayMessage,
                 choices: [
                     { text: 'Grant Interview (Good PR chance)', action: () => {
-                        if (dataGenerator.getRandomInt(1, 100) > 50) { // Use dataGenerator.getRandomInt
-                            renderers.displayMessage('Positive Publicity!', 'The article was very positive, boosting club reputation slightly.');
-                            gameState.playerClub.reputation = Math.min(100, gameState.playerClub.reputation + dataGenerator.getRandomInt(1, 3)); // Use dataGenerator.getRandomInt
+                        let outcomeMsg = '';
+                        if (dataGenerator.getRandomInt(1, 100) > 50) {
+                            gameState.playerClub.reputation = Math.min(100, gameState.playerClub.reputation + dataGenerator.getRandomInt(1, 3));
+                            outcomeMsg = `The article was very positive, boosting club reputation slightly to ${gameState.playerClub.reputation}%.`;
                         } else {
-                            renderers.displayMessage('Mixed Publicity', 'The article was a bit mixed, nothing much changes.');
+                            outcomeMsg = `The article was a bit mixed, nothing much changes.`;
                         }
-                        renderers.hideModal(); // Hide modal after action taken
+                        renderers.showModal('Publicity Outcome', outcomeMsg, [{ text: 'Continue', action: renderers.hideModal }]); // Use showModal
+                        Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `Journalist interview: ${outcomeMsg}` });
                     }},
                     { text: 'Decline Interview (Safe)', action: () => {
-                        renderers.displayMessage('No Publicity', 'You politely declined the interview. No news is good news, right?');
-                        renderers.hideModal(); // Hide modal after action taken
+                        renderers.showModal('No Publicity', 'You politely declined the interview. No news is good news, right?', [{ text: 'Continue', action: renderers.hideModal }]); // Use showModal
+                        Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `Journalist interview declined.` });
                     }}
                 ]
             };
             break;
+
         case Constants.EVENT_TYPES.BAD_EQUIPMENT_BREAK:
-            const brokenItem = dataGenerator.getRandomElement(['lawnmower', 'goal nets', 'shower heater']); // Use dataGenerator.getRandomElement
-            const repairCost = dataGenerator.getRandomInt(30, 80); // Use dataGenerator.getRandomInt
+            const brokenItem = dataGenerator.getRandomElement(['lawnmower', 'goal nets', 'shower heater']);
+            const repairCost = dataGenerator.getRandomInt(30, 80);
+            gameState.playerClub.finances = clubData.addTransaction(
+                gameState.playerClub.finances,
+                -repairCost,
+                Constants.TRANSACTION_TYPE.OTHER_EXP,
+                `Repair ${brokenItem}`
+            );
+            eventDisplayTitle = 'Equipment Breakdown!';
+            eventDisplayMessage = `Your old ${brokenItem} has broken down. It cost £${repairCost.toFixed(2)} for emergency repairs.`;
+            renderers.updateNewsFeed(eventDisplayTitle);
+
             event = {
-                title: 'Equipment Breakdown!',
-                description: `Your old ${brokenItem} has broken down. You'll need to pay for repairs or replace it.`,
-                effect: () => {
-                    gameState.playerClub.finances = clubData.addTransaction(
-                        gameState.playerClub.finances,
-                        -repairCost,
-                        Constants.TRANSACTION_TYPE.OTHER_EXP,
-                        `Repair ${brokenItem}`
-                    );
-                    gameState.messages.push({ week: gameState.currentWeek, text: `${brokenItem} broke, cost £${repairCost.toFixed(2)} to fix.` });
-                    renderers.updateNewsFeed(`${brokenItem} broke down!`);
-                },
-                choices: [{ text: 'Oh dear...', action: () => {renderers.hideModal();} }] // Add action to hide modal
+                title: eventDisplayTitle,
+                description: eventDisplayMessage,
+                choices: [{ text: 'Oh dear...', action: renderers.hideModal }]
             };
             break;
+
         case Constants.EVENT_TYPES.BAD_PLAYER_ABSENT:
-            // Ensure player is not already injured/suspended/absent
             const absentPlayerCandidates = playerData.getSquad().filter(p => p.status.injuryStatus === 'Fit' && !p.status.suspended);
-            const absentPlayer = dataGenerator.getRandomElement(absentPlayerCandidates); // Use dataGenerator.getRandomElement
+            const absentPlayer = dataGenerator.getRandomElement(absentPlayerCandidates);
             if (absentPlayer) {
+                const updatedPlayerSquad = playerData.updatePlayerStats(absentPlayer.id, {
+                    suspended: true,
+                    suspensionGames: 1,
+                    injuryStatus: 'Absent'
+                });
+                gameState.playerClub.squad = updatedPlayerSquad;
+                playerData.updatePlayerMorale(absentPlayer.id, -5);
+
+                eventDisplayTitle = 'Player Absent!';
+                eventDisplayMessage = `${absentPlayer.name} has called in sick/has work commitments and won't be available for the upcoming match! Morale dropped slightly.`;
+                renderers.updateNewsFeed(eventDisplayTitle);
+
                 event = {
-                    title: 'Player Absent!',
-                    description: `${absentPlayer.name} has called in sick/has work commitments and won't be available for the upcoming match!`,
-                    effect: () => {
-                        // Mark player as absent/suspended for 1 game
-                        const updatedPlayerSquad = playerData.updatePlayerStats(absentPlayer.id, {
-                            suspended: true,
-                            suspensionGames: 1, // Simplified to 1 game absence
-                            injuryStatus: 'Absent' // Mark as absent for clarity
-                        });
-                        // Since updatePlayerStats returns the new squad array, we should update gameState with it
-                        gameState.playerClub.squad = updatedPlayerSquad;
-                        playerData.updatePlayerMorale(absentPlayer.id, -5); // Morale hit
-                        gameState.messages.push({ week: gameState.currentWeek, text: `${absentPlayer.name} is absent this week.` });
-                        renderers.updateNewsFeed(`${absentPlayer.name} is unavailable!`);
-                    },
-                    choices: [{ text: 'Find a replacement!', action: () => {renderers.hideModal();} }] // Add action to hide modal
+                    title: eventDisplayTitle,
+                    description: eventDisplayMessage,
+                    choices: [{ text: 'Drat!', action: renderers.hideModal }]
                 };
             } else {
-                return null; // No eligible player to be absent
+                return null;
             }
             break;
+
         case Constants.EVENT_TYPES.GOOD_SMALL_SPONSOR:
-            const sponsorName = `${dataGenerator.getRandomName('last')} Co.`;
+            const sponsorName = `${dataGenerator.getRandomName('first')} ${dataGenerator.getRandomName('last')} Co.`; // Use getRandomName
             const sponsorAmount = dataGenerator.getRandomInt(50, 200);
+            gameState.playerClub.finances = clubData.addTransaction(
+                gameState.playerClub.finances,
+                sponsorAmount,
+                Constants.TRANSACTION_TYPE.SPONSOR_IN,
+                `${sponsorName} Sponsorship`
+            );
+            eventDisplayTitle = 'New Local Sponsor!';
+            eventDisplayMessage = `${sponsorName} has offered a small one-time sponsorship of £${sponsorAmount.toFixed(2)} for the club! A welcome financial boost.`;
+            renderers.updateNewsFeed(eventDisplayTitle);
+
             event = {
-                title: 'New Local Sponsor!',
-                description: `${sponsorName} has offered a small one-time sponsorship of £${sponsorAmount.toFixed(2)} for the club!`,
-                effect: () => {
-                    gameState.playerClub.finances = clubData.addTransaction(
-                        gameState.playerClub.finances,
-                        sponsorAmount,
-                        Constants.TRANSACTION_TYPE.SPONSOR_IN,
-                        `${sponsorName} Sponsorship`
-                    );
-                    gameState.messages.push({ week: gameState.currentWeek, text: `Received £${sponsorAmount.toFixed(2)} sponsorship from ${sponsorName}.` });
-                    renderers.updateNewsFeed(`New sponsor: ${sponsorName}!`);
-                },
-                choices: [{ text: 'Accept with thanks!', action: () => {renderers.hideModal();} }] // Add action to hide modal
+                title: eventDisplayTitle,
+                description: eventDisplayMessage,
+                choices: [{ text: 'Accept with thanks!', action: renderers.hideModal }]
             };
             break;
+
         default:
-            console.warn(`Unhandled event type: ${chosenEventType}`);
+            console.warn(`Unhandled event type in triggerRandomEvent: ${chosenEventType}`);
             return null;
     }
 
-    if (event && event.effect) {
-        // The effect is applied here, before the modal is shown, so the state is updated.
-        // The event's effect function will already have modified gameState.
+    if (event) {
+        renderers.showModal(event.title, event.description, event.choices);
     }
-    return event; // Return the event object for gameLoop to display the modal
+    return event;
 }
 

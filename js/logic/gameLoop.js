@@ -15,8 +15,9 @@ import * as matchLogic from './matchLogic.js';
 import * as eventLogic from './eventLogic.js';
 import * as playerInteractionLogic from './playerInteractionLogic.js';
 import * as committeeLogic from './committeeLogic.js';
+import * as taskLogic from './taskLogic.js';
 import * as renderers from '../ui/renderers.js';
-import * as Main from '../main.js';
+import * as Main from '../main.js'; // Ensure Main is imported
 
 
 // --- Helper Functions ---
@@ -30,227 +31,178 @@ function getRandomElement(arr) {
 
 /**
  * Advances the game by one week. This is the central function called from main.js.
+ * It initiates the sequence of events for the current week.
  * @param {object} gameState - The current mutable gameState object.
+ * @returns {boolean} True if an interactive modal was displayed by this execution of advanceWeek,
+ * false otherwise. If true, the caller (main.js) should NOT finalize the week, but
+ * wait for the modal's action to trigger processAIMatchesAndFinalizeWeek or finalizeWeekProcessing.
  */
 export function advanceWeek(gameState) {
-    console.log(`--- Advancing to Season ${gameState.currentSeason}, Week ${gameState.currentWeek} ---`);
+    console.log(`--- Starting processing for Season ${gameState.currentSeason}, Week ${gameState.currentWeek} ---`);
 
-    if (gameState.gamePhase === Constants.GAME_PHASE.SETUP || gameState.gamePhase === Constants.GAME_PHASE.OPPONENT_CUSTOMIZATION) {
-         renderers.showModal('Game Not Ready', 'Complete game setup and customization before advancing the week.');
-         return;
-    }
-
-    // 1. Process Player's Weekly Tasks
+    // 1. Process Player's Weekly Tasks (Effects already applied by clicking 'Do Task' button)
     processPlayerTasks(gameState);
 
-    // 2. Apply Natural Facility Decay/Improvement & Check Grade Degradation (NEW)
+
+    // 2. Apply Natural Facility Decay/Improvement & Check Grade Degradation (can show modal)
     applyNaturalFacilityChanges(gameState);
+    if (renderers.getModalDisplayStatus() === 'flex') {
+        return true; // Modal shown, synchronous flow stops, action will continue chain
+    }
+
 
     // 3. Apply Weekly Expenses
     applyWeeklyExpenses(gameState);
 
-    // 4. Check for Monthly Committee Meeting
-    if (gameState.currentWeek > 0 && gameState.currentWeek % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 0) {
-        console.log("Monthly committee meeting scheduled.");
-        committeeLogic.startCommitteeMeeting(gameState);
+
+    // 4. Check for Monthly Committee Meeting (can show modal)
+    if (gameState.currentWeek > 0 && gameState.currentWeek % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 0 && renderers.getModalDisplayStatus() === 'none') {
+        console.log("DEBUG: Monthly committee meeting scheduled.");
+        committeeLogic.startCommitteeMeeting(gameState); // This will show a modal
         gameState.messages.push({ week: gameState.currentWeek, text: `Monthly committee meeting held.` });
+        return true; // Modal shown, execution stops here until dismissal
     }
 
-    // 5. Trigger Random Event
-    if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS || gameState.gamePhase === Constants.GAME_PHASE.PRE_SEASON_PLANNING) {
-        const triggeredEvent = eventLogic.triggerRandomEvent(gameState);
+    // 5. Trigger Random Event (can show modal)
+    if ((gameState.currentWeek > Constants.PRE_SEASON_WEEKS || gameState.gamePhase === Constants.GAME_PHASE.PRE_SEASON_PLANNING) && renderers.getModalDisplayStatus() === 'none') {
+        const triggeredEvent = eventLogic.triggerRandomEvent(gameState); // This might show a modal
         if (triggeredEvent) {
             gameState.messages.push({ week: gameState.currentWeek, text: `${triggeredEvent.title}: ${triggeredEvent.description}` });
+            return true; // Modal shown, execution stops here until dismissal
         }
     }
 
-    // 6. Simulate Matches for the current week (if any)
+    // 6. Match Logic: Pre-Match Briefing (for player), Simulation, Post-Match Report
     const currentLeague = gameState.leagues[0];
-    let matchesPlayedThisWeek = false;
 
     if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS && gameState.currentWeek <= Constants.TOTAL_LEAGUE_WEEKS && currentLeague) {
         const matchWeekIndex = gameState.currentWeek - Constants.PRE_SEASON_WEEKS;
-        const currentWeekBlock = currentLeague.currentSeasonFixtures.find(
-            weekBlock => weekBlock.week === matchWeekIndex
-        );
+        const currentWeekBlock = currentLeague.currentSeasonFixtures.find(weekBlock => weekBlock.week === matchWeekIndex);
 
         if (currentWeekBlock && currentWeekBlock.matches.length > 0) {
-            console.log(`DEBUG: Matches scheduled for Game Week ${gameState.currentWeek} (Fixture Week ${matchWeekIndex}):`, currentWeekBlock.matches.length);
-            gameState.gamePhase = Constants.GAME_PHASE.MATCH_DAY;
+            const playerMatch = currentWeekBlock.matches.find(match =>
+                match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id
+            );
 
-            let playerMatchResult = null;
-
-            for (const match of currentWeekBlock.matches) {
-                if (match.played) continue;
-
-                // Check if player's pitch is unplayable BEFORE simulating match
-                if ((match.homeTeamId === gameState.playerClub.id) && !gameState.playerClub.facilities[Constants.FACILITIES.PITCH].isUsable) {
-                    renderers.showModal('Match Postponed!', `Your pitch is unplayable! The match against ${match.awayTeamName} has been postponed.`, [{ text: 'Drat!', action: renderers.hideModal }]);
-                    gameState.messages.push({ week: gameState.currentWeek, text: `Match against ${match.awayTeamName} postponed due to unplayable pitch.` });
-                    match.result = "P-P"; // Postponed
-                    match.played = true; // Mark as "handled"
-                    // This postponed match needs to be rescheduled later (future feature)
-                    continue; // Skip simulation for this match
+            if (playerMatch) {
+                // If player's home match and pitch is unplayable (shows modal)
+                if (!gameState.playerClub.facilities[Constants.FACILITIES.PITCH].isUsable && playerMatch.homeTeamId === gameState.playerClub.id && renderers.getModalDisplayStatus() === 'none') {
+                    renderers.showModal('Match Postponed!', `Your pitch is unplayable! The home match against ${playerMatch.awayTeamName} has been postponed.`, [{ text: 'Drat!', action: (context) => { // Pass context
+                        renderers.hideModal();
+                        processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, playerMatch);
+                    } }], 'match_postponed');
+                    gameState.messages.push({ week: gameState.currentWeek, text: `Home match against ${playerMatch.awayTeamName} postponed due to unplayable pitch.` });
+                    playerMatch.result = "P-P";
+                    playerMatch.played = true;
+                    return true; // Modal shown, stop synchronous flow
+                } else if (renderers.getModalDisplayStatus() === 'none') {
+                    // Start the interactive player match sequence (shows pre-match briefing modal)
+                    matchLogic.preMatchBriefing(gameState, playerMatch);
+                    return true; // Modal shown, stop synchronous flow
                 }
-
-                const matchResult = matchLogic.simulateMatch(
-                    match.homeTeamId,
-                    match.awayTeamId,
-                    gameState.playerClub,
-                    opponentData.getAllOpponentClubs(gameState.playerClub.id),
-                    playerData.getSquad()
-                );
-
-                // Apply match-day damage to facilities (Pitch, Changing Rooms) (NEW)
-                applyMatchDayFacilityDamage(gameState, match.homeTeamId === gameState.playerClub.id);
-
-
-                gameState.leagues = leagueData.updateLeagueTable(
-                    gameState.leagues,
-                    currentLeague.id,
-                    match.homeTeamId,
-                    match.awayTeamId,
-                    matchResult.homeScore,
-                    matchResult.awayScore
-                );
-
-                gameState.leagues = leagueData.updateMatchResult(
-                    gameState.leagues,
-                    currentLeague.id,
-                    match.id,
-                    `${matchResult.homeScore}-${matchResult.awayScore}`
-                );
-
-                if (match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id) {
-                    playerMatchResult = matchResult;
-                    console.log(`DEBUG: Player match simulated. Result: ${matchResult.homeScore}-${matchResult.awayScore}`);
-                } else {
-                    console.log(`DEBUG: AI match simulated: ${matchResult.homeTeamName} ${matchResult.homeScore}-${matchResult.awayScore} ${matchResult.awayTeamName}`);
-                }
-                matchesPlayedThisWeek = true;
+            } else {
+                // No player match this week, but there are AI matches. Process AI matches directly.
+                processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, null);
+                return true; // A modal (AI summary or Quiet Week if no AI matches) might be shown by that function
             }
-
-            if (playerMatchResult) {
-                renderers.showModal(
-                    `Match Result: ${playerMatchResult.homeTeamName} ${playerMatchResult.homeScore}-${playerMatchResult.awayScore} ${playerMatchResult.awayTeamName}`,
-                    playerMatchResult.report,
-                    [{ text: 'Continue', action: renderers.hideModal }]
-                );
-                gameState.messages.push({ week: gameState.currentWeek, text: `Match Result: ${playerMatchResult.homeTeamName} ${playerMatchResult.homeScore}-${playerMatchResult.awayScore} ${playerMatchResult.awayTeamName}` });
-            } else if (currentWeekBlock.matches.filter(m => m.awayTeamId !== 'BYE').length > 0) {
-                renderers.displayMessage('League Matches Played', 'Other league matches were played this week.');
-                gameState.messages.push({ week: gameState.currentWeek, text: `Other league matches played this week.` });
-            }
-
-        } else {
-            console.log(`DEBUG: No matches found in week block ${matchWeekIndex}. Player may have a BYE or it's a gap week.`);
-            renderers.displayMessage('Quiet Week', 'No league match scheduled for your team. Focus on club tasks!');
-            gameState.messages.push({ week: gameState.currentWeek, text: `No league match for your team this week.` });
-        }
-    } else {
-        console.log(`DEBUG: Not within league match weeks (Current Week: ${gameState.currentWeek}, Pre-Season Weeks: ${Constants.PRE_SEASON_WEEKS}, Total League Weeks: ${Constants.TOTAL_LEAGUE_WEEKS}).`);
-        if (!matchesPlayedThisWeek) {
-             renderers.displayMessage('Quiet Week', 'Focus on building your club!');
-             gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
         }
     }
 
+    // If we reach here and no modal was shown by any of the events/matches, then it's a truly quiet week.
+    // Show "Quiet Week" modal and signal that a modal was shown.
+    if (renderers.getModalDisplayStatus() === 'none') {
+        renderers.showModal('Quiet Week', 'Nothing major happened this week. Focus on building your club!', [], 'quiet_week');
+        gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
+        return true; // A modal was shown
+    }
+
+    // If we reach this point, it means some interaction (like a task click) already triggered a modal
+    // and this synchronous `advanceWeek` function is completing its execution.
+    // The previous modal's action should have called finalizeWeekProcessing.
+    console.log("DEBUG: advanceWeek finished, a modal was already active from a prior task/event.");
+    return false; // No *new* modal was explicitly opened in this advanceWeek path
+}
+
+/**
+ * Handles the simulation of AI-only matches for the current week and then finalizes the week processing.
+ * This is called by modal actions after a player's interactive match (or if player has no match).
+ * @param {object} gameState - The current mutable gameState.
+ * @param {object} currentWeekBlock - The fixture block for this week.
+ * @param {object|null} playerMatch - The player's match for the week, or null if none.
+ */
+export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, playerMatch) {
+    console.log("DEBUG: processAIMatchesAndFinalizeWeek called. Simulating AI matches if any.");
+    let aiMatchesPlayed = false;
+    const aiMatches = currentWeekBlock.matches.filter(match =>
+        match.id !== playerMatch?.id && !match.played
+    );
+
+    for (const match of aiMatches) {
+        const matchResult = matchLogic.simulateMatch(
+            match.homeTeamId,
+            match.awayTeamId,
+            gameState.playerClub,
+            opponentData.getAllOpponentClubs(gameState.playerClub.id),
+            playerData.getSquad()
+        );
+
+        gameState.leagues = leagueData.updateLeagueTable(
+            gameState.leagues,
+            Main.gameState.leagues[0].id,
+            match.homeTeamId,
+            match.awayTeamId,
+            matchResult.homeScore,
+            matchResult.awayScore
+        );
+        gameState.leagues = leagueData.updateMatchResult(
+            gameState.leagues,
+            Main.gameState.leagues[0].id,
+            match.id,
+            `${matchResult.homeScore}-${matchResult.awayScore}`
+        );
+        console.log(`DEBUG: AI match simulated: ${matchResult.homeTeamName} ${matchResult.homeScore}-${matchResult.awayScore} ${matchResult.awayTeamName}`);
+        aiMatchesPlayed = true;
+    }
+
+    // After AI matches are processed, show a summary if AI matches were played AND no other modal is already open.
+    if (aiMatchesPlayed && renderers.getModalDisplayStatus() === 'none') {
+        renderers.showModal('League Matches Played', 'Other league matches were played this week.', [], 'ai_matches_summary'); // Use showModal, pass type
+        gameState.messages.push({ week: gameState.currentWeek, text: `Other league matches played this week.` });
+    } else {
+        // No AI matches played, or modal already open. Just finalize the week directly.
+        finalizeWeekProcessing(gameState, 'no_ai_matches_or_modal_active'); // Pass type
+    }
+}
+
+/**
+ * This function encapsulates the very final steps of the week progression.
+ * It's called by the last action button in the modal chain (e.g., after the match report).
+ * @param {object} gameState - The mutable gameState.
+ * @param {string} dismissalContext - The type of modal that was just dismissed, or reason for direct call.
+ */
+export function finalizeWeekProcessing(gameState, dismissalContext) { // EXPORTED to be called by modal actions
+    console.log(`DEBUG: finalizeWeekProcessing called. Type: ${dismissalContext}. Finishing week processing.`);
+
+    // These steps now only occur once all match/event modals are dismissed and flow is returned.
     // 7. Update Player Fitness/Morale (Post-match/Weekly Decay)
     updatePlayerStatus(gameState);
-
 
     // 8. Advance Week Counter
     gameState.currentWeek++;
 
     // 9. Check for End of Season
     if (gameState.currentWeek > Constants.TOTAL_LEAGUE_WEEKS) {
-        endSeason(gameState);
+        endSeason(gameState); // endSeason will handle its own modal and its action will call finalizeWeekProcessing again for final UI/save
     } else {
+        // This is the normal end-of-week path.
         gameState.availableHours = Constants.WEEKLY_BASE_HOURS;
-        // Re-generate tasks based on new facility conditions
         gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
         gameState.gamePhase = Constants.GAME_PHASE.WEEKLY_PLANNING;
+        Main.updateUI(); // Update UI to show new week's tasks etc.
+        Main.saveGame(false); // Save silently
+        renderers.renderGameScreen('homeScreen'); // FIX: Explicitly render home screen here
     }
-
-    console.log(`DEBUG: Advanced to Week ${gameState.currentWeek}, Season ${gameState.currentSeason}`);
-    Main.updateUI();
-    Main.saveGame(false);
-}
-
-/**
- * Applies natural weekly facility changes (decay/improvement) and checks for grade degradation. (NEW)
- * @param {object} gameState - The current mutable gameState object.
- */
-function applyNaturalFacilityChanges(gameState) {
-    const facilities = gameState.playerClub.facilities;
-    for (const key in facilities) {
-        const facility = facilities[key];
-        if (facility.level > 0) { // Only apply to built facilities
-            // Natural improvement (e.g., Groundsman for Pitch)
-            if (facility.naturalImprovementPerWeek > 0) {
-                const groundsman = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.GRNDS);
-                let improvementAmount = facility.naturalImprovementPerWeek;
-                if (groundsman) { // Groundsman improves pitch naturally
-                    improvementAmount += Math.round(groundsman.skills.groundsKeepingSkill / 2); // Bonus from skilled groundsman
-                }
-                gameState.playerClub.facilities = clubData.updateFacilityCondition(
-                    gameState.playerClub.facilities, key, improvementAmount
-                );
-                // console.log(`DEBUG: ${facility.name} natural improvement: +${improvementAmount}%. New condition: ${gameState.playerClub.facilities[key].condition}`);
-            }
-
-            // Check for grade degradation
-            const degradedFacilities = clubData.degradeFacilityGrade(gameState.playerClub.facilities, key);
-            if (degradedFacilities) {
-                gameState.playerClub.facilities = degradedFacilities;
-                gameState.messages.push({ week: gameState.currentWeek, text: `${facility.name} condition has been poor, degrading to Grade ${gameState.playerClub.facilities[key].grade}.` });
-                renderers.displayMessage('Facility Degraded!', `${facility.name} has degraded to Grade ${gameState.playerClub.facilities[key].grade}!`);
-            }
-        }
-    }
-}
-
-/**
- * Applies match-day specific facility damage (e.g., pitch wear, changing room mess). (NEW)
- * Only applies if the match was played at the player's home ground.
- * @param {object} gameState - The current mutable gameState object.
- * @param {boolean} isHomeMatch - True if the match was played at player's home ground.
- */
-function applyMatchDayFacilityDamage(gameState, isHomeMatch) {
-    if (!isHomeMatch) return; // Only home matches damage your facilities
-
-    const facilities = gameState.playerClub.facilities;
-    const teamMorale = gameState.playerClub.squad.reduce((sum, p) => sum + p.status.morale, 0) / gameState.playerClub.squad.length;
-
-    // Pitch damage
-    if (facilities[Constants.FACILITIES.PITCH].level > 0) {
-        let pitchDamage = facilities[Constants.FACILITIES.PITCH].damagePerMatch; // Base damage (e.g., 50%)
-        // Randomize damage slightly
-        pitchDamage = getRandomInt(Math.round(pitchDamage * 0.7), pitchDamage); // 70-100% of base damage
-
-        gameState.playerClub.facilities = clubData.updateFacilityCondition(
-            gameState.playerClub.facilities, Constants.FACILITIES.PITCH, -pitchDamage
-        );
-        // console.log(`DEBUG: Pitch damaged by match: -${pitchDamage}%. New condition: ${gameState.playerClub.facilities[Constants.FACILITIES.PITCH].condition}`);
-        gameState.messages.push({ week: gameState.currentWeek, text: `Pitch condition reduced by match wear.` });
-    }
-
-    // Changing Rooms damage (affected by team morale)
-    if (facilities[Constants.FACILITIES.CHGRMS].level > 0) {
-        let crDamage = facilities[Constants.FACILITIES.CHGRMS].damagePerMatch; // Base damage (e.g., 10%)
-        // If team morale is low (<50%), damage increases significantly
-        if (teamMorale < 50) {
-            const moralePenaltyFactor = (50 - teamMorale) / 100; // e.g., 1% below 50 means 1% more damage
-            crDamage += Math.round(facilities[Constants.FACILITIES.CHGRMS].damagePerMatch * 2 * moralePenaltyFactor); // Up to double base damage for very low morale
-        }
-        crDamage = getRandomInt(Math.round(crDamage * 0.7), crDamage); // Randomize final damage
-
-        gameState.playerClub.facilities = clubData.updateFacilityCondition(
-            gameState.playerClub.facilities, Constants.FACILITIES.CHGRMS, -crDamage
-        );
-        // console.log(`DEBUG: Changing Rooms damaged by match: -${crDamage}%. New condition: ${gameState.playerClub.facilities[Constants.FACILITIES.CHGRMS].condition}`);
-        gameState.messages.push({ week: gameState.currentWeek, text: `Changing rooms condition reduced by match activity.` });
-    }
+    console.log(`DEBUG: Week ${gameState.currentWeek - 1} finished. Next: Week ${gameState.currentWeek}`);
 }
 
 
@@ -259,7 +211,7 @@ function applyMatchDayFacilityDamage(gameState, isHomeMatch) {
  * @param {object} gameState - The current mutable gameState object.
  */
 function processPlayerTasks(gameState) {
-    console.log("DEBUG: Processing weekly tasks...");
+    console.log("DEBUG: Processing weekly tasks (just logging now, outcomes handled on click)...");
     const tasksToProcess = gameState.weeklyTasks.filter(task => task.completed);
 
     if (tasksToProcess.length === 0 && (Constants.WEEKLY_BASE_HOURS - gameState.availableHours) > 0) {
@@ -267,81 +219,90 @@ function processPlayerTasks(gameState) {
     }
 
     tasksToProcess.forEach(task => {
-        console.log(`DEBUG: Processing task: ${task.description} (Completed)`);
-        let taskMessage = '';
-
-        switch (task.type) {
-            case Constants.WEEKLY_TASK_TYPES.PITCH_MAINT: // This is now general pitch maintenance
-                // Improve pitch condition based on task hours (which is baseHours now)
-                let pitchImprovement = task.baseHours * 2; // e.g. 8 hrs task -> 16% improvement
-                const groundsman = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.GRNDS);
-                if (groundsman) {
-                    pitchImprovement += Math.round(groundsman.skills.groundsKeepingSkill); // Bonus from skilled groundsman
-                }
-                gameState.playerClub.facilities = clubData.updateFacilityCondition(
-                    gameState.playerClub.facilities, Constants.FACILITIES.PITCH, pitchImprovement
-                );
-                taskMessage = `Pitch condition improved by ${pitchImprovement}%.`;
-                break;
-            case Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE: // Specific task for damage
-                 let repairAmount = task.baseHours * 3; // More effective for specific damage
-                 gameState.playerClub.facilities = clubData.updateFacilityCondition(
-                    gameState.playerClub.facilities, Constants.FACILITIES.PITCH, repairAmount
-                 );
-                 taskMessage = `Pitch damage repaired, condition improved by ${repairAmount}%.`;
-                 break;
-            case Constants.WEEKLY_TASK_TYPES.CLEAN_CHGRMS_SPECIFIC: // Specific task for changing rooms
-                 let cleanAmount = task.baseHours * 4; // Cleaning is quite effective
-                 gameState.playerClub.facilities = clubData.updateFacilityCondition(
-                    gameState.playerClub.facilities, Constants.FACILITIES.CHGRMS, cleanAmount
-                 );
-                 taskMessage = `Changing rooms deep cleaned, condition improved by ${cleanAmount}%.`;
-                 break;
-            case Constants.WEEKLY_TASK_TYPES.PLAYER_CONVO:
-                const eligiblePlayers = playerData.getSquad().filter(p => p.status.morale < 80);
-                const playerToTalkTo = dataGenerator.getRandomElement(eligiblePlayers.length > 0 ? eligiblePlayers : playerData.getSquad());
-                if (playerToTalkTo) {
-                    playerInteractionLogic.startPlayerConversation(playerToTalkTo, 'motivate');
-                    taskMessage = `You had a conversation with ${playerToTalkTo.name}.`;
-                } else {
-                    taskMessage = `Tried to talk to players, but everyone seems fine.`;
-                }
-                break;
-            case Constants.WEEKLY_TASK_TYPES.RECRUIT_PLYR:
-                const potentialPlayer = dataGenerator.generatePlayer(null, dataGenerator.getRandomInt(1, 2));
-                playerInteractionLogic.attemptRecruitment(potentialPlayer, gameState.playerClub.id);
-                taskMessage = `Spent time looking for new talent.`;
-                break;
-            case Constants.WEEKLY_TASK_TYPES.PLAN_FUNDRAISE:
-                taskMessage = `Planning a fundraising event. Details to follow!`;
-                break;
-            case Constants.WEEKLY_TASK_TYPES.ADMIN_WORK:
-                taskMessage = `Club admin duties handled by the committee.`;
-                break;
-            case Constants.WEEKLY_TASK_TYPES.SPONSOR_SEARCH:
-                if (dataGenerator.getRandomInt(1, 100) <= (gameState.playerClub.reputation + task.baseHours) / 2) {
-                    const sponsorAmount = dataGenerator.getRandomInt(50, 250);
-                    const sponsorName = `${dataGenerator.getRandomName('last')} Holdings`;
-                    gameState.playerClub.finances = clubData.addTransaction(
-                        gameState.playerClub.finances,
-                        sponsorAmount,
-                        Constants.TRANSACTION_TYPE.SPONSOR_IN,
-                        `New sponsor: ${sponsorName}`
-                    );
-                    taskMessage = `Found a new sponsor: ${sponsorName} for £${sponsorAmount.toFixed(2)}!`;
-                } else {
-                    taskMessage = `Searched for sponsors, but no luck this week.`;
-                }
-                break;
-            case Constants.WEEKLY_TASK_TYPES.FAC_CHECK:
-                taskMessage = `Facility checks completed, all seems in order.`;
-                break;
-        }
-        gameState.messages.push({ week: gameState.currentWeek, text: taskMessage });
+        console.log(`DEBUG: Task: ${task.description} was marked completed this week.`);
     });
 
     gameState.weeklyTasks.forEach(task => task.assignedHours = 0);
 }
+
+/**
+ * Applies natural weekly facility changes (decay/improvement) and checks for grade degradation.
+ * @param {object} gameState - The current mutable gameState object.
+ */
+function applyNaturalFacilityChanges(gameState) {
+    const facilities = gameState.playerClub.facilities;
+    for (const key in facilities) {
+        const facility = facilities[key];
+        if (facility.level > 0) {
+            if (facility.naturalImprovementPerWeek > 0) {
+                const groundsman = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.GRNDS);
+                let improvementAmount = facility.naturalImprovementPerWeek;
+                if (groundsman) {
+                    improvementAmount += Math.round(groundsman.skills.groundsKeepingSkill / 2);
+                }
+                gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, key, improvementAmount
+                );
+            } else {
+                const decayAmount = getRandomInt(1, 3);
+                 gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, key, -decayAmount
+                );
+            }
+
+            const oldGrade = facility.grade;
+            const updatedFacilitiesAfterDegradeCheck = clubData.degradeFacilityGrade(gameState.playerClub.facilities, key);
+            if (updatedFacilitiesAfterDegradeCheck) {
+                gameState.playerClub.facilities = updatedFacilitiesAfterDegradeCheck;
+                const newGrade = gameState.playerClub.facilities[key].grade;
+                // FIX: Action for this modal
+                renderers.showModal('Facility Degraded!', `${facility.name} condition has been poor, degrading from Grade ${oldGrade} to Grade ${newGrade}!`, [{ text: 'Drat!', action: () => {
+                    renderers.hideModal();
+                    finalizeWeekProcessing(gameState, 'facility_degraded');
+                } }]);
+                gameState.messages.push({ week: gameState.currentWeek, text: `Facility Degraded: ${facility.name} from Grade ${oldGrade} to Grade ${newGrade}.` });
+            }
+        }
+    }
+}
+
+/**
+ * Applies match-day specific facility damage (e.g., pitch wear, changing room mess).
+ * @param {object} gameState - The current mutable gameState object.
+ * @param {boolean} isHomeMatch - True if the match was played at player's home ground.
+ */
+function applyMatchDayFacilityDamage(gameState, isHomeMatch) {
+    if (!isHomeMatch) return;
+
+    const facilities = gameState.playerClub.facilities;
+    const teamMorale = playerData.getSquad().reduce((sum, p) => sum + p.status.morale, 0) / playerData.getSquad().length;
+
+    // Pitch damage
+    if (facilities[Constants.FACILITIES.PITCH].level > 0 && facilities[Constants.FACILITIES.PITCH].isUsable) {
+        let pitchDamage = getRandomInt(Math.round(facilities[Constants.FACILITIES.PITCH].damagePerMatch * 0.7), facilities[Constants.FACILITIES.PITCH].damagePerMatch);
+
+        gameState.playerClub.facilities = clubData.updateFacilityCondition(
+            gameState.playerClub.facilities, Constants.FACILITIES.PITCH, -pitchDamage
+        );
+        gameState.messages.push({ week: gameState.currentWeek, text: `Pitch condition reduced by match wear (-${pitchDamage}%).` });
+    }
+
+    // Changing Rooms damage (affected by team morale)
+    if (facilities[Constants.FACILITIES.CHGRMS].level > 0 && facilities[Constants.FACILITIES.CHGRMS].isUsable) {
+        let crDamage = getRandomInt(Math.round(facilities[Constants.FACILITIES.CHGRMS].damagePerMatch * 0.7), facilities[Constants.FACILITIES.CHGRMS].damagePerMatch);
+        if (teamMorale < 50) {
+            const moralePenaltyFactor = (50 - teamMorale) / 50;
+            crDamage += Math.round(facilities[Constants.FACILITIES.CHGRMS].damagePerMatch * 2 * moralePenaltyFactor);
+        }
+        crDamage = getRandomInt(Math.round(crDamage * 0.7), crDamage);
+
+        gameState.playerClub.facilities = clubData.updateFacilityCondition(
+            gameState.playerClub.facilities, Constants.FACILITIES.CHGRMS, -crDamage
+        );
+        gameState.messages.push({ week: gameState.currentWeek, text: `Changing rooms condition reduced by match activity (-${crDamage}%).` });
+    }
+}
+
 
 /**
  * Applies weekly expenses to the club's finances.
@@ -366,7 +327,13 @@ function applyWeeklyExpenses(gameState) {
  */
 function updatePlayerStatus(gameState) {
     console.log("DEBUG: Updating player status...");
-    gameState.playerClub.squad = gameState.playerClub.squad.map(player => {
+    const squad = gameState.playerClub.squad || [];
+    if (!Array.isArray(squad) || squad.length === 0) {
+        console.warn("DEBUG: Player squad is empty or not an array. Skipping player status update.");
+        return;
+    }
+
+    gameState.playerClub.squad = squad.map(player => {
         const updatedPlayer = { ...player };
 
         if (updatedPlayer.status.injuryStatus === 'Fit' && !updatedPlayer.status.suspended) {
@@ -438,7 +405,10 @@ function endSeason(gameState) {
         seasonSummaryMessage = `RELEGATED! Oh no! You finished ${playerFinalPos}th in the ${currentLeague.name} with ${playerFinalPoints} points. Time for rebuilding.`;
     }
 
-    renderers.showModal(endSeasonModalTitle, seasonSummaryMessage, [{ text: 'Review Season', action: renderers.hideModal }]);
+    renderers.showModal(endSeasonModalTitle, seasonSummaryMessage, [{ text: 'Review Season', action: () => {
+        renderers.hideModal();
+        finalizeWeekProcessing(gameState, 'end_of_season_review');
+    } }]);
     gameState.messages.push({ week: gameState.currentWeek, text: seasonSummaryMessage });
 
 
@@ -459,10 +429,11 @@ function endSeason(gameState) {
     gameState.leagues[0] = currentLeague;
 
     gameState.availableHours = Constants.WEEKLY_BASE_HOURS * 2;
-    // regenerate tasks based on potentially updated facilities after end of season
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
 
-    renderers.renderGameScreen('homeScreen');
-    renderers.displayMessage(`Season ${gameState.currentSeason - 1} Concluded!`, `Prepare for Season ${gameState.currentSeason}.`);
+    renderers.renderGameScreen('homeScreen'); // Re-render to show new season's details
+    renderers.showModal(`Season ${gameState.currentSeason - 1} Concluded!`, `Prepare for Season ${gameState.currentSeason}.`, [{ text: 'Continue', action: () => {
+        renderers.hideModal();
+        finalizeWeekProcessing(gameState, 'season_start_continue');
+    } }]);
 }
-

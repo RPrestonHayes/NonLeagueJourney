@@ -75,19 +75,17 @@ export const COMMITTEE_ROLES = {
 
 // --- Facilities (with new grades and condition properties) ---
 export const FACILITIES = {
-    PITCH: 'Pitch Condition',
+    PITCH: 'Pitch',
     CHGRMS: 'Changing Rooms',
     TOILETS: 'Toilets',
     SNACKBAR: 'Snack Bar',
-    COVERED_STAND: 'Covered Standing',
+    COVERED_STAND: 'Covered Standing Area',
     TURNSTILES: 'Turnstiles',
-    // New types of tasks for facilities maintenance/improvement
-    IMPROVE_PITCH_COND: 'Improve Pitch Condition',
-    CLEAN_CHGRMS: 'Clean Changing Rooms',
-    REPAIR_EQUIPMENT: 'Repair Equipment',
 };
 
-export const FACILITY_GRADES = ['F', 'E', 'D', 'C', 'B', 'A']; // F is lowest, A is highest
+export const FACILITY_GRADES = ['N/A', 'G', 'F', 'E', 'D', 'C', 'B', 'A']; // N/A for level 0. G is now 1. F is 2.
+export const PITCH_UNPLAYABLE_THRESHOLD = 10; // Pitch is unplayable if condition <= this %
+
 
 // --- Finance Transaction Types ---
 export const TRANSACTION_TYPE = {
@@ -97,21 +95,20 @@ export const TRANSACTION_TYPE = {
     OTHER_EXP: 'Other Expense', PRIZE_MONEY: 'Prize Money'
 };
 
-// --- Weekly Tasks (updated with new types and context for facility maintenance) ---
+// --- Weekly Tasks (updated with new specific maintenance types) ---
 export const WEEKLY_TASK_TYPES = {
-    PITCH_MAINT: 'Pitch Maintenance (General)', // Renamed for clarity
     PLAYER_CONVO: 'Player Conversation',
     RECRUIT_PLYR: 'Recruit New Player',
     PLAN_FUNDRAISE: 'Plan Fundraising Event',
     COMM_ENGAGE: 'Engage Committee',
-    FAC_CHECK: 'Facility Check (General)', // Renamed
     SPONSOR_SEARCH: 'Search for Sponsors',
     ADMIN_WORK: 'General Admin',
+    FAC_CHECK: 'General Facility Check',
 
-    // Specific maintenance tasks (these might be dynamically added)
-    FIX_PITCH_DAMAGE: 'Repair Pitch Damage',
-    CLEAN_CHGRMS_SPECIFIC: 'Deep Clean Changing Rooms', // More specific than FAC_CHECK
-    // REPAIR_EQUIPMENT is now a general event outcome rather than fixed task
+    // Specific maintenance tasks (dynamically added based on condition)
+    PITCH_MAINT: 'General Pitch Maintenance', // This improves condition if not too low
+    FIX_PITCH_DAMAGE: 'Repair Pitch Damage', // For severe damage or unplayable pitch
+    CLEAN_CHGRMS_SPECIFIC: 'Deep Clean Changing Rooms', // For dirty/damaged changing rooms
 };
 
 // --- Random Event Types ---

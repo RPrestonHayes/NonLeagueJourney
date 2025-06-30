@@ -20,6 +20,7 @@ let currentSquad = [];
  */
 export function initializePlayerSquad(playerClubId) {
     currentSquad = []; // Ensure it's empty for new game
+
     const positionsNeeded = [
         Constants.PLAYER_POSITIONS.GK, // 1 GK
         Constants.PLAYER_POSITIONS.CB, Constants.PLAYER_POSITIONS.CB, Constants.PLAYER_POSITIONS.RB, Constants.PLAYER_POSITIONS.LB, // 4 Defenders
@@ -29,12 +30,12 @@ export function initializePlayerSquad(playerClubId) {
 
     // Fill up to DEFAULT_INITIAL_PLAYERS with random positions for reserves
     while (currentSquad.length < Constants.DEFAULT_INITIAL_PLAYERS) {
-        let position = positionsNeeded[currentSquad.length] || getRandomElement(Object.values(Constants.PLAYER_POSITIONS));
+        let position = positionsNeeded[currentSquad.length] || dataGenerator.getRandomElement(Object.values(Constants.PLAYER_POSITIONS));
         const player = dataGenerator.generatePlayer(position, 1); // Quality tier 1 for grassroots
         player.currentClubId = playerClubId;
         currentSquad.push(player);
     }
-    console.log("DEBUG: Initial player squad generated internally (in playerData):", currentSquad.length, currentSquad); // NEW DEBUG
+    console.log("DEBUG: Initial player squad generated internally (in playerData):", currentSquad.length, currentSquad);
     return [...currentSquad]; // Return a copy
 }
 
@@ -43,8 +44,8 @@ export function initializePlayerSquad(playerClubId) {
  * @param {Array<object>} squad - The new squad array to set.
  */
 export function setSquad(squad) {
-    currentSquad = [...squad];
-    console.log("DEBUG: Squad set/updated in playerData module. Current internal squad size:", currentSquad.length, currentSquad); // NEW DEBUG
+    currentSquad = [...(squad || [])]; // Ensure it's always set to an array, even if null/undefined is passed
+    console.log("DEBUG: Squad set/updated in playerData module. Current internal squad size:", currentSquad.length, currentSquad);
 }
 
 
@@ -57,7 +58,7 @@ export function setSquad(squad) {
 export function addPlayer(player, playerClubId) {
     player.currentClubId = playerClubId;
     currentSquad = [...currentSquad, player];
-    console.log("DEBUG: Player added to squad:", player.name); // NEW DEBUG
+    console.log("DEBUG: Player added to squad:", player.name);
     return [...currentSquad];
 }
 
@@ -70,9 +71,9 @@ export function removePlayer(playerId) {
     const originalLength = currentSquad.length;
     currentSquad = currentSquad.filter(p => p.id !== playerId);
     if (currentSquad.length < originalLength) {
-        console.log(`DEBUG: Player ${playerId} removed from squad.`); // NEW DEBUG
+        console.log(`DEBUG: Player ${playerId} removed from squad.`);
     } else {
-        console.warn(`DEBUG: Player ${playerId} not found in squad for removal.`); // NEW DEBUG
+        console.warn(`DEBUG: Player ${playerId} not found in squad for removal.`);
     }
     return [...currentSquad];
 }
@@ -91,7 +92,7 @@ export function getPlayer(playerId) {
  * @returns {Array<object>} A copy of the current squad array.
  */
 export function getSquad() {
-    console.log("DEBUG: getSquad() called. Returning squad of size:", currentSquad.length, currentSquad); // NEW DEBUG
+    console.log("DEBUG: getSquad() called. Returning squad of size:", currentSquad.length, currentSquad);
     return [...currentSquad];
 }
 
@@ -104,7 +105,7 @@ export function getSquad() {
 export function updatePlayerStats(playerId, updates) {
     const playerIndex = currentSquad.findIndex(p => p.id === playerId);
     if (playerIndex === -1) {
-        console.warn(`DEBUG: Player ${playerId} not found for stats update.`); // NEW DEBUG
+        console.warn(`DEBUG: Player ${playerId} not found for stats update.`);
         return [...currentSquad];
     }
 
@@ -150,13 +151,8 @@ export function resetPlayerSeasonStats() {
     currentSquad = currentSquad.map(player => ({
         ...player,
         currentSeasonStats: {
-            appearances: 0,
-            goals: 0,
-            assists: 0,
-            yellowCards: 0,
-            redCards: 0,
-            manOfTheMatchAwards: 0,
-            averageRating: 0
+            appearances: 0, goals: 0, assists: 0, yellowCards: 0, redCards: 0,
+            manOfTheMatchAwards: 0, averageRating: 0
         },
         status: {
             ...player.status,
@@ -167,7 +163,7 @@ export function resetPlayerSeasonStats() {
             suspensionGames: 0
         }
     }));
-    console.log("DEBUG: Player season stats reset."); // NEW DEBUG
+    console.log("DEBUG: Player season stats reset.");
     return [...currentSquad];
 }
 

@@ -6,22 +6,18 @@
  */
 
 import * as Constants from './constants.js';
-// Removed import * as clubData from '../data/clubData.js'; as it's not directly used here
-// and importing data modules into utils can create circular dependencies if not careful.
-// getUniqueId and random utils are exported so they're accessible everywhere.
-// Export getRandomName as well
-export { getRandomInt, getRandomElement, generateUniqueId, getRandomName }; // NEW: Added getRandomName to export list
 
 // --- Helper Functions for Randomness ---
-function getRandomInt(min, max) {
+// FIX: Ensure these are explicitly exported as individual functions.
+export function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function getRandomElement(arr) {
+export function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function getRandomName(type = 'first') { // Changed to internal function
+export function getRandomName(type = 'first') { // FIX: Explicitly export
     const firstNames = ['Liam', 'Noah', 'Oliver', 'Elijah', 'James', 'William', 'Benjamin', 'Lucas', 'Henry', 'Alexander', 'Michael', 'Ethan', 'Daniel', 'Jacob', 'Logan', 'Jackson', 'Sebastian', 'Mateo', 'Jack', 'Aiden', 'Owen', 'Samuel', 'David', 'Joseph', 'Julian', 'Gabriel', 'John', 'Wyatt', 'Carter', 'Luke', 'Harry', 'George', 'Charlie', 'Oscar', 'Leo', 'Arthur', 'Freddie', 'Archie', 'Noah', 'Theo', 'Finley', 'Lewis', 'Reggie', 'Bobby', 'Frankie', 'Louie', 'Ronnie', 'Alfie', 'Ralph'];
     const lastNames = ['Smith', 'Jones', 'Williams', 'Brown', 'Davies', 'Evans', 'Wilson', 'Thomas', 'Roberts', 'Lewis', 'Walker', 'Hall', 'Wright', 'Green', 'Edwards', 'Hughes', 'Jackson', 'Clarke', 'Phillips', 'Cook', 'Miller', 'Shaw', 'Bell', 'Baker', 'Morgan', 'Young', 'Scott', 'Pugh', 'Cole', 'Harrison', 'Taylor', 'Wilson', 'Burgess', 'Bennett', 'Chapman', 'Dawson', 'Ellis', 'Fisher', 'Grant', 'Hayes', 'Jenkins', 'King', 'Lowe', 'Marsh', 'Newman', 'Palmer', 'Quinn', 'Richards', 'Stevens', 'Turner'];
     if (type === 'first') return getRandomElement(firstNames);
@@ -37,7 +33,7 @@ let nextTransactionId = 1;
 let nextLeagueId = 1;
 let nextMatchId = 1;
 
-function generateUniqueId(prefix) { // Changed to internal function
+export function generateUniqueId(prefix) { // FIX: Explicitly export
     switch (prefix) {
         case 'P': return `P${nextPlayerId++}`;
         case 'C': return `C${nextClubId++}`;
@@ -92,24 +88,54 @@ export function generateClubIdentity(baseLocation) {
     const locationParts = baseLocation.split(' ');
     const mainLocationWord = locationParts[0];
 
-    const suffixes = ['United', 'Rovers', 'Athletic', 'Town', 'City', 'Wanderers', 'Victoria', 'Amateurs', 'Corinthians', 'Sports', 'Albion', 'Park', 'FC'];
+    const suffixes = ['United', 'Rovers', 'Athletic', 'Town', 'City', 'Wanderers', 'Victoria', 'Amateurs', 'Corinthians', 'Sports', 'Albion', 'Park', 'FC', 'County', 'District'];
     const prefixes = ['', 'East ', 'West ', 'North ', 'South ', 'Royal ', 'Old ', 'Young ', 'St. ', 'AFC '];
-    const middleWords = ['Park', 'Lane', 'Bridge', 'Field', 'Brook', 'Grange', 'Vale', 'Heath', 'Green', 'Spring', 'Heights', 'Wood', 'Hill', 'Central'];
-    const nicknames = ['The Reds', 'The Blues', 'The Whites', 'The Blacks', 'The Brewers', 'The Villagers', 'The Foxes', 'The Lions', 'The Pigeons', 'The Swans', 'The Robins', 'The Tigers', 'The Hornets', 'The Mariners', 'The Millers', 'The Railwaymen'];
+    const middleWords = ['Park', 'Lane', 'Bridge', 'Field', 'Brook', 'Grange', 'Vale', 'Heath', 'Green', 'Spring', 'Heights', 'Wood', 'Hill', 'Central', 'Abbey', 'Grove', 'Meadow'];
+    const nicknames = ['The Reds', 'The Blues', 'The Whites', 'The Blacks', 'The Brewers', 'The Villagers', 'The Foxes', 'The Lions', 'The Pigeons', 'The Swans', 'The Robins', 'The Tigers', 'The Hornets', 'The Mariners', 'The Millers', 'The Railwaymen', 'The Oaks', 'The Pilgrims'];
 
-    let clubName = '';
+    let clubNameParts = [];
     let chosenLocation = mainLocationWord;
 
     const nearbyLocations = [...possibleNearbyTowns(mainLocationWord), mainLocationWord];
     chosenLocation = getRandomElement(nearbyLocations);
 
     const structureRoll = getRandomInt(1, 100);
-    if (structureRoll <= 60) { clubName = chosenLocation + ' ' + getRandomElement(suffixes); }
-    else if (structureRoll <= 85) { clubName = getRandomElement(prefixes) + chosenLocation + ' ' + getRandomElement(suffixes); }
-    else { clubName = chosenLocation + ' ' + getRandomElement(middleWords) + ' ' + getRandomElement(suffixes); }
+
+    if (structureRoll <= 40) {
+        clubNameParts.push(chosenLocation);
+        clubNameParts.push(getRandomElement(suffixes));
+    } else if (structureRoll <= 70) {
+        clubNameParts.push(chosenLocation);
+        clubNameParts.push(getRandomElement(['Town', 'City', 'United', 'Athletic']));
+    } else if (structureRoll <= 90) {
+        clubNameParts.push(chosenLocation);
+        clubNameParts.push(getRandomElement(middleWords));
+        clubNameParts.push(getRandomElement(suffixes));
+    } else {
+        clubNameParts.push(getRandomElement(prefixes));
+        clubNameParts.push(chosenLocation);
+        clubNameParts.push(getRandomElement(suffixes));
+    }
+
+    let finalClubName = clubNameParts.filter(part => part.trim() !== '').join(' ').trim();
+
+    if (finalClubName.split(' ').length < 2 && getRandomInt(1, 100) < 70) {
+        if (getRandomInt(0,1) === 0 && middleWords.length > 0) {
+            finalClubName = `${mainLocationWord} ${getRandomElement(middleWords)} ${getRandomElement(suffixes)}`;
+        } else if (suffixes.length > 0) {
+            finalClubName = `${mainLocationWord} ${getRandomElement(suffixes)}`;
+        }
+    }
+
+    if (getRandomInt(1, 100) < 15 && finalClubName.split(' ').length < 3) {
+        const connectors = [' & ', ' Utd ', ' FC '];
+        const secondPartOptions = [...possibleNearbyTowns(mainLocationWord), getRandomElement(middleWords)];
+        finalClubName = `${finalClubName}${getRandomElement(connectors)}${getRandomElement(secondPartOptions).split(' ')[0]} ${getRandomElement(suffixes)}`;
+    }
 
     const clubNickname = getRandomElement(nicknames);
-    return { name: clubName.trim(), nickname: clubNickname };
+
+    return { name: finalClubName.trim(), nickname: clubNickname };
 }
 
 // --- Kit Color Generation ---
@@ -158,56 +184,61 @@ export function generateCommitteeMember(role) {
 }
 
 // --- Weekly Task Generation ---
+/**
+ * Generates a list of weekly tasks available to the player based on club needs and facility condition.
+ * Tasks are filtered to be "all or nothing" within WEEKLY_BASE_HOURS.
+ * @param {object} clubFacilities - Current state of player's club facilities.
+ * @param {array} committeeMembers - Current list of committee members.
+ * @returns {Array<object>} An array of task objects.
+ */
 export function generateWeeklyTasks(clubFacilities, committeeMembers) {
     const tasks = [];
-    const groundsman = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.GRNDS);
-    const secretary = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.SEC);
-    const socialSec = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.SOC);
 
-    // Always available tasks
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PLAYER_CONVO, description: 'Talk to players, check morale', baseHours: 5, assignedHours: 0, completed: false, requiresStaff: null });
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.RECRUIT_PLYR, description: 'Scout for new players in the local area', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: null });
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.SPONSOR_SEARCH, description: 'Seek local sponsors', baseHours: 7, assignedHours: 0, completed: false, requiresStaff: null });
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FAC_CHECK, description: 'General Facility Check', baseHours: 4, assignedHours: 0, completed: false, requiresStaff: null });
+    const groundsmanSkill = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.GRNDS)?.skills.groundsKeepingSkill || 0;
+    const secretarySkill = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.SEC)?.skills.administration || 0;
+    const socialSecSkill = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.SOC)?.skills.communityRelations || 0;
 
-    // Dynamic tasks based on facility condition and staff
-    // Pitch Maintenance (General)
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PLAYER_CONVO, description: 'Talk to Players', longDescription: 'Have a one-on-one chat with a player to boost morale or address concerns (e.g., low form, commitment).', baseHours: 5, assignedHours: 0, completed: false, requiresStaff: null });
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.RECRUIT_PLYR, description: 'Scout for New Player', longDescription: 'Dedicate time to scouting the local area. Chance to find and recruit new talent.', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: null });
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.SPONSOR_SEARCH, description: 'Seek Sponsors', longDescription: `Approach local businesses for sponsorship deals. Chance to gain new income based on club reputation.`, baseHours: 7, assignedHours: 0, completed: false, requiresStaff: null });
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FAC_CHECK, description: 'General Facility Check', longDescription: `Perform a general inspection of all club facilities. Minor condition increase (up to 5%) for all facilities.`, baseHours: 4, assignedHours: 0, completed: false, requiresStaff: null });
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.ADMIN_WORK, description: 'Handle Administration', longDescription: `Tackle the mountain of paperwork and administrative duties required to run the club.`, baseHours: 6, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SEC });
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PLAN_FUNDRAISE, description: 'Plan Fundraiser', longDescription: `Organize an event to raise much-needed funds for the club. Success depends on effort and social secretary skill.`, baseHours: 7, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SOC });
+
+
     if (clubFacilities[Constants.FACILITIES.PITCH].level > 0) {
-        if (clubFacilities[Constants.FACILITIES.PITCH].condition < 90) {
-             tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PITCH_MAINT, description: 'General Pitch Maintenance', baseHours: 6, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
+        const pitch = clubFacilities[Constants.FACILITIES.PITCH];
+        
+        if (pitch.condition < 90) {
+             const estImprovement = Math.min(pitch.maxCondition - pitch.condition, 6 + Math.round(groundsmanSkill / 2));
+             tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PITCH_MAINT, description: 'General Pitch Maintenance', longDescription: `Work on the pitch to maintain its quality. Current Grade: ${pitch.grade}, Condition: ${pitch.condition}%. Expected: ~+${estImprovement}% condition.`, baseHours: 6, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
         }
-        if (clubFacilities[Constants.FACILITIES.PITCH].condition < 50 && clubFacilities[Constants.FACILITIES.PITCH].isUsable) {
-            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE, description: 'Repair Major Pitch Damage', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
+        if (pitch.condition < 50) {
+            const estRepair = Math.min(pitch.maxCondition - pitch.condition, 8 + Math.round(groundsmanSkill * 1.5));
+            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE, description: 'Repair Major Pitch Damage', longDescription: `Repair significant damage to the pitch. Current Grade: ${pitch.grade}, Condition: ${pitch.condition}%. Expected: ~+${estRepair}% condition.`, baseHours: 8, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
         }
-        if (clubFacilities[Constants.FACILITIES.PITCH].condition < Constants.PITCH_UNPLAYABLE_THRESHOLD) {
-            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE, description: 'Urgent Pitch Repair (Unplayable)', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
+        if (pitch.condition < Constants.PITCH_UNPLAYABLE_THRESHOLD) {
+            const estUrgentRepair = Math.min(pitch.maxCondition - pitch.condition, 10 + groundsmanSkill * 2);
+            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE, description: 'Urgent Pitch Repair (Unplayable)', longDescription: `The pitch is unplayable! Urgent repairs needed to allow matches to proceed. Current Grade: ${pitch.grade}, Condition: ${pitch.condition}%. Expected: ~+${estUrgentRepair}% condition.`, baseHours: 10, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
         }
     }
 
-    // Changing Rooms Cleaning
     if (clubFacilities[Constants.FACILITIES.CHGRMS].level > 0) {
-        if (clubFacilities[Constants.FACILITIES.CHGRMS].condition < 70) {
-            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.CLEAN_CHGRMS_SPECIFIC, description: 'Deep Clean Changing Rooms', baseHours: 8, assignedHours: 0, completed: false, requiresStaff: null });
+        const chgrms = clubFacilities[Constants.FACILITIES.CHGRMS];
+        if (chgrms.condition < 70) {
+            const estClean = Math.min(chgrms.maxCondition - chgrms.condition, 8 + Math.round(secretarySkill / 2));
+            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.CLEAN_CHGRMS_SPECIFIC, description: 'Deep Clean Changing Rooms', longDescription: `Thoroughly clean and tidy the changing rooms. Current Grade: ${chgrms.grade}, Condition: ${chgrms.condition}%. Expected: ~+${estClean}% condition.`, baseHours: 8, assignedHours: 0, completed: false, requiresStaff: null });
         }
     }
     
-    // Admin Work (always needed but can be staff assisted)
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.ADMIN_WORK, description: 'Handle club administration', baseHours: 6, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SEC });
-
-    // Fundraising (if social secretary exists, or if finances are low)
-    // Note: getFinances() would need to be imported from clubData.js if used here,
-    // Or we pass the full club object from gameState.
-    // For now, let's simplify to always offer fundraising.
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PLAN_FUNDRAISE, description: 'Plan a fundraising event', baseHours: 7, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SOC });
-
-
     tasks.forEach(task => {
         if (task.requiresStaff) {
             const staff = committeeMembers.find(cm => cm.role === task.requiresStaff);
             if (staff) {
                 const reductionFactor = staff.skills.workEthic / Constants.ATTRIBUTE_MAX;
-                task.baseHours = Math.max(1, Math.round(task.baseHours * (1 - reductionFactor * 0.3)));
-                task.description += ` (Assisted by ${staff.name})`;
+                const originalBaseHours = task.baseHours;
+                task.baseHours = Math.max(1, Math.round(originalBaseHours * (1 - reductionFactor * 0.3)));
+                task.description += ` (Assisted by ${staff.name}, est. hrs reduced from ${originalBaseHours} to ${task.baseHours})`;
             }
         }
     });
@@ -224,145 +255,43 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
         return [];
     }
 
-    let teamsForScheduling = [...allLeagueClubsData];
-    const isOdd = numTeams % 2 !== 0;
-    if (isOdd) {
-        teamsForScheduling.push({ id: 'DUMMY_TEAM', name: 'BYE', location: 'N/A', kitColors: {}, overallTeamQuality: 0 });
-    }
-    const n = teamsForScheduling.length;
-
-    const schedule = [];
-    const totalRounds = (n - 1) * 2;
-
-    let teamIds = teamsForScheduling.map(t => t.id);
-    const fixedPivotId = teamIds[0];
-    let rotatingTeamIds = teamIds.slice(1);
-
-    for (let round = 0; round < totalRounds; round++) {
-        const matchesInRound = [];
-        
-        let team1_id_pivot = fixedPivotId;
-        let team2_id_pivot = rotatingTeamIds[0];
-
-        if (team1_id_pivot === 'DUMMY_TEAM' || team2_id_pivot === 'DUMMY_TEAM') {
-            const realTeamId = team1_id_pivot === 'DUMMY_TEAM' ? team2_id_pivot : team1_id_pivot;
-            if (realTeamId !== 'DUMMY_TEAM') {
-                matchesInRound.push({
-                    id: generateUniqueId('M'), week: round + 1, season: season,
-                    homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
-                    awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
-                });
-            }
-        } else {
-            let homeId, awayId;
-            if (round % 2 === 0) { homeId = team1_id_pivot; awayId = team2_id_pivot; }
-            else { homeId = team2_id_pivot; awayId = team1_id_pivot; }
-            matchesInRound.push({
-                id: generateUniqueId('M'), week: round + 1, season: season,
-                homeTeamId: homeId, homeTeamName: allLeagueClubsData.find(c => c.id === homeId).name,
-                awayTeamId: awayId, awayTeamName: allLeagueClubsData.find(c => c.id === awayId).name,
-                competition: 'League', result: null, played: false
-            });
-        }
-
-        for (let i = 1; i < n / 2; i++) {
-            let teamA_id = rotatingTeamIds[i];
-            let teamB_id = rotatingTeamIds[n - 1 - i];
-
-            if (teamA_id === 'DUMMY_TEAM' || teamB_id === 'DUMMY_TEAM') {
-                const realTeamId = teamA_id === 'DUMMY_TEAM' ? teamB_id : teamA_id;
-                if (realTeamId !== 'DUMMY_TEAM') {
-                    matchesInRound.push({
-                        id: generateUniqueId('M'), week: round + 1, season: season,
-                        homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
-                        awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
-                    });
-                }
-                continue;
-            }
-
-            let homeId, awayId;
-            const isSecondLeg = round >= (n - 1);
-
-            if ((i - 1) % 2 === 0) {
-                 homeId = isSecondLeg ? teamB_id : teamA_id;
-                 awayId = isSecondLeg ? teamA_id : teamB_id;
-            } else {
-                 homeId = isSecondLeg ? teamA_id : teamB_id;
-                 awayId = isSecondLeg ? teamB_id : teamA_id;
-            }
-
-            matchesInRound.push({
-                id: generateUniqueId('M'), week: round + 1, season: season,
-                homeTeamId: homeId, homeTeamName: allLeagueClubsData.find(c => c.id === homeId).name,
-                awayTeamId: awayId, awayTeamName: allLeagueClubsData.find(c => c.id === awayId).name,
-                competition: 'League', result: null, played: false
-            });
-        }
-        
-        schedule.push({
-            week: round + 1,
-            matches: matchesInRound.filter(match => match.homeTeamId !== 'DUMMY_TEAM' && match.awayTeamId !== 'DUMMY_TEAM')
-        });
-
-        const fixedPivot = topHalf[0]; // Need to re-derive topHalf/bottomHalf from teamsForScheduling
-        // To accurately rotate the remaining teams while keeping pivot fixed:
-        const firstTeam = teamsForScheduling.shift(); // Remove pivot temporarily
-        teamsForScheduling.push(firstTeam); // Put pivot at the end
-        const tempRotate = teamsForScheduling.slice(1); // Get all except pivot and first rotating
-        teamsForScheduling.splice(1, rotatingTeamIds.length, rotatingTeamIds.pop(), ...tempRotate); // Rotate
-
-
-        // Correct rotation for Circle Method:
-        // Hold the first team fixed. Rotate the remaining N-1 teams.
-        const rotatedPart = rotatingTeamIds; // This is the array of rotating teams from the start of the round
-        const lastOfRotating = rotatedPart.pop(); // Remove last team
-        rotatedPart.splice(0, 0, lastOfRotating); // Insert at beginning
-        rotatingTeamIds = rotatedPart; // Update rotating teams for next round
-    }
-
-    // After the loop, the rotation logic was slightly incorrect in previous versions.
-    // Let's use a simpler, known-good Circle Method rotation.
-
-    // New, simplified Circle Method implementation to ensure correct rotation and pairing.
-    // This assumes teams are IDs initially.
-    let teams = allLeagueClubsData.map(t => t.id); // Use only IDs for rotation
+    let teams = [...allLeagueClubsData.map(c => c.id)];
     const originalNumTeams = teams.length;
     const hasDummy = originalNumTeams % 2 !== 0;
     if (hasDummy) {
-        teams.push('DUMMY_TEAM'); // Add dummy ID
+        teams.push('DUMMY_TEAM');
     }
-    const N = teams.length; // N is now even
+    const N = teams.length;
 
     const newSchedule = [];
-    const numRoundsPerHalf = N - 1; // Each team plays N-1 opponents once in a half-season
+    const numRoundsPerHalf = N - 1;
 
-    for (let round = 0; round < numRoundsPerHalf * 2; round++) { // totalRounds = (N-1)*2
+    for (let round = 0; round < numRoundsPerHalf * 2; round++) {
         const currentRoundMatches = [];
-        // First team (pivot) plays against the middle team
-        const homePivot = teams[0];
-        const awayPivot = teams[N / 2];
+        
+        const team1_id_pivot = teams[0];
+        const team2_id_pivot = teams[N / 2];
 
-        // Determine home/away based on round parity for the pivot match
-        let h1, a1;
-        if (round % 2 === 0) { // Even round for the first leg, odd for second leg
-            h1 = homePivot;
-            a1 = awayPivot;
+        const isSecondLeg = round >= numRoundsPerHalf;
+        let homeId_pivot, awayId_pivot;
+
+        if (round % 2 === 0) {
+            homeId_pivot = isSecondLeg ? team2_id_pivot : team1_id_pivot;
+            awayId_pivot = isSecondLeg ? team1_id_pivot : team2_id_pivot;
         } else {
-            h1 = awayPivot;
-            a1 = homePivot;
+            homeId_pivot = isSecondLeg ? team1_id_pivot : team2_id_pivot;
+            awayId_pivot = isSecondLeg ? team2_id_pivot : team1_id_pivot;
         }
         
-        if (h1 !== 'DUMMY_TEAM' && a1 !== 'DUMMY_TEAM') {
+        if (homeId_pivot !== 'DUMMY_TEAM' && awayId_pivot !== 'DUMMY_TEAM') {
             currentRoundMatches.push({
                 id: generateUniqueId('M'), week: round + 1, season: season,
-                homeTeamId: h1, homeTeamName: allLeagueClubsData.find(c => c.id === h1).name,
-                awayTeamId: a1, awayTeamName: allLeagueClubsData.find(c => c.id === a1).name,
+                homeTeamId: homeId_pivot, homeTeamName: allLeagueClubsData.find(c => c.id === homeId_pivot).name,
+                awayTeamId: awayId_pivot, awayTeamName: allLeagueClubsData.find(c => c.id === awayId_pivot).name,
                 competition: 'League', result: null, played: false
             });
         } else {
-             // Handle BYE for dummy team
-            const realTeamId = h1 === 'DUMMY_TEAM' ? a1 : h1;
+            const realTeamId = homeId_pivot === 'DUMMY_TEAM' ? team2_id_pivot : team1_id_pivot;
             if (realTeamId !== 'DUMMY_TEAM') {
                 currentRoundMatches.push({
                     id: generateUniqueId('M'), week: round + 1, season: season,
@@ -373,19 +302,17 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
         }
 
 
-        // Pair remaining teams in a "cross" pattern
         for (let i = 1; i < N / 2; i++) {
             const teamA_id = teams[i];
             const teamB_id = teams[N - i];
 
             let h, a;
-            // Home/away swap for balance in each round's pairings
-            if (round % 2 === 0) {
-                h = teamA_id;
-                a = teamB_id;
+            if ((round % (N - 1)) % 2 === 0) {
+                 h = isSecondLeg ? teamB_id : teamA_id;
+                 a = isSecondLeg ? teamA_id : teamB_id;
             } else {
-                h = teamB_id;
-                a = teamA_id;
+                 h = isSecondLeg ? teamA_id : teamB_id;
+                 a = isSecondLeg ? teamB_id : teamA_id;
             }
 
             if (h !== 'DUMMY_TEAM' && a !== 'DUMMY_TEAM') {
@@ -406,24 +333,19 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
                 }
             }
         }
-
+        
         newSchedule.push({
             week: round + 1,
-            matches: currentRoundMatches.filter(m => m.homeTeamId !== 'DUMMY_TEAM' && m.awayTeamId !== 'DUMMY_TEAM') // Filter out any BYE matches
+            matches: currentRoundMatches.filter(match => match.homeTeamId !== 'DUMMY_TEAM' && match.awayTeamId !== 'DUMMY_TEAM')
         });
 
-        // Rotate teams: Keep first team fixed. Move last team to second position. Shift others.
-        // Slice the array for rotation (exclude pivot at index 0)
-        const lastOfRotating = teams.pop();
-        teams.splice(1, 0, lastOfRotating); // Insert at index 1
-
-        // The rotation should be like this:
-        // teams = [T1, T2, T3, T4, T5, T6]
-        // After 1st round: [T1, T6, T2, T3, T4, T5] (T1 fixed, T6 moves to T2's spot, others shift)
-        // This is done by taking the last element and inserting it right after the first.
+        const firstTeamId = teams[0];
+        const lastRotatingId = teams.pop();
+        teams.splice(1, 0, lastRotatingId);
+        teams[0] = firstTeamId;
     }
 
-    console.log(`Generated ${newSchedule.length} match weeks.`);
+    console.log(`Generated ${newSchedule.length} match weeks.`, newSchedule);
     return newSchedule;
 }
 
@@ -487,6 +409,6 @@ function possibleNearbyTowns(centerTown) {
     const specificNearby = nearbyMap[centerTown] || [];
 
     const genericVillages = ['Newton', 'Kingston', 'Charlton', 'Stanton', 'Hinton', 'Morton', 'Burton', 'Oakley', 'Ashley', 'Bradley'];
-    return [...new Set([...specificNearby, ...genericVillages.slice(0, getRandomInt(3, 7))])];
+    return [...new Set([...specificNearby, ...getRandomElement(genericVillages.slice(0, getRandomInt(3, 7)))])];
 }
 

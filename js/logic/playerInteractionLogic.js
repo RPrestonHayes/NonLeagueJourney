@@ -9,7 +9,8 @@ import * as Constants from '../utils/constants.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
 import * as Main from '../main.js';
-import { getRandomInt, getRandomElement } from '../utils/dataGenerator.js'; // Ensure these are imported
+import { getRandomInt, getRandomElement, getRandomName } from '../utils/dataGenerator.js';
+
 
 /**
  * Initiates a conversation with a specific player.
@@ -18,6 +19,7 @@ import { getRandomInt, getRandomElement } from '../utils/dataGenerator.js'; // E
  * @param {string} interactionType - The type of interaction (e.g., 'motivate', 'ask_commitment', 'address_form').
  */
 export function startPlayerConversation(player, interactionType) {
+    console.log(`DEBUG: playerInteractionLogic.startPlayerConversation called for ${player.name}, type: ${interactionType}`);
     let title = `Talking to ${player.name}`;
     let message = '';
     let choices = [];
@@ -29,36 +31,39 @@ export function startPlayerConversation(player, interactionType) {
                 {
                     text: 'Focus on recent performance',
                     action: () => {
+                        renderers.hideModal(); // Hide choice modal
                         let moraleChange = getRandomInt(3, 8);
                         let feedback = '';
                         if (player.status.morale < 50) {
                             moraleChange = getRandomInt(8, 15);
-                            feedback = `"${player.name} seems re-energized after your talk, morale greatly improved."`;
+                            feedback = `Your passionate words re-energize ${player.name}. His morale is greatly improved!`;
+                        } else if (player.status.morale < 75) {
+                            feedback = `${player.name} appreciates the support. His morale is slightly boosted.`;
                         } else {
-                            feedback = `"${player.name} appreciates the support. Morale slightly boosted."`;
+                             feedback = `${player.name} is already highly motivated. He acknowledges your support.`;
+                             moraleChange = getRandomInt(0, 1);
                         }
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.displayMessage('Player Morale', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
+                        renderers.showModal('Morale Boost Outcome', `${feedback} New morale: ${player.status.morale}%.`, [{ text: 'Continue', action: renderers.hideModal }]); // Outcome modal
                         Main.updateUI();
-                        renderers.hideModal(); // Hide modal after action taken
                     },
                     isPrimary: true
                 },
                 {
                     text: 'Remind him of team goals',
                     action: () => {
+                        renderers.hideModal(); // Hide choice modal
                         let moraleChange = getRandomInt(1, 5);
                         let feedback = '';
                         if (player.traits.ambition > 7) {
                             moraleChange += getRandomInt(2, 5);
-                            feedback = `"${player.name} is fired up by the team's ambition. Morale improved."`;
+                            feedback = `${player.name} is fired up by the team's ambition. His morale improved!`;
                         } else {
-                            feedback = `"${player.name} nods. Morale slightly improved."`;
+                            feedback = `${player.name} nods. His morale is slightly improved.`;
                         }
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.displayMessage('Player Morale', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
+                        renderers.showModal('Morale Boost Outcome', `${feedback} New morale: ${player.status.morale}%.`, [{ text: 'Continue', action: renderers.hideModal }]);
                         Main.updateUI();
-                        renderers.hideModal(); // Hide modal after action taken
                     }
                 }
             ];
@@ -70,32 +75,32 @@ export function startPlayerConversation(player, interactionType) {
                 {
                     text: 'Emphasize club’s future',
                     action: () => {
+                        renderers.hideModal(); // Hide choice modal
                         let moraleChange = 0;
                         let feedback = '';
                         if (player.traits.commitmentLevel === 'Low') {
-                            feedback = `"${player.name} looks a bit sheepish, but promises to try harder. Commitment unchanged for now."`;
+                            feedback = `${player.name} looks a bit sheepish, but promises to try harder. Commitment unchanged for now.`;
                         } else if (player.traits.commitmentLevel === 'Medium') {
-                            feedback = `"${player.name} confirms he's still invested. Commitment slightly reinforced."`;
+                            feedback = `${player.name} confirms he's still invested in the project. Commitment slightly reinforced.`;
                             moraleChange = 3;
                         } else {
-                            feedback = `"${player.name} reaffirms his dedication. Commitment already high."`;
+                            feedback = `${player.name} reaffirms his dedication. Commitment already high.`;
                             moraleChange = 1;
                         }
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.displayMessage('Player Commitment', feedback);
+                        renderers.showModal('Commitment Check Outcome', feedback, [{ text: 'Continue', action: renderers.hideModal }]);
                         Main.updateUI();
-                        renderers.hideModal(); // Hide modal after action taken
                     },
                     isPrimary: true
                 },
                 {
                     text: 'Offer to help with issues (if any)',
                     action: () => {
-                        message = `"${player.name} appreciates the offer, but says he's fine. Morale slightly up."`;
+                        renderers.hideModal(); // Hide choice modal
+                        let feedback = `${player.name} appreciates the offer, but says he's fine. Morale slightly up.`;
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, 2);
-                        renderers.displayMessage('Player Support', message);
+                        renderers.showModal('Player Support Outcome', feedback, [{ text: 'Continue', action: renderers.hideModal }]);
                         Main.updateUI();
-                        renderers.hideModal(); // Hide modal after action taken
                     }
                 }
             ];
@@ -107,30 +112,30 @@ export function startPlayerConversation(player, interactionType) {
                 {
                     text: 'Be direct, demand more',
                     action: () => {
+                        renderers.hideModal(); // Hide choice modal
                         let moraleChange = -getRandomInt(5, 10);
                         let feedback = '';
                         if (player.traits.temperament < 5) {
                             moraleChange = -getRandomInt(10, 15);
-                            feedback = `"${player.name} seems agitated and morale drops significantly."`;
+                            feedback = `${player.name} seems agitated and morale drops significantly after your direct words.`;
                         } else {
-                            feedback = `"${player.name} seems to take it on board. Morale slightly drops, but might improve performance."`;
+                            feedback = `${player.name} seems to take it on board. Morale slightly drops, but might improve performance.`;
                         }
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.displayMessage('Player Performance', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
+                        renderers.showModal('Performance Review Outcome', `${feedback} New morale: ${player.status.morale}%.`, [{ text: 'Continue', action: renderers.hideModal }]);
                         Main.updateUI();
-                        renderers.hideModal(); // Hide modal after action taken
                     },
                     isPrimary: true
                 },
                 {
                     text: 'Offer support, identify solutions',
                     action: () => {
+                        renderers.hideModal(); // Hide choice modal
                         let moraleChange = getRandomInt(1, 5);
-                        let feedback = `"${player.name} responds positively to your supportive approach. Morale slightly up."`;
+                        let feedback = `${player.name} responds positively to your supportive approach. Morale slightly up.`;
                         Main.gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.displayMessage('Player Performance', `${player.name} morale is now ${player.status.morale}%. ${feedback}`);
+                        renderers.showModal('Performance Review Outcome', `${feedback} New morale: ${player.status.morale}%.`, [{ text: 'Continue', action: renderers.hideModal }]);
                         Main.updateUI();
-                        renderers.hideModal(); // Hide modal after action taken
                     }
                 }
             ];
@@ -138,7 +143,8 @@ export function startPlayerConversation(player, interactionType) {
 
         default:
             console.warn(`Unknown player interaction type: ${interactionType}`);
-            return;
+            renderers.showModal('Interaction Error', `An unknown interaction type occurred with ${player.name}.`, [{ text: 'Continue', action: renderers.hideModal }]);
+            break;
     }
 
     renderers.showModal(title, message, choices);
@@ -150,6 +156,7 @@ export function startPlayerConversation(player, interactionType) {
  * @param {string} playerClubId - The ID of the player's club.
  */
 export function attemptRecruitment(newPlayer, playerClubId) {
+    console.log(`DEBUG: playerInteractionLogic.attemptRecruitment called for ${newPlayer.name}`);
     const title = `Recruiting ${newPlayer.name}`;
     let message = '';
     let choices = [];
@@ -163,37 +170,39 @@ export function attemptRecruitment(newPlayer, playerClubId) {
         {
             text: 'Offer a compelling vision',
             action: () => {
+                renderers.hideModal(); // Hide choice modal
                 let outcomeMessage = '';
                 if (getRandomInt(1, 100) < successChance + getRandomInt(5,15)) {
                     Main.gameState.playerClub.squad = playerData.addPlayer(newPlayer, playerClubId);
-                    outcomeMessage = `${newPlayer.name} is impressed by your vision and agrees to join the club! Welcome aboard!`;
+                    outcomeMessage = `SUCCESS! ${newPlayer.name} is impressed by your vision and agrees to join the club! Welcome aboard!`;
                     Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: renderers.hideModal }]);
                 } else {
-                    outcomeMessage = `${newPlayer.name} politely declines, stating he's not convinced by the current project.`;
+                    outcomeMessage = `FAILED. ${newPlayer.name} politely declines, stating he's not convinced by the current project.`;
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: renderers.hideModal }]);
                 }
-                renderers.displayMessage('Recruitment Outcome', outcomeMessage);
                 Main.updateUI();
-                renderers.hideModal(); // Hide modal after action taken
             },
             isPrimary: true
         },
         {
             text: 'Emphasize local camaraderie',
             action: () => {
+                renderers.hideModal(); // Hide choice modal
                 let outcomeMessage = '';
                 let actualChance = successChance;
                 if (newPlayer.traits.loyalty > 15) actualChance += getRandomInt(2, 5);
 
                 if (getRandomInt(1, 100) < actualChance) {
                     Main.gameState.playerClub.squad = playerData.addPlayer(newPlayer, playerClubId);
-                    outcomeMessage = `${newPlayer.name} is swayed by the promise of local camaraderie and joins the club!`;
+                    outcomeMessage = `SUCCESS! ${newPlayer.name} is swayed by the promise of local camaraderie and joins the club!`;
                     Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: renderers.hideModal }]);
                 } else {
-                    outcomeMessage = `${newPlayer.name} thanks you but prefers to stay with his current setup.`;
+                    outcomeMessage = `FAILED. ${newPlayer.name} thanks you but prefers to stay with his current setup.`;
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: renderers.hideModal }]);
                 }
-                renderers.displayMessage('Recruitment Outcome', outcomeMessage);
                 Main.updateUI();
-                renderers.hideModal(); // Hide modal after action taken
             }
         }
     ];

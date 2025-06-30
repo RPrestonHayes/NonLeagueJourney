@@ -11,6 +11,8 @@ import * as Main from '../main.js';
 import * as renderers from './renderers.js';
 // Import Constants to access task types
 import * as Constants from '../utils/constants.js';
+// NEW: Import taskLogic to trigger task outcomes immediately
+import * as taskLogic from '../logic/taskLogic.js';
 
 
 // --- Cached DOM Elements ---
@@ -179,31 +181,34 @@ function handleSaveOpponentCustomization() {
 /**
  * Handles the "Do Task" button click for weekly tasks.
  * STRICT "ALL OR NOTHING" implementation: Requires full task hours available.
+ * This now immediately calls taskLogic to handle the outcome and modal.
  * @param {HTMLButtonElement} buttonElement - The button that was clicked.
  */
 function handleCompleteTask(buttonElement) {
     const taskId = buttonElement.dataset.taskId;
-    // Find the task object within the current gameState's weeklyTasks
     const task = Main.gameState.weeklyTasks.find(t => t.id === taskId);
 
     if (task && !task.completed) {
-        // Strict check: available hours must be >= task's baseHours
         if (Main.gameState.availableHours >= task.baseHours) {
-            // Deduct hours from availableHours
+            // Deduct hours immediately
             Main.gameState.availableHours -= task.baseHours;
             // Mark task as completed for this week's processing
             task.assignedHours = task.baseHours; // Mark as assigned for gameLoop to process
             task.completed = true; // Mark as completed for UI state
 
+            // Update UI immediately to reflect hours deduction and button change
             renderers.updateWeeklyTasksDisplay(Main.gameState.weeklyTasks, Main.gameState.availableHours);
-            renderers.displayMessage('Task Completed', `${task.description} done!`);
-
+            
             // Disable the button to prevent re-clicking
             buttonElement.disabled = true;
             buttonElement.textContent = 'Completed';
             buttonElement.classList.add('completed');
 
             Main.saveGame(false); // Save state silently after a task is done
+
+            // Immediately call taskLogic to handle the task's specific outcome/modal
+            taskLogic.handleCompletedTaskOutcome(Main.gameState, task);
+
         } else {
             renderers.showModal('Not Enough Hours', `You need exactly ${task.baseHours} hours for this task, but only have ${Main.gameState.availableHours} remaining! You cannot do this task partially.`, [{ text: 'OK', action: renderers.hideModal }]);
         }
