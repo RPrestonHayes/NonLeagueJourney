@@ -2,14 +2,22 @@
 
 /* --- Base Styles --- */
 :root {
+    /* Base colors - these will be dynamically overridden by JS for club theme */
     --primary-color: #004D40; /* Dark Teal - for accents, buttons */
     --secondary-color: #B2DFDB; /* Light Teal - for highlights */
+
+    /* Text colors that adapt based on the background they're on */
+    --primary-text-on-bg: #FFFFFF; /* Text color to use on --primary-color background */
+    --secondary-text-on-bg: #000000; /* Text color to use on --secondary-color background */
+
+    /* Fixed UI colors (not club-dependent) */
     --background-color: #F0F2F5; /* Light Grey Blue - overall background */
     --surface-color: #FFFFFF; /* White - for content cards/panels */
     --text-color: #333333; /* Dark Grey - for general text */
     --light-text-color: #666666; /* Medium Grey - for secondary text */
     --border-color: #E0E0E0; /* Light Grey - for borders */
     --accent-color: #FFC107; /* Amber - for warnings, highlights */
+
     --font-family: 'Inter', sans-serif;
     --border-radius: 8px;
     --padding-md: 16px;
@@ -33,8 +41,8 @@ body {
 
 /* --- Header & Navigation --- */
 .app-header {
-    background-color: var(--primary-color);
-    color: var(--surface-color);
+    background-color: var(--primary-color); /* Uses dynamic primary color */
+    color: var(--primary-text-on-bg); /* Uses dynamic text color for primary background */
     padding: var(--padding-md);
     text-align: center;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -66,18 +74,18 @@ body {
 }
 
 .nav-btn {
-    background-color: var(--secondary-color);
-    color: var(--primary-color);
+    background-color: var(--secondary-color); /* Uses dynamic secondary color */
+    color: var(--secondary-text-on-bg); /* Uses dynamic text color for secondary background */
 }
 
 .nav-btn:hover {
-    background-color: #80CBC4; /* A slightly darker secondary */
+    filter: brightness(90%); /* Slightly darken on hover instead of fixed color */
     transform: translateY(-1px);
 }
 
 .nav-btn.active-nav {
-    background-color: var(--accent-color);
-    color: var(--text-color);
+    background-color: var(--accent-color); /* Active button uses accent color */
+    color: var(--text-color); /* Standard text color for accent background */
     box-shadow: 0 3px 6px rgba(0,0,0,0.2);
 }
 
@@ -105,7 +113,7 @@ body {
 }
 
 .game-screen h2 {
-    color: var(--primary-color);
+    color: var(--primary-color); /* H2 titles use dynamic primary color */
     font-size: 1.5em;
     margin-top: 0;
     margin-bottom: var(--padding-md);
@@ -122,9 +130,9 @@ body {
 }
 
 .info-box h3 {
-    margin-top: 0;
-    color: var(--primary-color);
+    color: var(--primary-color); /* H3 titles use dynamic primary color */
     font-size: 1.2em;
+    margin-top: 0;
 }
 
 .action-panel {
@@ -154,28 +162,28 @@ body {
 }
 
 .task-list li button {
-    background-color: var(--primary-color);
-    color: var(--surface-color);
+    background-color: var(--primary-color); /* Task button uses dynamic primary color */
+    color: var(--primary-text-on-bg); /* Task button text uses dynamic text color */
     padding: 5px 10px;
     font-size: 0.85em;
 }
 
 .task-list li button:hover {
-    background-color: #00695C; /* Darker primary */
+    filter: brightness(90%); /* Slightly darken on hover */
 }
 
 /* --- Buttons --- */
 .primary-btn {
-    background-color: var(--primary-color);
-    color: var(--surface-color);
-    display: block; /* Makes it full width by default */
-    width: auto; /* Auto width based on content if not block */
-    margin: 15px 0 0; /* Top margin for spacing */
+    background-color: var(--primary-color); /* Uses dynamic primary color */
+    color: var(--primary-text-on-bg); /* Uses dynamic text color */
+    display: block;
+    width: auto;
+    margin: 15px 0 0;
     font-size: 1em;
 }
 
 .primary-btn:hover {
-    background-color: #00695C;
+    filter: brightness(90%);
     transform: translateY(-2px);
 }
 
@@ -197,7 +205,7 @@ body {
 /* --- Data Tables (General Styling) --- */
 .data-table-container {
     width: 100%;
-    overflow-x: auto; /* Allows horizontal scrolling on small screens */
+    overflow-x: auto;
     margin-bottom: var(--margin-md);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
@@ -207,7 +215,7 @@ body {
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 500px; /* Ensure table is wide enough for columns on small screens */
+    min-width: 500px;
 }
 
 .data-table th, .data-table td {
@@ -217,15 +225,15 @@ body {
 }
 
 .data-table th {
-    background-color: var(--secondary-color);
-    color: var(--primary-color);
+    background-color: var(--secondary-color); /* Table header uses dynamic secondary color */
+    color: var(--secondary-text-on-bg); /* Table header text uses dynamic text color */
     font-weight: 600;
     text-transform: uppercase;
     font-size: 0.8em;
 }
 
 .data-table tbody tr:nth-child(even) {
-    background-color: #F8F8F8; /* Light stripe for readability */
+    background-color: #F8F8F8;
 }
 
 .data-table tbody tr:hover {
@@ -253,27 +261,27 @@ body {
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     font-size: 1em;
-    box-sizing: border-box; /* Include padding in width */
+    box-sizing: border-box;
 }
 
 .form-group input[type="color"] {
-    height: 40px; /* Make color input more visible */
+    height: 40px;
     padding: 5px;
 }
 
 /* --- Modals --- */
 .modal-overlay {
-    display: none; /* Hidden by default */
+    display: none;
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent black overlay */
+    background-color: rgba(0, 0, 0, 0.6);
     justify-content: center;
     align-items: center;
-    z-index: 1000; /* Ensure it's on top */
-    overflow-y: auto; /* Allow scrolling for the entire overlay if needed, though modal-content should handle it */
+    z-index: 1000;
+    overflow-y: auto;
 }
 
 .modal-content {
@@ -281,18 +289,16 @@ body {
     padding: var(--padding-md);
     border-radius: var(--border-radius);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-    width: 90%; /* Responsive width */
-    max-width: 500px; /* Max width for larger screens */
+    width: 90%;
+    max-width: 500px;
     box-sizing: border-box;
     position: relative;
-
-    /* --- NEW: Modal Content Scrolling --- */
-    max-height: 90vh; /* Max height relative to viewport height */
-    overflow-y: auto; /* Enable vertical scrolling */
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .modal-content h3 {
-    color: var(--primary-color);
+    color: var(--primary-color); /* Modal titles use dynamic primary color */
     margin-top: 0;
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 10px;
@@ -301,7 +307,7 @@ body {
 
 .modal-actions {
     display: flex;
-    justify-content: flex-end; /* Align buttons to the right */
+    justify-content: flex-end;
     gap: 10px;
     margin-top: 20px;
 }
@@ -323,11 +329,11 @@ body {
 
 /* --- Footer --- */
 .app-footer {
-    background-color: var(--primary-color);
-    color: var(--surface-color);
+    background-color: var(--primary-color); /* Footer uses dynamic primary color */
+    color: var(--primary-text-on-bg); /* Footer text uses dynamic text color */
     padding: 10px var(--padding-md);
     text-align: center;
-    margin-top: auto; /* Pushes footer to the bottom */
+    margin-top: auto;
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -339,23 +345,23 @@ body {
 .app-footer p {
     margin: 0;
     font-size: 0.8em;
-    color: var(--secondary-color);
+    color: var(--secondary-text-on-bg); /* Footer copyright text uses secondary text color */
 }
 
 .footer-btn {
+    background-color: var(--secondary-color); /* Footer buttons use dynamic secondary color */
+    color: var(--secondary-text-on-bg); /* Footer button text uses dynamic text color */
     padding: 8px 12px;
     border: none;
     border-radius: var(--border-radius);
     cursor: pointer;
-    background-color: var(--secondary-color);
-    color: var(--primary-color);
     font-size: 0.85em;
     font-weight: 600;
     transition: background-color 0.2s ease;
 }
 
 .footer-btn:hover {
-    background-color: #80CBC4;
+    filter: brightness(90%);
 }
 
 /* --- Responsive Adjustments --- */
@@ -392,23 +398,23 @@ body {
 
 /* --- Loading Screen Specific Styles --- */
 .loading-screen-overlay {
-    position: fixed; /* Fixed to cover the whole viewport */
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.8); /* Darker overlay for loading */
+    background-color: rgba(0, 0, 0, 0.8);
     color: var(--surface-color);
-    display: none; /* Hidden by default, JS will show/hide */
+    display: none;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    z-index: 1001; /* Higher than other modals */
+    z-index: 1001;
     text-align: center;
 }
 
 .loading-content {
-    background-color: rgba(0, 0, 0, 0.7); /* Slightly lighter background for the content box */
+    background-color: rgba(0, 0, 0, 0.7);
     padding: 30px;
     border-radius: var(--border-radius);
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
@@ -426,7 +432,7 @@ body {
 /* Spinner Animation */
 .spinner {
     border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top: 4px solid var(--accent-color); /* Use accent color for spinner */
+    border-top: 4px solid var(--accent-color);
     border-radius: 50%;
     width: 40px;
     height: 40px;
@@ -460,10 +466,10 @@ body {
 }
 
 .opponent-custom-item .color-pickers > div {
-    flex: 1; /* Make color pickers take equal space */
+    flex: 1;
 }
 
 .opponent-custom-item input[type="color"] {
-    width: 100%; /* Fill available space */
+    width: 100%;
 }
 

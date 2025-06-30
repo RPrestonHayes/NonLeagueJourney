@@ -43,6 +43,9 @@ console.log("DEBUG: Attempting to import Constants...");
 import * as Constants from './utils/constants.js';
 console.log("DEBUG: Constants imported successfully.");
 
+// NEW: Import color utility functions - CORRECTED PATH to coloursUtils.js
+import { getContrastingTextColor } from './utils/coloursUtils.js';
+
 
 // --- Global Game State Object ---
 export let gameState = {
@@ -62,62 +65,51 @@ export let gameState = {
 console.log("DEBUG: gameState object initialized.");
 
 
-// --- Helper for Calendar Conversion (FINAL REVISION) ---
-/**
- * Converts a game week number into a formatted calendar string (e.g., "August Week 1 (Pre-Season)").
- * Handles pre-season, regular season, and off-season phases.
- * @param {number} weekNum - The 1-indexed game week number (e.g., 1 to 52).
- * @returns {string} Formatted calendar string.
- */
+// --- Helper for Calendar Conversion ---
 function getCalendarWeekString(weekNum) {
-    if (weekNum <= 0) {
-        return "Invalid Week";
-    }
-
-    // Handle Pre-Season (Weeks 1 to Constants.PRE_SEASON_WEEKS)
+    if (weekNum <= 0) { return "Invalid Week"; }
     if (weekNum <= Constants.PRE_SEASON_WEEKS) {
         return `${Constants.MONTH_NAMES[Constants.SEASON_START_MONTH_INDEX]} Week ${weekNum} (Pre-Season)`;
     }
-
-    // Handle Regular Season (Weeks after PRE_SEASON_WEEKS up to TOTAL_LEAGUE_WEEKS)
-    if (weekNum <= Constants.TOTAL_LEAGUE_WEEKS) {
-        const weekInSeasonBlock = weekNum - Constants.PRE_SEASON_WEEKS; // Week number relative to start of regular season block (1-indexed)
-        let cumulativeWeeksPassed = 0;
-
-        for (let i = 0; i < Constants.GAME_WEEK_TO_MONTH_MAP.length; i++) {
-            const monthBlock = Constants.GAME_WEEK_TO_MONTH_MAP[i];
-            const weeksInThisMonthBlock = monthBlock.weeks;
-
-            // Check if weekInSeasonBlock falls within the current month block
-            if (weekInSeasonBlock > cumulativeWeeksPassed && weekInSeasonBlock <= cumulativeWeeksPassed + weeksInThisMonthBlock) {
-                const monthIndex = (Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12;
-                const weekInMonth = weekInSeasonBlock - cumulativeWeeksPassed;
-                return `${Constants.MONTH_NAMES[monthIndex]} Week ${weekInMonth}`;
-            }
-            cumulativeWeeksPassed += weeksInThisMonthBlock;
+    const weekInRegularSeasonBlock = weekNum - Constants.PRE_SEASON_WEEKS;
+    let cumulativeWeeksInMap = 0;
+    for (let i = 0; i < Constants.GAME_WEEK_TO_MONTH_MAP.length; i++) {
+        const monthBlock = Constants.GAME_WEEK_TO_MONTH_MAP[i];
+        const weeksInThisMonthBlock = monthBlock.weeks;
+        if (weekInRegularSeasonBlock > cumulativeWeeksInMap && weekInRegularSeasonBlock <= cumulativeWeeksInMap + weeksInThisMonthBlock) {
+            const monthIndex = (Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12;
+            const weekInMonth = weekInRegularSeasonBlock - cumulativeWeeksInMap;
+            return `${Constants.MONTH_NAMES[monthIndex]} Week ${weekInMonth}`;
         }
-        // Fallback for regular season if loop didn't catch it (shouldn't happen with correct map)
-        return `Regular Season Week ${weekNum}`;
+        cumulativeWeeksInMap += weeksInThisMonthBlock;
     }
-
-    // Handle Off-Season (Weeks after TOTAL_LEAGUE_WEEKS up to TOTAL_GAME_WEEKS_IN_YEAR)
-    if (weekNum <= Constants.TOTAL_GAME_WEEKS_IN_YEAR) {
+    if (weekNum > Constants.TOTAL_LEAGUE_WEEKS) {
         const offSeasonStartWeek = Constants.TOTAL_LEAGUE_WEEKS + 1;
-        const offSeasonWeekNum = weekNum - offSeasonStartWeek + 1; // 1-indexed week within off-season
-
-        // Determine off-season month based on offSeasonWeekNum
-        // Assumes June and July are off-season (each 4 weeks)
-        if (offSeasonWeekNum <= 4) {
-            return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 10) % 12]} Week ${offSeasonWeekNum} (Off-Season)`; // June
-        } else if (offSeasonWeekNum <= 8) {
-            return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 11) % 12]} Week ${offSeasonWeekNum - 4} (Off-Season)`; // July
-        } else {
-            return `Off-Season Week ${offSeasonWeekNum}`; // Generic if extending past known months
-        }
+        const offSeasonWeekNum = weekNum - offSeasonStartWeek + 1;
+        if (offSeasonWeekNum <= 4) { return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 10) % 12]} Week ${offSeasonWeekNum} (Off-Season)`; }
+        else if (offSeasonWeekNum <= 8) { return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 11) % 12]} Week ${offSeasonWeekNum - 4} (Off-Season)`; }
+        else { return `Off-Season Week ${offSeasonWeekNum}`; }
     }
-    
-    // Fallback for weeks beyond a full year cycle (e.g., if debugging far into game)
     return `Unknown Period Week ${weekNum}`;
+}
+
+/**
+ * Applies the club's primary and secondary kit colors to CSS variables,
+ * and calculates contrasting text colors for readability.
+ * @param {string} primaryColor - The primary hex color (e.g., #RRGGBB).
+ * @param {string} secondaryColor - The secondary hex color.
+ */
+function applyThemeColors(primaryColor, secondaryColor) {
+    const root = document.documentElement;
+
+    root.style.setProperty('--primary-color', primaryColor);
+    root.style.setProperty('--secondary-color', secondaryColor);
+
+    // Calculate contrasting text colors using the imported utility
+    root.style.setProperty('--primary-text-on-bg', getContrastingTextColor(primaryColor));
+    root.style.setProperty('--secondary-text-on-bg', getContrastingTextColor(secondaryColor));
+
+    console.log(`DEBUG: Applied theme colors. Primary: ${primaryColor}, Secondary: ${secondaryColor}`);
 }
 
 
@@ -155,6 +147,8 @@ function initGame() {
             } else {
                  opponentData.setAllOpponentClubs([]);
             }
+            // Apply loaded club's theme colors
+            applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
         renderers.hideLoadingScreen();
         updateUI();
@@ -165,6 +159,8 @@ function initGame() {
         renderers.renderNewGameModal();
         renderers.displayMessage('Welcome, Gaffer!', 'Please set up a new game.');
         gameState.gamePhase = Constants.GAME_PHASE.SETUP;
+        // Apply default theme colors if no game loaded
+        applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
     }
     console.log("DEBUG: initGame() finished.");
 }
@@ -182,6 +178,9 @@ export function startNewGame(playerClubDetails) {
     // 1. Initialize Player's Club
     gameState.playerClub = clubData.createPlayerClub(playerClubDetails);
     gameState.playerClubCustomized = true;
+
+    // Apply initial custom theme colors immediately after club creation
+    applyThemeColors(playerClubDetails.primaryColor, playerClubDetails.secondaryColor);
 
     // 2. Initialize Player Squad and attach to playerClub
     const initialSquad = playerData.initializePlayerSquad(gameState.playerClub.id);
@@ -307,6 +306,8 @@ export function loadGame() {
             } else {
                  opponentData.setAllOpponentClubs([]);
             }
+            // Apply loaded club's theme colors
+            applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
 
         updateUI();
@@ -322,7 +323,10 @@ export function loadGame() {
         };
         renderers.hideLoadingScreen();
         renderers.renderNewGameModal();
+        // Apply default theme colors if no game loaded
+        applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
     }
+    console.log("DEBUG: initGame() finished.");
 }
 
 /**
@@ -344,6 +348,8 @@ export function newGameConfirm() {
                     gamePhase: Constants.GAME_PHASE.SETUP, playerClubCustomized: false, opponentClubsCustomized: false,
                 };
                 renderers.renderNewGameModal();
+                // Apply default theme colors for new game modal
+                applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
             }, isPrimary: true },
             { text: 'No, Cancel', action: () => {
                 renderers.hideModal();

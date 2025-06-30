@@ -34,7 +34,7 @@ const leagueTableContainer = document.getElementById('leagueTable');
 const fixturesListContainer = document.getElementById('fixturesList');
 const committeeListContainer = document.getElementById('committeeList');
 const clubHistoryListContainer = document.getElementById('clubHistoryList');
-const financeBalanceDisplay = document.getElementById('financeBalanceDisplay'); // Corrected ID reference
+const financeBalanceDisplay = document.getElementById('financeBalanceDisplay');
 const opponentListCustomization = document.getElementById('opponentListCustomization');
 
 
@@ -44,23 +44,20 @@ const opponentListCustomization = document.getElementById('opponentListCustomiza
  * @param {string} screenId - The ID of the screen or modal to show (e.g., 'homeScreen', 'newGameModal').
  */
 export function renderGameScreen(screenId) {
-    // Hide all game screens and modals first
     gameScreens.forEach(screen => {
         screen.style.display = 'none';
-        screen.classList.remove('active'); // IMPORTANT: Remove 'active' class from all screens
+        screen.classList.remove('active');
     });
     modalOverlay.style.display = 'none';
     newGameModal.style.display = 'none';
     opponentCustomizationModal.style.display = 'none';
     loadingScreen.style.display = 'none';
 
-    // Show the requested screen/modal
     const targetScreen = document.getElementById(screenId);
     if (targetScreen) {
         targetScreen.style.display = 'block';
-        targetScreen.classList.add('active'); // IMPORTANT: Add 'active' class to the target screen
+        targetScreen.classList.add('active');
 
-        // Add active class to nav button if it corresponds to a main screen
         document.querySelectorAll('.nav-btn').forEach(btn => {
             if (btn.dataset.screen + 'Screen' === screenId) {
                 btn.classList.add('active-nav');
@@ -79,13 +76,13 @@ export function renderGameScreen(screenId) {
 export function showLoadingScreen() {
     gameScreens.forEach(screen => {
         screen.style.display = 'none';
-        screen.classList.remove('active'); // Ensure active is removed
+        screen.classList.remove('active');
     });
     modalOverlay.style.display = 'none';
     newGameModal.style.display = 'none';
     opponentCustomizationModal.style.display = 'none';
     loadingScreen.style.display = 'flex';
-    loadingScreen.classList.add('active'); // Loading screen is also "active"
+    loadingScreen.classList.add('active');
 }
 
 /**
@@ -93,7 +90,7 @@ export function showLoadingScreen() {
  */
 export function hideLoadingScreen() {
     loadingScreen.style.display = 'none';
-    loadingScreen.classList.remove('active'); // Remove active
+    loadingScreen.classList.remove('active');
 }
 
 
@@ -101,12 +98,12 @@ export function hideLoadingScreen() {
 /**
  * Updates the season, week, and balance display in the header.
  * @param {number} season
- * @param {number} week
+ * @param {string} weekString - Formatted week string (e.g., "August Week 1").
  * @param {number} balance
  */
-export function updateTopBarStats(season, week, balance) {
+export function updateTopBarStats(season, weekString, balance) {
     currentSeasonDisplay.textContent = season;
-    currentWeekDisplay.textContent = week;
+    currentWeekDisplay.textContent = weekString; // Now expects a string
     currentBalanceDisplay.textContent = `£${balance.toFixed(2)}`;
 }
 
@@ -135,23 +132,21 @@ export function updateNewsFeed(message) {
 export function displayMessage(title, message) {
     modalTitle.textContent = title;
     modalMessage.textContent = message;
-    modalChoices.innerHTML = ''; // Clear choices
-    modalChoices.style.display = 'none'; // Hide choices
-    modalCloseBtn.style.display = 'none'; // Hide close button for auto-disappearing message
+    modalChoices.innerHTML = '';
+    modalChoices.style.display = 'none';
+    modalCloseBtn.style.display = 'none';
 
-    modalOverlay.style.display = 'flex'; // Show modal
+    modalOverlay.style.display = 'flex';
 
-    // Automatically hide after a few seconds
     setTimeout(() => {
         hideModal();
-    }, 3000); // 3 seconds
+    }, 3000);
 }
 
 
-// --- Generic Modal Display (for confirmations, events with choices) ---
+// --- Generic Modal Display ---
 /**
  * Shows a generic modal with a title, message, and optional action choices.
- * This is for interactive modals, unlike displayMessage for quick info.
  * @param {string} title - The modal title.
  * @param {string} message - The modal message/description.
  * @param {Array<object>} choices - Optional array of { text: string, action: function, isPrimary: boolean }
@@ -159,7 +154,7 @@ export function displayMessage(title, message) {
 export function showModal(title, message, choices = []) {
     modalTitle.textContent = title;
     modalMessage.textContent = message;
-    modalChoices.innerHTML = ''; // Clear previous choices
+    modalChoices.innerHTML = '';
 
     choices.forEach(choice => {
         const button = document.createElement('button');
@@ -167,8 +162,6 @@ export function showModal(title, message, choices = []) {
         button.classList.add('modal-choice-btn', choice.isPrimary ? 'primary-btn' : 'secondary-btn');
         button.onclick = () => {
             choice.action();
-            // hideModal(); // Modals with choices often hide via the action itself, or based on specific logic
-            // Commenting out hideModal here. The action itself should call hideModal if needed.
         };
         modalChoices.appendChild(button);
     });
@@ -195,21 +188,13 @@ export function hideModal() {
 }
 
 // --- New Game Setup Modal ---
-/**
- * Prepares and displays the New Game Setup modal.
- * This is called at game start if no save is found.
- */
 export function renderNewGameModal() {
     renderGameScreen('newGameModal');
 }
 
 // --- Opponent Customization Modal ---
-/**
- * Renders the opponent customization modal with editable fields for each opponent club.
- * @param {Array<object>} opponentClubs - Array of opponent club structural data.
- */
 export function renderOpponentCustomizationModal(opponentClubs) {
-    opponentListCustomization.innerHTML = ''; // Clear previous content
+    opponentListCustomization.innerHTML = '';
 
     opponentClubs.forEach(club => {
         const div = document.createElement('div');
@@ -241,9 +226,6 @@ export function renderOpponentCustomizationModal(opponentClubs) {
     renderGameScreen('opponentCustomizationModal');
 }
 
-/**
- * Hides the opponent customization modal.
- */
 export function hideOpponentCustomizationModal() {
     opponentCustomizationModal.style.display = 'none';
 }
@@ -251,19 +233,10 @@ export function hideOpponentCustomizationModal() {
 
 // --- Screen-Specific Renderers ---
 
-/**
- * Renders the Home Screen content.
- * @param {object} gameState - The current gameState object.
- */
 export function renderHomeScreen(gameState) {
     // No direct rendering needed here as elements are updated by other renderers.
 }
 
-
-/**
- * Renders the Squad Screen with player data.
- * @param {Array<object>} players - Array of player objects.
- */
 export function renderSquadScreen(players) {
     console.log("DEBUG: renderSquadScreen received players:", players);
     let tableHTML = `
@@ -312,11 +285,6 @@ export function renderSquadScreen(players) {
     squadListContainer.innerHTML = tableHTML;
 }
 
-/**
- * Helper to calculate overall player rating (simplified for now).
- * @param {object} attributes - Player's attributes.
- * @returns {number} Overall rating.
- */
 function calculateOverallPlayerRating(attributes) {
     let sum = 0;
     let count = 0;
@@ -337,10 +305,6 @@ function calculateOverallPlayerRating(attributes) {
 }
 
 
-/**
- * Renders the Facilities Screen.
- * @param {object} facilities - The facilities object from playerClub.
- */
 export function renderFacilitiesScreen(facilities) {
     console.log("DEBUG: renderFacilitiesScreen received facilities:", facilities);
     let tableHTML = `
@@ -375,13 +339,8 @@ export function renderFacilitiesScreen(facilities) {
     facilitiesListContainer.innerHTML = tableHTML;
 }
 
-/**
- * Renders the Finances Screen.
- * @param {object} finances - The finances object from playerClub.
- */
 export function renderFinancesScreen(finances) {
     console.log("DEBUG: renderFinancesScreen received finances:", finances);
-    // Ensure the ID of the balance display is correct, it was `financeBalanceDisplay` in my previous HTML
     const financeBalanceElement = document.getElementById('financeBalanceDisplay');
     if (financeBalanceElement) {
         financeBalanceElement.textContent = `£${finances.balance.toFixed(2)}`;
@@ -425,10 +384,6 @@ export function renderFinancesScreen(finances) {
     transactionListContainer.innerHTML = tableHTML;
 }
 
-/**
- * Renders the League Table screen.
- * @param {Array<object>} leagueTableData - Array of club objects with league stats.
- */
 export function renderLeagueScreen(leagueTableData) {
     console.log("DEBUG: renderLeagueScreen received leagueTableData:", leagueTableData);
     let tableHTML = `
@@ -479,52 +434,60 @@ export function renderLeagueScreen(leagueTableData) {
 }
 
 /**
- * Renders the Fixtures & Results screen.
- * @param {Array<object>} matchSchedule - Array of match objects.
+ * Renders the Fixtures & Results screen, now expecting grouped fixtures.
+ * @param {Array<object>} groupedMatchSchedule - Array of match week objects, each containing an array of matches.
  */
-export function renderFixturesScreen(matchSchedule) {
-    console.log("DEBUG: renderFixturesScreen received matchSchedule:", matchSchedule);
-    let tableHTML = `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Week</th>
-                    <th>Home Team</th>
-                    <th>Away Team</th>
-                    <th>Result</th>
-                    <th>Comp</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
+export function renderFixturesScreen(groupedMatchSchedule) {
+    console.log("DEBUG: renderFixturesScreen received groupedMatchSchedule:", groupedMatchSchedule);
+    let htmlContent = '';
 
-    if (matchSchedule && matchSchedule.length > 0) {
-        matchSchedule.forEach(match => {
-            tableHTML += `
-                <tr>
-                    <td>${match.week}</td>
-                    <td>${match.homeTeamName}</td>
-                    <td>${match.awayTeamName}</td>
-                    <td>${match.result ? match.result : 'vs'}</td>
-                    <td>${match.competition}</td>
-                </tr>
+    if (groupedMatchSchedule && groupedMatchSchedule.length > 0) {
+        groupedMatchSchedule.forEach(weekBlock => {
+            if (weekBlock.matches.length === 0) {
+                // If it's a BYE week for all, or no matches scheduled for this week, skip.
+                return;
+            }
+
+            htmlContent += `
+                <div class="fixture-week-block">
+                    <h3>Week ${weekBlock.week}</h3>
+                    <table class="data-table fixture-table">
+                        <thead>
+                            <tr>
+                                <th>Home Team</th>
+                                <th>Score</th>
+                                <th>Away Team</th>
+                                <th>Comp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            weekBlock.matches.forEach(match => {
+                const score = match.played && match.result ? match.result : 'vs';
+                htmlContent += `
+                    <tr>
+                        <td>${match.homeTeamName}</td>
+                        <td>${score}</td>
+                        <td>${match.awayTeamName}</td>
+                        <td>${match.competition}</td>
+                    </tr>
+                `;
+            });
+
+            htmlContent += `
+                        </tbody>
+                    </table>
+                </div>
             `;
         });
     } else {
-        tableHTML += `<tr><td colspan="5">No fixtures scheduled.</td></tr>`;
+        htmlContent += `<p>No fixtures scheduled for this season yet.</p>`;
     }
 
-    tableHTML += `
-            </tbody>
-        </table>
-    `;
-    fixturesListContainer.innerHTML = tableHTML;
+    fixturesListContainer.innerHTML = htmlContent;
 }
 
-/**
- * Renders the Committee Screen.
- * @param {Array<object>} committeeMembers - Array of committee member objects.
- */
 export function renderCommitteeScreen(committeeMembers) {
     console.log("DEBUG: renderCommitteeScreen received committeeMembers:", committeeMembers);
     let tableHTML = `
@@ -564,10 +527,6 @@ export function renderCommitteeScreen(committeeMembers) {
     committeeListContainer.innerHTML = tableHTML;
 }
 
-/**
- * Renders the Club History screen.
- * @param {Array<object>} clubHistory - Array of historical season summaries.
- */
 export function renderHistoryScreen(clubHistory) {
     console.log("DEBUG: renderHistoryScreen received clubHistory:", clubHistory);
     let tableHTML = `
@@ -611,16 +570,11 @@ export function renderHistoryScreen(clubHistory) {
     clubHistoryListContainer.innerHTML = tableHTML;
 }
 
-/**
- * Updates the weekly tasks list on the home screen.
- * @param {Array<object>} tasks - Array of task objects.
- * @param {number} availableHours - Player's remaining hours for the week.
- */
 export function updateWeeklyTasksDisplay(tasks, availableHours) {
-    if (!weeklyTasksList) return; // Ensure element exists
+    if (!weeklyTasksList) return;
 
     availableHoursDisplay.textContent = availableHours;
-    weeklyTasksList.innerHTML = ''; // Clear previous tasks
+    weeklyTasksList.innerHTML = '';
 
     if (tasks && tasks.length > 0) {
         tasks.forEach(task => {

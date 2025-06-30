@@ -7,11 +7,7 @@
 
 import * as Constants from '../utils/constants.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
-import * as opponentData from './opponentData.js'; // To get opponent club structural data
-
-// --- Internal League State ---
-// This module will hold the current league structure.
-// This will be directly managed by Main.gameState.leagues, and this module provides helper functions.
+import * as opponentData from './opponentData.js';
 
 /**
  * Generates the initial league structure for a new game.
@@ -25,71 +21,68 @@ import * as opponentData from './opponentData.js'; // To get opponent club struc
  */
 export function generateInitialLeagues(playerClubLocation, playerClubId, playerClubName) {
     const initialLeague = dataGenerator.generateInitialLeagueName(playerClubLocation);
-    initialLeague.level = 1; // Lowest tier (e.g., "Step 8" in the unofficial pyramid)
+    initialLeague.id = dataGenerator.generateUniqueId('L'); // Ensure league has a unique ID
+    initialLeague.level = 1;
     initialLeague.numTeams = Constants.DEFAULT_LEAGUE_SIZE;
-    initialLeague.promotedTeams = 1; // Example: 1 team promoted
-    initialLeague.relegatedTeams = 1; // Example: 1 team relegated
-    initialLeague.currentSeasonFixtures = []; // Placeholder for fixtures
+    initialLeague.promotedTeams = 1;
+    initialLeague.relegatedTeams = 1;
+    initialLeague.currentSeasonFixtures = [];
 
-    const playerClub = {
+    const playerClubTemplate = { // Create a template for playerClub with initial leagueStats
         id: playerClubId,
-        name: playerClubName, // Use the provided name for player club
+        name: playerClubName,
         location: playerClubLocation,
-        nickname: null, // Nickname already in playerClub object
-        kitColors: null, // Kit colors already in playerClub object
-        overallTeamQuality: null, // Quality determined by actual player attributes, not fixed here
+        nickname: null, // These will be filled from actual playerClub object passed by main.js
+        kitColors: null,
+        overallTeamQuality: null, // This is player's quality, managed by playerData based on squad
         currentLeagueId: initialLeague.id,
         finalLeaguePosition: null,
         leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
     };
 
-    const initialOpponents = opponentData.initializeOpponentClubs(playerClubLocation, playerClubId);
+    const initialOpponents = opponentData.initializeOpponentClubs(playerClubLocation);
 
     // Combine player club and opponent clubs for the league
-    // Add default leagueStats for all clubs
-    const allLeagueClubs = [playerClub, ...initialOpponents].map(club => ({
+    // Initialize leagueStats for all clubs if not already present
+    const allLeagueClubsData = [playerClubTemplate, ...initialOpponents].map(club => ({
         ...club,
         currentLeagueId: initialLeague.id,
-        leagueStats: {
-            played: 0,
-            won: 0,
-            drawn: 0,
-            lost: 0,
-            goalsFor: 0,
-            goalsAgainst: 0,
-            goalDifference: 0,
-            points: 0
-        }
+        // Ensure leagueStats are always initialized
+        leagueStats: club.leagueStats || { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
     }));
-    initialLeague.clubs = allLeagueClubs.map(c => c.id); // Store only IDs in league for efficiency
-    initialLeague.allClubsData = allLeagueClubs; // Store full data for local access within leagueData
 
-    // Generate fixtures for the first season
-    initialLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(playerClubId, allLeagueClubs, 1); // Season 1
+    // Generate fixtures using the new algorithm
+    initialLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
+        playerClubId,
+        allLeagueClubsData,
+        1 // Season 1
+    );
+
+    initialLeague.clubs = allLeagueClubsData.map(c => c.id); // Store only IDs
+    initialLeague.allClubsData = allLeagueClubsData; // Store full data for internal league use
 
     console.log("Initial league structure generated:", initialLeague);
-    return { leagues: [initialLeague], clubs: allLeagueClubs }; // Return array of leagues and all clubs
+    return { leagues: [initialLeague], clubs: allLeagueClubsData }; // Return array of leagues and all clubs
 }
 
 /**
  * Retrieves the current league table for a given league ID.
  * Assumes the league object is available in gameState.leagues.
  * @param {string} leagueId - The ID of the league.
- * @param {Array<object>} allClubsInGame - The comprehensive list of all clubs (player and opponents) from gameState.
+ * @param {Array<object>} allClubsInLeague - The comprehensive list of all clubs (player and opponents) for this league.
  * @returns {Array<object>} An array of club objects sorted by points for the league table.
  */
-export function getLeagueTable(leagueId, allClubsInGame) {
-    const league = allClubsInGame.find(l => l.id === leagueId); // Find the actual league object
-    if (!league) {
-        console.error(`League with ID ${leagueId} not found.`);
+export function getLeagueTable(leagueId, allClubsInLeague) {
+    if (!allClubsInLeague || allClubsInLeague.length === 0) {
+        console.warn(`No clubs provided for league table for league ${leagueId}.`);
         return [];
     }
 
-    // Filter clubs belonging to this league and ensure leagueStats exist
-    const clubsInLeague = allClubsInGame.filter(club => club.currentLeagueId === leagueId && club.leagueStats);
+    // Filter and sort by points, then goal difference, then goals for
+    // Ensure leagueStats exist before attempting to access
+    const clubsWithStats = allClubsInLeague.filter(club => club.leagueStats);
 
-    // Sort by points, then goal difference, then goals for
-    clubsInLeague.sort((a, b) => {
+    clubsWithStats.sort((a, b) => {
         if (b.leagueStats.points !== a.leagueStats.points) {
             return b.leagueStats.points - a.leagueStats.points;
         }
@@ -99,7 +92,7 @@ export function getLeagueTable(leagueId, allClubsInGame) {
         return b.leagueStats.goalsFor - a.leagueStats.goalsFor;
     });
 
-    return clubsInLeague.map(club => ({
+    return clubsWithStats.map(club => ({
         id: club.id,
         name: club.name,
         played: club.leagueStats.played,
@@ -127,16 +120,16 @@ export function getLeagueTable(leagueId, allClubsInGame) {
  * @returns {Array<object>} A new array of league objects with updated standings.
  */
 export function updateLeagueTable(currentLeagues, leagueId, homeClubId, awayClubId, homeScore, awayScore) {
-    const updatedLeagues = JSON.parse(JSON.stringify(currentLeagues)); // Deep copy to ensure immutability
+    const updatedLeagues = JSON.parse(JSON.stringify(currentLeagues));
     const leagueIndex = updatedLeagues.findIndex(l => l.id === leagueId);
 
     if (leagueIndex === -1) {
         console.error(`League ${leagueId} not found for table update.`);
-        return currentLeagues; // Return original if not found
+        return currentLeagues;
     }
 
     const leagueToUpdate = updatedLeagues[leagueIndex];
-    const clubsData = leagueToUpdate.allClubsData; // Get mutable clubs data for this league
+    const clubsData = leagueToUpdate.allClubsData;
 
     const homeClub = clubsData.find(c => c.id === homeClubId);
     const awayClub = clubsData.find(c => c.id === awayClubId);
@@ -150,53 +143,46 @@ export function updateLeagueTable(currentLeagues, leagueId, homeClubId, awayClub
     let awayWon = 0, awayDrawn = 0, awayLost = 0;
 
     if (homeScore > awayScore) {
-        homeWon = 1;
-        awayLost = 1;
+        homeWon = 1; awayLost = 1;
     } else if (homeScore < awayScore) {
-        homeLost = 1;
-        awayWon = 1;
+        homeLost = 1; awayWon = 1;
     } else {
-        homeDrawn = 1;
-        awayDrawn = 1;
+        homeDrawn = 1; awayDrawn = 1;
     }
 
-    // Update home club's stats
-    homeClub.leagueStats.played++;
-    homeClub.leagueStats.won += homeWon;
-    homeClub.leagueStats.drawn += homeDrawn;
-    homeClub.leagueStats.lost += homeLost;
-    homeClub.leagueStats.goalsFor += homeScore;
+    // Ensure leagueStats are initialized
+    if (!homeClub.leagueStats) homeClub.leagueStats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
+    if (!awayClub.leagueStats) awayClub.leagueStats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
+
+
+    homeClub.leagueStats.played++; homeClub.leagueStats.won += homeWon; homeClub.leagueStats.drawn += homeDrawn;
+    homeClub.leagueStats.lost += homeLost; homeClub.leagueStats.goalsFor += homeScore;
     homeClub.leagueStats.goalsAgainst += awayScore;
     homeClub.leagueStats.goalDifference = homeClub.leagueStats.goalsFor - homeClub.leagueStats.goalsAgainst;
     homeClub.leagueStats.points += (homeWon * 3) + (homeDrawn * 1);
 
-    // Update away club's stats
-    awayClub.leagueStats.played++;
-    awayClub.leagueStats.won += awayWon;
-    awayClub.leagueStats.drawn += awayDrawn;
-    awayClub.leagueStats.lost += awayLost;
-    awayClub.leagueStats.goalsFor += awayScore;
+    awayClub.leagueStats.played++; awayClub.leagueStats.won += awayWon; awayClub.leagueStats.drawn += awayDrawn;
+    awayClub.leagueStats.lost += awayLost; awayClub.leagueStats.goalsFor += awayScore;
     awayClub.leagueStats.goalsAgainst += homeScore;
     awayClub.leagueStats.goalDifference = awayClub.leagueStats.goalsFor - awayClub.leagueStats.goalsAgainst;
     awayClub.leagueStats.points += (awayWon * 3) + (awayDrawn * 1);
 
-    // No need to explicitly re-sort here, as getLeagueTable will sort when called for display.
-    // The clubs array within allClubsData is mutable in this deep copy.
-
-    return updatedLeagues; // Return the updated deep copy
+    return updatedLeagues;
 }
 
 
 /**
  * Retrieves the current season's match schedule for a specific league.
+ * Returns the schedule grouped by week as generated by dataGenerator.
  * @param {Array<object>} currentLeagues - The current array of league objects (from gameState.leagues).
  * @param {string} leagueId - The ID of the league.
- * @returns {Array<object>} An array of match objects.
+ * @returns {Array<object>} An array of match week objects, each containing an array of matches.
  */
 export function getFixtures(currentLeagues, leagueId) {
     const league = currentLeagues.find(l => l.id === leagueId);
     if (league && league.currentSeasonFixtures) {
-        return [...league.currentSeasonFixtures]; // Return a copy
+        // currentSeasonFixtures is already structured as Array<{week: number, matches: Array<object>}>
+        return [...league.currentSeasonFixtures];
     }
     console.warn(`Fixtures not found for league ${leagueId}.`);
     return [];
@@ -217,13 +203,20 @@ export function updateMatchResult(currentLeagues, leagueId, matchId, resultStrin
     const league = updatedLeagues.find(l => l.id === leagueId);
 
     if (league) {
-        const match = league.currentSeasonFixtures.find(m => m.id === matchId);
-        if (match) {
-            match.result = resultString;
-            match.played = true;
-            console.log(`Match ${matchId} updated with result: ${resultString}`);
-        } else {
-            console.warn(`Match ${matchId} not found in league ${leagueId}.`);
+        // Find the match within its week's array of matches
+        let matchFound = false;
+        for (const weekBlock of league.currentSeasonFixtures) {
+            const matchIndex = weekBlock.matches.findIndex(m => m.id === matchId);
+            if (matchIndex !== -1) {
+                weekBlock.matches[matchIndex].result = resultString;
+                weekBlock.matches[matchIndex].played = true;
+                matchFound = true;
+                console.log(`Match ${matchId} updated with result: ${resultString}`);
+                break;
+            }
+        }
+        if (!matchFound) {
+            console.warn(`Match ${matchId} not found in league ${leagueId}'s fixtures.`);
         }
     } else {
         console.warn(`League ${leagueId} not found for match update.`);
@@ -243,28 +236,22 @@ export function processEndOfSeason(currentLeagues, allClubsInGame) {
     const updatedLeagues = JSON.parse(JSON.stringify(currentLeagues));
 
     updatedLeagues.forEach(league => {
-        // Get the sorted league table for this league
-        const sortedTable = getLeagueTable(league.id, allClubsInGame);
+        // Filter clubs belonging to this league and ensure leagueStats exist
+        const clubsInThisLeague = allClubsInGame.filter(club => club.currentLeagueId === league.id && club.leagueStats);
 
-        // Assign final positions
-        sortedTable.forEach((club, index) => {
-            const originalClub = allClubsInGame.find(c => c.id === club.id);
+        const sortedTable = getLeagueTable(league.id, clubsInThisLeague);
+
+        // Assign final positions to the clubs in the actual allClubsInGame array (passed by reference)
+        sortedTable.forEach((clubInTable, index) => {
+            const originalClub = allClubsInGame.find(c => c.id === clubInTable.id);
             if (originalClub) {
-                originalClub.finalLeaguePosition = index + 1; // Update final position on the persistent club object
+                originalClub.finalLeaguePosition = index + 1;
             }
         });
-
-        // Determine promotions and relegations (simplified)
-        // This will need more complex logic when multiple leagues/levels are introduced.
-        // For now, assume top N promoted, bottom N relegated within this single league context.
-        // This logic will be more robust when the full league pyramid is built.
 
         console.log(`End of season processed for league: ${league.name}`);
     });
 
     return updatedLeagues;
 }
-
-// NOTE: This module does NOT manage the global `gameState`.
-// Its functions return updated arrays/objects that `main.js` will assign to `gameState.leagues`.
 

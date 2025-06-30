@@ -47,10 +47,7 @@ export function advanceWeek(gameState) {
     applyWeeklyExpenses(gameState);
 
     // 3. Check for Monthly Committee Meeting
-    // Trigger meeting if current week is a multiple of frequency AND it's after pre-season (or a specific starting week)
-    // For example, if PRE_SEASON_WEEKS is 4, and freq is 4, meetings could be at week 4, 8, 12, etc.
-    // So, currentWeek % freq should be 0, or currentWeek - 1 % freq (if 0-indexed).
-    if (gameState.currentWeek > 0 && gameState.currentWeek % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 0) { // Meeting at end of every 4th week
+    if (gameState.currentWeek > 0 && gameState.currentWeek % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 0) {
         console.log("Monthly committee meeting scheduled.");
         committeeLogic.startCommitteeMeeting(gameState);
         gameState.messages.push({ week: gameState.currentWeek, text: `Monthly committee meeting held.` });
@@ -64,57 +61,95 @@ export function advanceWeek(gameState) {
         }
     }
 
-    // 5. Simulate Match (if a match is scheduled for this week AND it's a match week)
+    // 5. Simulate Matches for the current week (if any)
     const currentLeague = gameState.leagues[0];
+    let matchesPlayedThisWeek = false; // Flag to track if any matches were played
+
     // Check if it's within match playing weeks (after pre-season, within total match weeks)
     if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS && gameState.currentWeek <= Constants.TOTAL_LEAGUE_WEEKS && currentLeague) {
         // Adjust the week for fixture lookup to be relative to league match start
-        const matchWeekIndex = gameState.currentWeek - Constants.PRE_SEASON_WEEKS;
-        const weeklyMatch = currentLeague.currentSeasonFixtures.find(
-            match => match.week === matchWeekIndex && !match.played
+        const matchWeekIndex = gameState.currentWeek - Constants.PRE_SEASON_WEEKS; // 1-indexed for the fixtures array
+
+        // Find the week block for the current matchWeekIndex
+        const currentWeekBlock = currentLeague.currentSeasonFixtures.find(
+            weekBlock => weekBlock.week === matchWeekIndex
         );
 
-        if (weeklyMatch) {
-            console.log(`Match scheduled for Week ${gameState.currentWeek}: ${weeklyMatch.homeTeamName} vs ${weeklyMatch.awayTeamName}`);
+        if (currentWeekBlock && currentWeekBlock.matches.length > 0) {
+            console.log(`DEBUG: Matches scheduled for Game Week ${gameState.currentWeek} (Fixture Week ${matchWeekIndex}):`, currentWeekBlock.matches.length);
             gameState.gamePhase = Constants.GAME_PHASE.MATCH_DAY;
 
-            const matchResult = matchLogic.simulateMatch(
-                weeklyMatch.homeTeamId,
-                weeklyMatch.awayTeamId,
-                gameState.playerClub,
-                opponentData.getAllOpponentClubs(gameState.playerClub.id), // Ensure playerClubId is passed here for filtering
-                playerData.getSquad()
-            );
+            let playerMatchResult = null; // To store player's match result for modal
 
-            gameState.leagues = leagueData.updateLeagueTable(
-                gameState.leagues,
-                currentLeague.id,
-                weeklyMatch.homeTeamId,
-                weeklyMatch.awayTeamId,
-                matchResult.homeScore,
-                matchResult.awayScore
-            );
+            // Iterate through all matches scheduled for this specific week
+            for (const match of currentWeekBlock.matches) {
+                // Skip if this match has already been played (e.g., BYE match handled earlier)
+                if (match.played) continue;
 
-            gameState.leagues = leagueData.updateMatchResult(
-                gameState.leagues,
-                currentLeague.id,
-                weeklyMatch.id,
-                `${matchResult.homeScore}-${matchResult.awayScore}`
-            );
+                // Simulate match
+                const matchResult = matchLogic.simulateMatch(
+                    match.homeTeamId,
+                    match.awayTeamId,
+                    gameState.playerClub,
+                    opponentData.getAllOpponentClubs(gameState.playerClub.id), // Ensure playerClubId is passed for filtering
+                    playerData.getSquad()
+                );
 
-            renderers.showModal(
-                `Match Result: ${matchResult.homeTeamName} ${matchResult.homeScore}-${matchResult.awayScore} ${matchResult.awayTeamName}`,
-                matchResult.report,
-                [{ text: 'Continue', action: renderers.hideModal }]
-            );
-            gameState.messages.push({ week: gameState.currentWeek, text: `Match Result: ${matchResult.homeTeamName} ${matchResult.homeScore}-${matchResult.awayScore} ${matchResult.awayTeamName}` });
+                // Update league table for both teams involved
+                gameState.leagues = leagueData.updateLeagueTable(
+                    gameState.leagues,
+                    currentLeague.id,
+                    match.homeTeamId,
+                    match.awayTeamId,
+                    matchResult.homeScore,
+                    matchResult.awayScore
+                );
 
-            console.log("Match simulated. Result:", matchResult.homeScore, matchResult.awayScore);
+                // Mark this specific match object as played with its result
+                gameState.leagues = leagueData.updateMatchResult(
+                    gameState.leagues,
+                    currentLeague.id,
+                    match.id,
+                    `${matchResult.homeScore}-${matchResult.awayScore}`
+                );
+
+                // If this was the player's match, store its result for a dedicated modal
+                if (match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id) {
+                    playerMatchResult = matchResult;
+                    console.log(`DEBUG: Player match simulated. Result: ${matchResult.homeScore}-${matchResult.awayScore}`);
+                } else {
+                    console.log(`DEBUG: AI match simulated: ${matchResult.homeTeamName} ${matchResult.homeScore}-${matchResult.awayScore} ${matchResult.awayTeamName}`);
+                }
+                matchesPlayedThisWeek = true;
+            }
+
+            // After all matches for the week are simulated, display player's match result
+            if (playerMatchResult) {
+                renderers.showModal(
+                    `Match Result: ${playerMatchResult.homeTeamName} ${playerMatchResult.homeScore}-${playerMatchResult.awayScore} ${playerMatchResult.awayTeamName}`,
+                    playerMatchResult.report,
+                    [{ text: 'Continue', action: renderers.hideModal }]
+                );
+                gameState.messages.push({ week: gameState.currentWeek, text: `Match Result: ${playerMatchResult.homeTeamName} ${playerMatchResult.homeScore}-${playerMatchResult.awayScore} ${playerMatchResult.awayTeamName}` });
+            } else if (currentWeekBlock.matches.filter(m => m.awayTeamId !== 'BYE').length > 0) {
+                // If there were matches but player had a BYE or no match this week but others played
+                renderers.displayMessage('League Matches Played', 'Other league matches were played this week.');
+                gameState.messages.push({ week: gameState.currentWeek, text: `Other league matches played this week.` });
+            }
+
+
         } else {
-            console.log(`No league match scheduled for current match-week index ${matchWeekIndex}.`);
+            console.log(`DEBUG: No matches found in week block ${matchWeekIndex}. Player may have a BYE or it's a gap week.`);
+            renderers.displayMessage('Quiet Week', 'No league match scheduled for your team. Focus on club tasks!');
+            gameState.messages.push({ week: gameState.currentWeek, text: `No league match for your team this week.` });
         }
     } else {
-        console.log(`Not within league match weeks (Current Week: ${gameState.currentWeek}, Pre-Season Weeks: ${Constants.PRE_SEASON_WEEKS}, Total League Weeks: ${Constants.TOTAL_LEAGUE_WEEKS}).`);
+        console.log(`DEBUG: Not within league match weeks (Current Week: ${gameState.currentWeek}, Pre-Season Weeks: ${Constants.PRE_SEASON_WEEKS}, Total League Weeks: ${Constants.TOTAL_LEAGUE_WEEKS}).`);
+        // Only show 'Quiet Week' if not already showing an event modal etc.
+        if (!matchesPlayedThisWeek) { // Avoid double messages if random event already popped up
+             renderers.displayMessage('Quiet Week', 'Focus on building your club!');
+             gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
+        }
     }
 
     // 6. Update Player Fitness/Morale (Post-match/Weekly Decay)
@@ -127,14 +162,13 @@ export function advanceWeek(gameState) {
     // 8. Check for End of Season
     if (gameState.currentWeek > Constants.TOTAL_LEAGUE_WEEKS) {
         endSeason(gameState);
-        // Phase is set inside endSeason for END_OF_SEASON then OFF_SEASON
     } else {
         gameState.availableHours = Constants.WEEKLY_BASE_HOURS;
         gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
         gameState.gamePhase = Constants.GAME_PHASE.WEEKLY_PLANNING;
     }
 
-    console.log(`Advanced to Week ${gameState.currentWeek}, Season ${gameState.currentSeason}`);
+    console.log(`DEBUG: Advanced to Week ${gameState.currentWeek}, Season ${gameState.currentSeason}`);
     Main.updateUI();
     Main.saveGame(false);
 }
@@ -145,15 +179,15 @@ export function advanceWeek(gameState) {
  * @param {object} gameState - The current mutable gameState object.
  */
 function processPlayerTasks(gameState) {
-    console.log("Processing weekly tasks...");
+    console.log("DEBUG: Processing weekly tasks...");
     const tasksToProcess = gameState.weeklyTasks.filter(task => task.completed);
 
     if (tasksToProcess.length === 0 && (Constants.WEEKLY_BASE_HOURS - gameState.availableHours) > 0) {
-        console.warn("Player allocated time but no tasks were marked as completed.");
+        console.warn("DEBUG: Player allocated time but no tasks were marked as completed.");
     }
 
     tasksToProcess.forEach(task => {
-        console.log(`Processing task: ${task.description} (Completed)`);
+        console.log(`DEBUG: Processing task: ${task.description} (Completed)`);
         let taskMessage = '';
 
         switch (task.type) {
@@ -169,7 +203,7 @@ function processPlayerTasks(gameState) {
                 break;
             case Constants.WEEKLY_TASK_TYPES.PLAYER_CONVO:
                 const eligiblePlayers = playerData.getSquad().filter(p => p.status.morale < 80);
-                const playerToTalkTo = getRandomElement(eligiblePlayers.length > 0 ? eligiblePlayers : playerData.getSquad());
+                const playerToTalkTo = dataGenerator.getRandomElement(eligiblePlayers.length > 0 ? eligiblePlayers : playerData.getSquad());
                 if (playerToTalkTo) {
                     playerInteractionLogic.startPlayerConversation(playerToTalkTo, 'motivate');
                     taskMessage = `You had a conversation with ${playerToTalkTo.name}.`;
@@ -178,7 +212,7 @@ function processPlayerTasks(gameState) {
                 }
                 break;
             case Constants.WEEKLY_TASK_TYPES.RECRUIT_PLYR:
-                const potentialPlayer = dataGenerator.generatePlayer(null, getRandomInt(1, 2));
+                const potentialPlayer = dataGenerator.generatePlayer(null, dataGenerator.getRandomInt(1, 2));
                 playerInteractionLogic.attemptRecruitment(potentialPlayer, gameState.playerClub.id);
                 taskMessage = `Spent time looking for new talent.`;
                 break;
@@ -189,8 +223,8 @@ function processPlayerTasks(gameState) {
                 taskMessage = `Club admin duties handled by the committee.`;
                 break;
             case Constants.WEEKLY_TASK_TYPES.SPONSOR_SEARCH:
-                if (getRandomInt(1, 100) <= (gameState.playerClub.reputation + task.baseHours) / 2) {
-                    const sponsorAmount = getRandomInt(50, 250);
+                if (dataGenerator.getRandomInt(1, 100) <= (gameState.playerClub.reputation + task.baseHours) / 2) {
+                    const sponsorAmount = dataGenerator.getRandomInt(50, 250);
                     const sponsorName = `${dataGenerator.getRandomName('last')} Holdings`;
                     gameState.playerClub.finances = clubData.addTransaction(
                         gameState.playerClub.finances,
@@ -235,21 +269,21 @@ function applyWeeklyExpenses(gameState) {
  * @param {object} gameState - The current mutable gameState object.
  */
 function updatePlayerStatus(gameState) {
-    console.log("Updating player status...");
+    console.log("DEBUG: Updating player status...");
     gameState.playerClub.squad = gameState.playerClub.squad.map(player => {
         const updatedPlayer = { ...player };
 
         if (updatedPlayer.status.injuryStatus === 'Fit' && !updatedPlayer.status.suspended) {
-            updatedPlayer.status.fitness = Math.max(0, updatedPlayer.status.fitness - getRandomInt(2, 5));
+            updatedPlayer.status.fitness = Math.max(0, updatedPlayer.status.fitness - dataGenerator.getRandomInt(2, 5));
         }
 
-        updatedPlayer.status.morale = Math.max(0, Math.min(100, updatedPlayer.status.morale - getRandomInt(1, 3)));
+        updatedPlayer.status.morale = Math.max(0, Math.min(100, updatedPlayer.status.morale - dataGenerator.getRandomInt(1, 3)));
 
         if (updatedPlayer.status.injuryStatus !== 'Fit' && updatedPlayer.status.injuryReturnDate) {
             if (updatedPlayer.status.injuryReturnDate === "Next Week") {
                 updatedPlayer.status.injuryStatus = 'Fit';
                 updatedPlayer.status.injuryReturnDate = null;
-                Main.gameState.messages.push({ week: Main.currentWeek, text: `${updatedPlayer.name} has recovered from injury.` }); // Corrected Main.currentWeek to Main.gameState.currentWeek
+                Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${updatedPlayer.name} has recovered from injury.` });
             }
         }
         if (updatedPlayer.status.suspended && updatedPlayer.status.suspensionGames > 0) {
@@ -257,7 +291,7 @@ function updatePlayerStatus(gameState) {
             if (updatedPlayer.status.suspensionGames === 0) {
                 updatedPlayer.status.suspended = false;
                 updatedPlayer.status.injuryStatus = 'Fit';
-                Main.gameState.messages.push({ week: Main.currentWeek, text: `${updatedPlayer.name}'s suspension has ended.` }); // Corrected Main.currentWeek to Main.gameState.currentWeek
+                Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${updatedPlayer.name}'s suspension has ended.` });
             }
         }
 
@@ -295,7 +329,7 @@ function endSeason(gameState) {
     if (playerFinalPos && playerFinalPos <= currentLeague.promotedTeams) {
         endSeasonModalTitle = 'PROMOTED!';
         seasonSummaryMessage = `PROMOTED! Congratulations! You finished ${playerFinalPos}st in the ${currentLeague.name} with ${playerFinalPoints} points. Prepare for a new challenge!`;
-        const prizeMoney = getRandomInt(500, 1500);
+        const prizeMoney = dataGenerator.getRandomInt(500, 1500);
         gameState.playerClub.finances = clubData.addTransaction(
             gameState.playerClub.finances,
             prizeMoney,
