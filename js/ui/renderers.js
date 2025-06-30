@@ -7,9 +7,8 @@
 
 // --- Module Imports ---
 import * as Constants from '../utils/constants.js';
-// Removed all imports that cause circular dependencies.
-// renderers.js will NOT import Main or gameLoop.
-
+import * as gameLoop from '../logic/gameLoop.js';
+import * as Main from '../main.js'; // Import Main to access gameState and other functions
 
 // --- DOM Element References (Cache for performance and correct ID access) ---
 const gameScreens = document.querySelectorAll('.game-screen');
@@ -158,10 +157,12 @@ export function displayMessage(title, message) {
  * @param {string} title - The modal title.
  * @param {string} message - The modal message/description.
  * @param {Array<object>} customChoices - Array of { text: string, action: function, isPrimary: boolean }.
- * Each action MUST call renderers.hideModal() if it should close the modal.
+ * Each action function will be called when the button is clicked.
+ * @param {object} gameState - The current mutable gameState object, passed from the caller.
+ * @param {object} updateUICallbacks - An object { updateUI: function, saveGame: function, renderHomeScreen: function, finalizeWeekProcessing: function } provided by Main/gameLoop.
  * @param {string|null} dismissalContext - An optional context string for the caller's logic.
  */
-export function showModal(title, message, customChoices = [], dismissalContext = null) { // dismissalContext is passed to action function
+export function showModal(title, message, customChoices = [], gameState, updateUICallbacks, dismissalContext = null) {
     modalTitle.textContent = title;
     modalMessage.textContent = message;
     modalChoices.innerHTML = ''; // Clear previous choices
@@ -170,8 +171,21 @@ export function showModal(title, message, customChoices = [], dismissalContext =
 
     // If no custom choices were provided, add a default 'Continue' button
     if (choicesToRender.length === 0) {
-        // Fix: Default 'Continue' now simply calls hideModal(). The caller's context determines next step.
-        choicesToRender.push({ text: 'Continue', action: () => { hideModal(); }, isPrimary: true }); 
+        // Default 'Continue' now calls hideModal() and then the updateUICallbacks.
+        choicesToRender.push({ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context to action
+            hideModal(); 
+            console.log("DEBUG: here ");
+            // Use the provided updateUICallbacks and gameState
+            if (uic && uic.finalizeWeekProcessing) {
+                uic.finalizeWeekProcessing(gs, context); // Call finalizer with correct gameState and context
+            } else {
+                console.warn("DEBUG: finalizeWeekProcessing callback not available in showModal default action.");
+                // Fallback if callbacks aren't properly passed (shouldn't happen with correct Main.js setup)
+                Main.updateUI(); 
+                Main.saveGame(false);
+                renderGameScreen('homeScreen');
+            }
+        }, isPrimary: true }); 
     }
     
     modalChoices.style.display = 'flex'; 
@@ -182,10 +196,10 @@ export function showModal(title, message, customChoices = [], dismissalContext =
         button.textContent = choice.text;
         button.classList.add('modal-choice-btn', choice.isPrimary ? 'primary-btn' : 'secondary-btn');
         button.onclick = () => {
-            // FIX: The action function is now responsible for:
-            // 1. Hiding the modal (if it's a custom action).
-            // 2. Triggering the next game logic step.
-            choice.action(dismissalContext); // Pass dismissalContext to the action callback
+            // Custom actions also hide modal, then execute their specific logic, passing callbacks.
+            hideModal(); // Always hide modal when any button is clicked
+            // Pass all necessary context/callbacks to the custom action
+            choice.action(gameState, updateUICallbacks, dismissalContext); // Pass gameState, updateUICallbacks, dismissalContext
         };
         modalChoices.appendChild(button);
     });
@@ -209,7 +223,7 @@ export function hideModal() {
 /**
  * Returns the current display status of the generic modal.
  * Used by other modules to check if a modal is already open.
- * @returns {string} The CSS display property value (e.g., 'none', 'flex').
+ * @returns {string} The CSS display property property value (e.g., 'none', 'flex').
  */
 export function getModalDisplayStatus() {
     return modalOverlay.style.display;

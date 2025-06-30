@@ -19,22 +19,29 @@ export function startCommitteeMeeting(gameState) {
     let message = 'It\'s time for the monthly committee meeting. What do you want to discuss?';
 
     const proposals = generateAvailableProposals(gameState);
+    const updateUICallbacks = Main.getUpdateUICallbacks(); // Get callbacks here
 
     const affordableProposals = proposals.filter(p => p.cost <= clubData.getFinances().balance);
 
     if (affordableProposals.length === 0) {
         message += "\n\nCurrently, there are no affordable proposals to discuss. Focus on fundraising!";
-        renderers.showModal(title, message, [{ text: 'End Meeting', action: renderers.hideModal }]);
+        // Ensure this modal also correctly passes gameState and callbacks
+        renderers.showModal(title, message, [{ text: 'End Meeting', action: (gs, uic, context) => {
+            renderers.hideModal();
+            uic.finalizeWeekProcessing(gs, context); // Finalize week after no proposals
+        }}], gameState, updateUICallbacks, 'committee_no_proposals');
         return;
     }
 
     const choices = affordableProposals.map(proposal => ({
         text: `${proposal.name} (Cost: £${proposal.cost.toFixed(2)})`,
-        action: () => presentProposal(gameState, proposal), // presentProposal calls showModal
+        // Pass gameState, updateUICallbacks, and dismissalContext to presentProposal
+        action: (gs, uic, context) => presentProposal(gs, proposal, uic, context),
         isPrimary: proposal.isPrimary
     }));
 
-    renderers.showModal(title, message, choices);
+    // Pass gameState and updateUICallbacks to the initial showModal call
+    renderers.showModal(title, message, choices, gameState, updateUICallbacks, 'committee_meeting_start');
 }
 
 /**
@@ -116,28 +123,34 @@ function generateAvailableProposals(gameState) {
  * Presents a specific proposal to the committee for a vote.
  * @param {object} gameState - The current mutable gameState object.
  * @param {object} proposal - The proposal being voted on.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {string} dismissalContext - Context for modal dismissal.
  */
-function presentProposal(gameState, proposal) {
+function presentProposal(gameState, proposal, updateUICallbacks, dismissalContext) {
     let message = `You are proposing: "${proposal.name}" (${proposal.description}).\n\n`;
     message += `Cost: £${proposal.cost.toFixed(2)}. This proposal has a base difficulty of ${proposal.difficulty}.`;
 
     const choices = [
         {
             text: 'Argue for it passionately',
-            action: () => voteOnProposal(gameState, proposal, 'passion'),
+            // Pass all necessary arguments to voteOnProposal
+            action: (gs, uic, context) => voteOnProposal(gs, proposal, 'passion', uic, context),
             isPrimary: true
         },
         {
             text: 'Highlight financial benefits',
-            action: () => voteOnProposal(gameState, proposal, 'finance')
+            // Pass all necessary arguments to voteOnProposal
+            action: (gs, uic, context) => voteOnProposal(gs, proposal, 'finance', uic, context)
         },
         {
             text: 'Emphasize community impact',
-            action: () => voteOnProposal(gameState, proposal, 'community')
+            // Pass all necessary arguments to voteOnProposal
+            action: (gs, uic, context) => voteOnProposal(gs, proposal, 'community', uic, context)
         }
     ];
 
-    renderers.showModal(`Propose: ${proposal.name}`, message, choices);
+    // Pass gameState and updateUICallbacks to the showModal call
+    renderers.showModal(`Propose: ${proposal.name}`, message, choices, gameState, updateUICallbacks, dismissalContext);
 }
 
 /**
@@ -145,9 +158,11 @@ function presentProposal(gameState, proposal) {
  * @param {object} gameState - The current mutable gameState object.
  * @param {object} proposal - The proposal being voted on.
  * @param {string} playerArgumentStyle - How the player argued (e.g., 'passion', 'finance').
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {string} dismissalContext - Context for modal dismissal.
  */
-function voteOnProposal(gameState, proposal, playerArgumentStyle) {
-    renderers.hideModal(); // Hide the first modal (proposal choices) immediately
+function voteOnProposal(gameState, proposal, playerArgumentStyle, updateUICallbacks, dismissalContext) {
+    // renderers.hideModal(); // This hide is handled by the button action in renderers.showModal
 
     let votesFor = 0;
     let totalVotes = 0;
@@ -184,24 +199,31 @@ function voteOnProposal(gameState, proposal, playerArgumentStyle) {
 
     if (approvalPercentage >= 60) {
         outcomeMessage = `Proposal "${proposal.name}" PASSED! ${votesFor} out of ${totalVotes} voted 'Yes'.`;
-        applyProposalEffect(gameState, proposal); // Apply effect only if passed
+        // Pass updateUICallbacks and dismissalContext to applyProposalEffect
+        applyProposalEffect(gameState, proposal, updateUICallbacks, dismissalContext);
         outcomeTitle = 'Proposal Passed!';
     } else {
         outcomeMessage = `Proposal "${proposal.name}" FAILED. Only ${votesFor} out of ${totalVotes} voted 'Yes'.`;
         gameState.messages.push({ week: Main.gameState.currentWeek, text: `Committee voted down: ${proposal.name}.` });
         outcomeTitle = 'Proposal Failed!';
+        // If proposal failed, immediately finalize the week
+        renderers.showModal(outcomeTitle, outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+            renderers.hideModal();
+            uic.finalizeWeekProcessing(gs, context); // Finalize week if proposal failed
+        }}], gameState, updateUICallbacks, dismissalContext);
     }
 
-    renderers.showModal(outcomeTitle, outcomeMessage, [{ text: 'Continue', action: renderers.hideModal }]);
-    Main.updateUI();
+    // Main.updateUI(); // This will be called by finalizeWeekProcessing
 }
 
 /**
  * Applies the effects of a passed committee proposal to the game state.
  * @param {object} gameState - The current mutable gameState object.
  * @param {object} proposal - The proposal object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {string} dismissalContext - Context for modal dismissal.
  */
-function applyProposalEffect(gameState, proposal) {
+function applyProposalEffect(gameState, proposal, updateUICallbacks, dismissalContext) {
     gameState.playerClub.finances = clubData.addTransaction(
         gameState.playerClub.finances,
         -proposal.cost,
@@ -217,10 +239,20 @@ function applyProposalEffect(gameState, proposal) {
             );
             gameState.messages.push({ week: Main.gameState.currentWeek, text: `${proposal.name} approved! Work will begin on ${gameState.playerClub.facilities[proposal.facilityKey].name}.` });
             renderers.updateNewsFeed(`Committee approves ${proposal.name}!`);
+            // Finalize week after facility upgrade
+            renderers.showModal('Facility Upgrade Approved', `Your committee approved the upgrade to ${proposal.name}!`, [{ text: 'OK', action: (gs, uic, context) => {
+                renderers.hideModal();
+                uic.finalizeWeekProcessing(gs, context);
+            }}], gameState, updateUICallbacks, dismissalContext);
             break;
         case 'fundraising':
             gameState.messages.push({ week: Main.gameState.currentWeek, text: `${proposal.name} approved! Planning is underway.` });
             renderers.updateNewsFeed(`Major fundraiser approved!`);
+            // Finalize week after fundraising approval
+            renderers.showModal('Fundraiser Approved', `Your committee approved the ${proposal.name}!`, [{ text: 'OK', action: (gs, uic, context) => {
+                renderers.hideModal();
+                uic.finalizeWeekProcessing(gs, context);
+            }}], gameState, updateUICallbacks, dismissalContext);
             break;
         case 'club_identity':
             if (proposal.id === 'change_club_name') {
@@ -230,19 +262,26 @@ function applyProposalEffect(gameState, proposal) {
                      <div class="form-group"><label for="newClubNameInput">New Name:</label><input type="text" id="newClubNameInput" value="${gameState.playerClub.name}"></div>
                      <div class="form-group"><label for="newClubNicknameInput">New Nickname:</label><input type="text" id="newClubNicknameInput" value="${gameState.playerClub.nickname}"></div>`,
                     [
-                        { text: 'Confirm', action: () => {
+                        { text: 'Confirm', action: (gs, uic, context) => { // Pass gs, uic, context
                             const newNameInput = document.getElementById('newClubNameInput');
                             const newNicknameInput = document.getElementById('newClubNicknameInput');
                             if (newNameInput && newNicknameInput && newNameInput.value.trim() && newNicknameInput.value.trim()) {
-                                gameState.playerClub = clubData.updateClubIdentity(gameState.playerClub, newNameInput.value.trim(), newNicknameInput.value.trim());
-                                gameState.messages.push({ week: Main.gameState.currentWeek, text: `Club name changed to ${newNameInput.value}.` });
-                                renderers.showModal('Club Identity Updated', `Your club is now known as ${newNameInput.value} (${newNicknameInput.value}).`, [{ text: 'OK', action: renderers.hideModal }]);
-                                Main.updateUI();
+                                gs.playerClub = clubData.updateClubIdentity(gs.playerClub, newNameInput.value.trim(), newNicknameInput.value.trim());
+                                gs.messages.push({ week: gs.currentWeek, text: `Club name changed to ${newNameInput.value}.` });
+                                renderers.showModal('Club Identity Updated', `Your club is now known as ${newNameInput.value} (${newNicknameInput.value}).`, [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
+                                    renderers.hideModal();
+                                    uicInner.finalizeWeekProcessing(gsInner, contextInner); // Finalize week after name change
+                                }}], gs, uic, context); // Pass gs, uic, context to nested modal
+                                uic.updateUI(); // Update UI immediately to reflect name change
                             } else {
-                                renderers.showModal('Input Error', 'Please enter both new name and nickname.', [{ text: 'OK', action: renderers.hideModal }]);
+                                renderers.showModal('Input Error', 'Please enter both new name and nickname.', [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
+                                    renderers.hideModal();
+                                    uicInner.finalizeWeekProcessing(gsInner, contextInner); // Finalize week even on input error
+                                }}], gs, uic, context); // Pass gs, uic, context to nested modal
                             }
                         }, isPrimary: true}
-                    ]
+                    ],
+                    gameState, updateUICallbacks, dismissalContext // Pass gameState and callbacks to initial showModal
                 );
             } else if (proposal.id === 'change_kit_colors') {
                  renderers.showModal(
@@ -251,23 +290,29 @@ function applyProposalEffect(gameState, proposal) {
                      <div class="form-group"><label for="newPrimaryColorInput">Primary Color:</label><input type="color" id="newPrimaryColorInput" value="${gameState.playerClub.kitColors.primary}"></div>
                      <div class="form-group"><label for="newSecondaryColorInput">Secondary Color:</label><input type="color" id="newSecondaryColorInput" value="${gameState.playerClub.kitColors.secondary}"></div>`,
                     [
-                        { text: 'Confirm', action: () => {
+                        { text: 'Confirm', action: (gs, uic, context) => { // Pass gs, uic, context
                             const newPrimaryInput = document.getElementById('newPrimaryColorInput');
                             const newSecondaryInput = document.getElementById('newSecondaryColorInput');
                             if (newPrimaryInput && newSecondaryInput && newPrimaryInput.value && newSecondaryInput.value && newPrimaryInput.value !== newSecondaryInput.value) {
-                                gameState.playerClub = clubData.updateClubKitColors(gameState.playerClub, newPrimaryInput.value, newSecondaryInput.value);
-                                gameState.messages.push({ week: Main.gameState.currentWeek, text: `Club kit colors updated.` });
-                                renderers.showModal('Kit Colors Updated', `Your club kit has been updated.`, [{ text: 'OK', action: renderers.hideModal }]);
+                                gs.playerClub = clubData.updateClubKitColors(gs.playerClub, newPrimaryInput.value, newSecondaryInput.value);
+                                gs.messages.push({ week: gs.currentWeek, text: `Club kit colors updated.` });
+                                renderers.showModal('Kit Colors Updated', `Your club kit has been updated.`, [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
+                                    renderers.hideModal();
+                                    uicInner.finalizeWeekProcessing(gsInner, contextInner); // Finalize week after color change
+                                }}], gs, uic, context); // Pass gs, uic, context to nested modal
                                 Main.applyThemeColors(newPrimaryInput.value, newSecondaryInput.value);
-                                Main.updateUI();
+                                uic.updateUI(); // Update UI immediately to reflect color change
                             } else {
-                                renderers.showModal('Input Error', 'Please choose two different colors.', [{ text: 'OK', action: renderers.hideModal }]);
+                                renderers.showModal('Input Error', 'Please choose two different colors.', [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
+                                    renderers.hideModal();
+                                    uicInner.finalizeWeekProcessing(gsInner, contextInner); // Finalize week even on input error
+                                }}], gs, uic, context); // Pass gs, uic, context to nested modal
                             }
                         }, isPrimary: true}
-                    ]
+                    ],
+                    gameState, updateUICallbacks, dismissalContext // Pass gameState and callbacks to initial showModal
                 );
             }
             break;
     }
 }
-

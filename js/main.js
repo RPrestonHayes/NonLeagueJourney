@@ -98,7 +98,7 @@ function getCalendarWeekString(weekNum) {
  * @param {string} primaryColor - The primary hex color (e.g., #RRGGBB).
  * @param {string} secondaryColor - The secondary hex color.
  */
-function applyThemeColors(primaryColor, secondaryColor) {
+export function applyThemeColors(primaryColor, secondaryColor) { // Exported for committeeLogic
     const root = document.documentElement;
 
     root.style.setProperty('--primary-color', primaryColor);
@@ -112,6 +112,111 @@ function applyThemeColors(primaryColor, secondaryColor) {
 
 
 // --- Core Game Functions ---
+// Export Main's update functions for other modules to call back.
+// gameLoop.js will call these when finalizing a week.
+export function updateUI() { // Renamed from updateGameAndUI for clarity
+    console.log("DEBUG: updateUI called.");
+    if (!gameState.playerClub) {
+        console.warn("DEBUG: playerClub not yet initialized, skipping some UI updates in updateUI.");
+        return;
+    }
+
+    // Convert week to month/week string
+    const calendarWeekString = getCalendarWeekString(gameState.currentWeek);
+    renderers.updateTopBarStats(
+        gameState.currentSeason,
+        calendarWeekString,
+        gameState.playerClub.finances.balance
+    );
+    renderers.updateClubNameDisplay(gameState.playerClub.name);
+
+    renderers.updateWeeklyTasksDisplay(gameState.weeklyTasks, gameState.availableHours);
+
+    const activeScreenElement = document.querySelector('.game-screen.active');
+    if (activeScreenElement) {
+        const screenId = activeScreenElement.id;
+        console.log(`DEBUG: Rendering active screen from updateUI: ${screenId}`);
+        switch (screenId) {
+            case 'homeScreen':
+                renderers.renderHomeScreen(gameState);
+                break;
+            case 'squadScreen':
+                renderers.renderSquadScreen(playerData.getSquad());
+                break;
+            case 'facilitiesScreen':
+                renderers.renderFacilitiesScreen(gameState.playerClub.facilities);
+                break;
+            case 'financesScreen':
+                renderers.renderFinancesScreen(gameState.playerClub.finances);
+                break;
+            case 'leagueScreen':
+                const currentLeague = gameState.leagues[0];
+                const allClubsInCurrentLeague = currentLeague ? currentLeague.allClubsData : [];
+                renderers.renderLeagueScreen(
+                    leagueData.getLeagueTable(currentLeague?.id, allClubsInCurrentLeague)
+                );
+                break;
+            case 'fixturesScreen':
+                renderers.renderFixturesScreen(leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id));
+                break;
+            case 'committeeScreen':
+                renderers.renderCommitteeScreen(clubData.getCommittee());
+                break;
+            case 'historyScreen':
+                renderers.renderHistoryScreen(gameState.clubHistory);
+                break;
+            default:
+                console.warn(`DEBUG: No specific renderer case for screen in updateUI: ${screenId}`);
+                break;
+        }
+    } else {
+        console.warn("DEBUG: No active screen element found during updateUI, rendering homeScreen.");
+        renderers.renderGameScreen('homeScreen'); // Fallback to home if no active screen
+    }
+
+    if (gameState.messages.length > 0) {
+        renderers.updateNewsFeed(gameState.messages[gameState.messages.length - 1].text);
+    }
+
+    // Scroll to the top of the main game content area to ensure visibility of updates
+    const gameContentElement = document.getElementById('gameContent');
+    if (gameContentElement) {
+        gameContentElement.scrollTop = 0;
+    }
+    window.scrollTo(0, 0); // Also scroll the entire window to top
+
+    console.log("DEBUG: updateUI() finished.");
+}
+
+export function saveGame(showMessage = true) { // Exported for gameLoop to call
+    console.log("DEBUG: saveGame() called. showMessage:", showMessage);
+    try {
+        localStorageManager.saveGame(gameState);
+        if (showMessage) {
+            renderers.displayMessage('Game Saved!', 'Your progress has been secured.');
+        }
+        console.log("DEBUG: Game saved successfully.");
+    } catch (error) {
+        console.error("DEBUG: Failed to save game:", error);
+        if (showMessage) {
+            renderers.displayMessage('Save Failed!', 'Could not save game. Check browser storage space.');
+        }
+    }
+}
+
+/**
+ * Provides an object of functions for renderers.js to call back to Main/gameLoop.
+ * This prevents circular dependencies and provides a clear API for UI interactions.
+ */
+export function getUpdateUICallbacks() {
+    return {
+        updateUI: updateUI,
+        saveGame: saveGame,
+        finalizeWeekProcessing: gameLoop.finalizeWeekProcessing, // Reference to gameLoop's finalizer
+        renderHomeScreen: () => renderers.renderGameScreen('homeScreen') // Example, if needed
+    };
+}
+
 
 /**
  * Initializes the game when the page loads.
@@ -128,15 +233,17 @@ function initGame() {
     console.log("DEBUG: Attempting to load game...");
     renderers.showLoadingScreen();
     const loadedState = localStorageManager.loadGame();
+    const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
+
     if (loadedState) {
         console.log("DEBUG: Game loaded from localStorage.");
         gameState = loadedState;
-        // Fix: Action directly updates UI and navigates home
-        renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: () => {
-            renderers.hideModal();
+        // FIX: Action directly updates UI and navigates home
+        renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
+            renderers.hideModal(); // Hide modal
             renderers.renderGameScreen('homeScreen'); // Go to home screen
-            Main.updateUI(); // Update UI for loaded state
-        }, isPrimary: true }]);
+            uic.updateUI(); // Update UI for loaded state
+        }, isPrimary: true }], gameState, updateUICallbacks, 'game_loaded'); // Pass gameState and callbacks
         if (gameState.playerClub) {
             playerData.setSquad(gameState.playerClub.squad || []);
             clubData.setCommittee(gameState.playerClub.committee || []);
@@ -157,11 +264,11 @@ function initGame() {
         console.log("DEBUG: No save game found. Rendering new game modal.");
         renderers.hideLoadingScreen();
         renderers.renderNewGameModal();
-        // Fix: Action directly updates UI and navigates home (or stays on modal)
-        renderers.showModal('Welcome, Chairman!', 'Please set up your club and begin your Non-League Journey.', [{ text: 'Continue', action: () => {
-            renderers.hideModal();
-            // After welcome, stay on newGameModal for input, no screen change needed here
-        }, isPrimary: true }]);
+        // FIX: Action directly updates UI and navigates home (or stays on modal)
+        renderers.showModal('Welcome, Chairman!', 'Please set up your club and begin your Non-League Journey.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
+            renderers.hideModal(); // Hide this modal
+            // No screen change here, newGameModal is already displayed
+        }, isPrimary: true }], gameState, updateUICallbacks, 'welcome_new_game'); // Pass gameState and callbacks
         gameState.gamePhase = Constants.GAME_PHASE.SETUP;
         applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
     }
@@ -177,6 +284,7 @@ export function startNewGame(playerClubDetails) {
     console.log("DEBUG: startNewGame() called with details:", playerClubDetails);
 
     renderers.showLoadingScreen();
+    const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
 
     // 1. Initialize Player's Club
     gameState.playerClub = clubData.createPlayerClub(playerClubDetails);
@@ -218,11 +326,11 @@ export function startNewGame(playerClubDetails) {
         opponentData.getAllOpponentClubs(gameState.playerClub.id)
     );
     // Fix: Explicit action for showModal
-    renderers.showModal('Your club is born!', 'Now, customize your league rivals before the season kicks off.', [{ text: 'Continue', action: () => {
+    renderers.showModal('Your club is born!', 'Now, customize your league rivals before the season kicks off.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
         renderers.hideModal(); // Hide this modal
         renderers.renderGameScreen('homeScreen'); // Go to home screen
-        Main.updateUI(); // Update UI for the home screen
-    }, isPrimary: true }]);
+        uic.updateUI(); // Update UI for the home screen
+    }, isPrimary: true }], gameState, updateUICallbacks, 'club_born'); // Pass gameState and callbacks
     console.log("DEBUG: startNewGame() finished.");
 }
 
@@ -236,6 +344,7 @@ export function applyOpponentCustomization(customizedOpponents) {
     console.log("DEBUG: applyOpponentCustomization() called with:", customizedOpponents);
 
     renderers.showLoadingScreen();
+    const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
 
     // Update the league's allClubsData with customized opponent details
     const currentLeague = gameState.leagues[0];
@@ -261,33 +370,13 @@ export function applyOpponentCustomization(customizedOpponents) {
     renderers.hideLoadingScreen();
     renderers.hideOpponentCustomizationModal();
     // Fix: Explicit action for showModal
-    renderers.showModal('Rivals Customized!', 'Your league opponents are now set for the journey ahead. Welcome to pre-season!', [{ text: 'Continue', action: () => {
+    renderers.showModal('Rivals Customized!', 'Your league opponents are now set for the journey ahead. Welcome to pre-season!', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
         renderers.hideModal();
         renderers.renderGameScreen('homeScreen'); // Go to home screen
-        Main.updateUI(); // Update UI for the home screen
-    }, isPrimary: true }]);
+        uic.updateUI(); // Update UI for the home screen
+    }, isPrimary: true }], gameState, updateUICallbacks, 'rivals_customized'); // Pass gameState and callbacks
     saveGame(false);
     console.log("DEBUG: applyOpponentCustomization() finished.");
-}
-
-/**
- * Saves the current game state to Local Storage.
- * @param {boolean} showMessage - If true, displays a "Game Saved!" message. Default is true.
- */
-export function saveGame(showMessage = true) {
-    console.log("DEBUG: saveGame() called. showMessage:", showMessage);
-    try {
-        localStorageManager.saveGame(gameState);
-        if (showMessage) {
-            renderers.displayMessage('Game Saved!', 'Your progress has been secured.');
-        }
-        console.log("DEBUG: Game saved successfully.");
-    } catch (error) {
-        console.error("DEBUG: Failed to save game:", error);
-        if (showMessage) {
-            renderers.displayMessage('Save Failed!', 'Could not save game. Check browser storage space.');
-        }
-    }
 }
 
 /**
@@ -298,14 +387,16 @@ export function loadGame() {
     console.log("DEBUG: Attempting to load game...");
     renderers.showLoadingScreen();
     const loadedState = localStorageManager.loadGame();
+    const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
+
     if (loadedState) {
         gameState = loadedState;
         // Fix: Explicit action for showModal
-        renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: () => {
+        renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal();
             renderers.renderGameScreen('homeScreen'); // Go to home screen
-            Main.updateUI(); // Update UI for loaded state
-        }, isPrimary: true }]);
+            uic.updateUI(); // Update UI for loaded state
+        }, isPrimary: true }], gameState, updateUICallbacks, 'game_loaded_confirm'); // Pass gameState and callbacks
         console.log("DEBUG: Game loaded successfully:", gameState);
 
         if (gameState.playerClub) {
@@ -327,11 +418,11 @@ export function loadGame() {
         renderers.hideLoadingScreen();
     } else {
         // Fix: Explicit action for showModal
-        renderers.showModal('No Save Found!', 'Starting a new game instead.', [{ text: 'Continue', action: () => {
+        renderers.showModal('No Save Found!', 'Starting a new game instead.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal();
             renderers.renderNewGameModal(); // Go to new game setup
-            Main.updateUI(); // Update UI for the new game modal
-        }, isPrimary: true }]);
+            uic.updateUI(); // Update UI for the new game modal
+        }, isPrimary: true }], gameState, updateUICallbacks, 'no_save_found'); // Pass gameState and callbacks
         console.log("DEBUG: No game save found to load.");
         gameState = {
             playerClub: null, leagues: [], currentSeason: 1, currentWeek: 1,
@@ -349,11 +440,13 @@ export function loadGame() {
  */
 export function newGameConfirm() {
     console.log("DEBUG: newGameConfirm() called.");
+    const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
+
     renderers.showModal(
         'Start New Game?',
         'Are you sure you want to start a new game? All unsaved progress will be lost.',
         [
-            { text: 'Yes, Start New', action: () => {
+            { text: 'Yes, Start New', action: (gs, uic, context) => { // Pass gs, uic, context
                 localStorageManager.clearSave();
                 renderers.hideModal();
                 gameState = {
@@ -364,11 +457,12 @@ export function newGameConfirm() {
                 renderers.renderNewGameModal();
                 applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
             }, isPrimary: true },
-            { text: 'No, Cancel', action: () => {
+            { text: 'No, Cancel', action: (gs, uic, context) => { // Pass gs, uic, context
                 renderers.hideModal();
-                Main.updateUI(); // Update UI if cancelled to refresh current screen
+                uic.updateUI(); // Update UI if cancelled to refresh current screen
             }}
-        ]
+        ],
+        gameState, updateUICallbacks, 'new_game_confirm' // Pass gameState and callbacks
     );
 }
 
@@ -381,108 +475,28 @@ export function advanceWeek() {
     const currentAvailableHours = gameState.availableHours;
     const baseWeeklyHours = Constants.WEEKLY_BASE_HOURS;
     const allocatedHours = baseWeeklyHours - currentAvailableHours;
+    const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
+
 
     const minimumAllocatedPercentage = 0.75;
     if (allocatedHours < baseWeeklyHours * minimumAllocatedPercentage && currentAvailableHours > 0) {
         // Fix: Explicit actions for showModal, including week advancement logic
-        renderers.showModal('Allocate More Time!', 'You still have a lot of available hours. Consider completing more tasks before advancing the week!', [{ text: 'Advance Anyway', action: () => {
+        renderers.showModal('Allocate More Time!', 'You still have a lot of available hours. Consider completing more tasks before advancing the week!', [{ text: 'Advance Anyway', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal(); // Hide this modal
-            gameLoop.advanceWeek(Main.gameState); // Call gameLoop directly
+            gameLoop.advanceWeek(gs); // Call gameLoop directly with correct gameState
         }, isPrimary: true },
-        { text: 'Allocate More', action: () => {
+        { text: 'Allocate More', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal(); // Hide modal, stay on current week
-            Main.updateUI(); // Update UI to refresh current screen
+            uic.updateUI(); // Update UI to refresh current screen
         }}
-        ]);
+        ], gameState, updateUICallbacks, 'allocate_more_time'); // Pass gameState and callbacks
         return; // Stop execution, await user choice
     }
 
-    gameLoop.advanceWeek(Main.gameState); // If check passes or skipped, proceed to week logic
-
-
-    // updateUI() will be called by gameLoop.finalizeWeekProcessing
-    // saveGame(false) will be called by gameLoop.finalizeWeekProcessing
-    // renderers.renderGameScreen('homeScreen') will be called by gameLoop.finalizeWeekProcessing
+    gameLoop.advanceWeek(gameState); // If check passes or skipped, proceed to week logic
 }
 
 
-/**
- * Updates all relevant UI elements based on the current gameState.
- * This function will be called frequently after state changes.
- */
-export function updateUI() {
-    console.log("DEBUG: updateUI() called. Current State:", gameState.currentSeason, gameState.currentWeek, gameState.gamePhase);
-    if (!gameState.playerClub) {
-        console.warn("DEBUG: playerClub not yet initialized in gameState, skipping some UI updates.");
-        return;
-    }
-
-    // Convert week to month/week string
-    const calendarWeekString = getCalendarWeekString(gameState.currentWeek);
-    renderers.updateTopBarStats(
-        gameState.currentSeason,
-        calendarWeekString, // Pass the formatted string
-        gameState.playerClub.finances.balance
-    );
-    renderers.updateClubNameDisplay(gameState.playerClub.name);
-
-    renderers.updateWeeklyTasksDisplay(gameState.weeklyTasks, gameState.availableHours);
-
-
-    const activeScreenElement = document.querySelector('.game-screen.active');
-    if (activeScreenElement) {
-        const screenId = activeScreenElement.id;
-        console.log(`DEBUG: Rendering active screen: ${screenId}`);
-        switch (screenId) {
-            case 'homeScreen':
-                renderers.renderHomeScreen(gameState);
-                break;
-            case 'squadScreen':
-                const squadData = playerData.getSquad();
-                console.log("DEBUG: Squad data passed to renderer:", squadData);
-                renderers.renderSquadScreen(squadData);
-                break;
-            case 'facilitiesScreen':
-                renderers.renderFacilitiesScreen(gameState.playerClub.facilities);
-                break;
-            case 'financesScreen':
-                console.log("DEBUG: Finance data passed to renderer:", gameState.playerClub.finances);
-                renderers.renderFinancesScreen(gameState.playerClub.finances);
-                break;
-            case 'leagueScreen':
-                const currentLeague = gameState.leagues[0];
-                const allClubsInCurrentLeague = currentLeague ? currentLeague.allClubsData : [];
-                console.log("DEBUG: League clubs data passed to renderer:", allClubsInCurrentLeague);
-                renderers.renderLeagueScreen(
-                    leagueData.getLeagueTable(currentLeague?.id, allClubsInCurrentLeague)
-                );
-                break;
-            case 'fixturesScreen':
-                console.log("DEBUG: Fixtures data passed to renderer:", leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id));
-                renderers.renderFixturesScreen(leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id));
-                break;
-            case 'committeeScreen':
-                const committeeData = clubData.getCommittee();
-                console.log("DEBUG: Committee data passed to renderer:", committeeData);
-                renderers.renderCommitteeScreen(committeeData);
-                break;
-            case 'historyScreen':
-                console.log("DEBUG: History data passed to renderer:", gameState.clubHistory);
-                renderers.renderHistoryScreen(gameState.clubHistory);
-                break;
-            default:
-                console.warn(`DEBUG: No specific renderer case for screen: ${screenId}`);
-                break;
-        }
-    } else {
-        console.warn("DEBUG: No active screen element found to render specific data for.");
-    }
-
-    if (gameState.messages.length > 0) {
-        renderers.updateNewsFeed(gameState.messages[gameState.messages.length - 1].text);
-    }
-    console.log("DEBUG: updateUI() finished.");
-}
 
 
 // --- Event Listener for Page Load ---

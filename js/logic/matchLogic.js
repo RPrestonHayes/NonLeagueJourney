@@ -78,6 +78,78 @@ function calculateTeamDefensiveRatingFromSquad(squad) {
     return playersCount > 0 ? Math.round(totalDefenseRating / playersCount) : 1;
 }
 
+/**
+ * Simulates a single match between two clubs.
+ * This is a core simulation function used for both player and AI matches.
+ * @param {string} homeClubId - ID of the home club.
+ * @param {string} awayClubId - ID of the away club.
+ * @param {object} playerClub - The player's club object (needed for its squad and reputation).
+ * @param {Array<object>} allOpponentClubs - All opponent club structural data.
+ * @param {Array<object>} playerSquad - The player's current squad.
+ * @returns {object} An object containing match results and report.
+ */
+export function simulateMatch(homeClubId, awayClubId, playerClub, allOpponentClubs, playerSquad) { // EXPORTED
+    let homeClubDetails, awayClubDetails;
+    let homeSquadForMatch, awaySquadForMatch;
+
+    // Determine club details and generate seasonal squads if AI
+    if (homeClubId === playerClub.id) {
+        homeClubDetails = playerClub;
+        homeSquadForMatch = playerSquad;
+    } else {
+        homeClubDetails = allOpponentClubs.find(c => c.id === homeClubId);
+        homeSquadForMatch = opponentData.generateSeasonalOpponentPlayers(homeClubId, homeClubDetails.overallTeamQuality);
+    }
+
+    if (awayClubId === playerClub.id) {
+        awayClubDetails = playerClub;
+        awaySquadForMatch = playerSquad;
+    } else {
+        awayClubDetails = allOpponentClubs.find(c => c.id === awayClubId);
+        awaySquadForMatch = opponentData.generateSeasonalOpponentPlayers(awayClubId, awayClubDetails.overallTeamQuality);
+    }
+
+    // Calculate team ratings, applying morale bonus for player's team
+    let homeAttack, homeDefense, awayAttack, awayDefense;
+
+    if (homeClubId === playerClub.id) {
+        const playerTeamMoraleAvg = playerSquad.reduce((sum, p) => sum + p.status.morale, 0) / playerSquad.length;
+        homeAttack = calculateTeamAttackingRatingFromSquad(homeSquadForMatch) + (playerTeamMoraleAvg - 50) / 20;
+        homeDefense = calculateTeamDefensiveRatingFromSquad(homeSquadForMatch) + (playerTeamMoraleAvg - 50) / 20;
+    } else {
+        homeAttack = homeClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2);
+        homeDefense = homeClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2);
+    }
+
+    if (awayClubId === playerClub.id) {
+        const playerTeamMoraleAvg = playerSquad.reduce((sum, p) => sum + p.status.morale, 0) / playerSquad.length;
+        awayAttack = calculateTeamAttackingRatingFromSquad(awaySquadForMatch) + (playerTeamMoraleAvg - 50) / 20;
+        awayDefense = calculateTeamDefensiveRatingFromSquad(awaySquadForMatch) + (playerTeamMoraleAvg - 50) / 20;
+    } else {
+        awayAttack = awayClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2);
+        awayDefense = awayClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2);
+    }
+
+    const homeAdvantageFactor = (homeClubId === playerClub.id && playerClub.facilities[Constants.FACILITIES.PITCH].isUsable) ? 1 : 0; // Only player gets home advantage if pitch is usable
+    const randomMatchVariance = dataGenerator.getRandomInt(-1, 1);
+
+    // Initial score calculation based on attack vs defense
+    let homeScoreBase = Math.max(0, homeAttack - awayDefense + homeAdvantageFactor + randomMatchVariance);
+    let awayScoreBase = Math.max(0, awayAttack - homeDefense - homeAdvantageFactor + randomMatchVariance);
+
+    // Introduce some randomness and cap scores
+    const finalHomeScore = Math.max(0, Math.min(Math.round(homeScoreBase + dataGenerator.getRandomInt(-1, 2)), 5));
+    const finalAwayScore = Math.max(0, Math.min(Math.round(awayScoreBase + dataGenerator.getRandomInt(-1, 2)), 5));
+
+    let reportMessage = `Match simulated: ${homeClubDetails.name} ${finalHomeScore} - ${finalAwayScore} ${awayClubDetails.name}.`;
+
+    return {
+        homeScore: finalHomeScore, awayScore: finalAwayScore, homeTeamId: homeClubId, awayTeamId: awayClubId,
+        homeTeamName: homeClubDetails.name, awayTeamName: awayClubDetails.name, report: reportMessage
+    };
+}
+
+
 // --- Match Day State Management ---
 let currentMatchState = null; // Stores data for the match currently being simulated
 
@@ -126,11 +198,15 @@ export function preMatchBriefing(gameState, playerMatch) {
         report: [] // Accumulate report messages
     };
 
+    const updateUICallbacks = Main.getUpdateUICallbacks(); // Get callbacks for modal actions
 
     renderers.showModal(
         `Match Day Briefing: ${playerMatch.homeTeamName} vs ${playerMatch.awayTeamName}`,
         briefingMessage,
-        [{ text: 'Kick Off!', action: () => simulateFirstHalf(currentMatchState), isPrimary: true }] // Chain to first half
+        [{ text: 'Kick Off!', action: (gs, uic, context) => simulateFirstHalf(currentMatchState, gs, uic, context), isPrimary: true }], // Chain to first half, pass all args
+        gameState, // Pass gameState
+        updateUICallbacks, // Pass callbacks
+        'pre_match_briefing' // Context
     );
     Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `Pre-match briefing for ${playerMatch.homeTeamName} vs ${playerMatch.awayTeamName}.` });
 }
@@ -138,38 +214,25 @@ export function preMatchBriefing(gameState, playerMatch) {
 /**
  * Simulates the first half of the match and displays its outcome.
  * @param {object} matchState - The current match state object.
+ * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {string} dismissalContext - Context for modal dismissal.
  */
-function simulateFirstHalf(matchState) {
+function simulateFirstHalf(matchState, gameState, updateUICallbacks, dismissalContext) {
     console.log("DEBUG: Simulating First Half...");
     const { homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad, isHomeMatch, opponentClub } = matchState;
 
-    let homeClubDetails, awayClubDetails;
-    let homeSquadForMatch, awaySquadForMatch;
+    // Determine club details for display in half-time message
+    const homeClubDetails = (homeTeamId === playerClub.id) ? playerClub : opponentClub;
+    const awayClubDetails = (awayTeamId === playerClub.id) ? playerClub : opponentClub;
 
-    if (homeTeamId === playerClub.id) { homeClubDetails = playerClub; homeSquadForMatch = playerSquad; }
-    else { homeClubDetails = allOpponentClubs.find(c => c.id === homeTeamId); homeSquadForMatch = opponentData.generateSeasonalOpponentPlayers(homeTeamId, homeClubDetails.overallTeamQuality); }
+    // Use the simulateMatch function for the first half
+    const halfResult = simulateMatch(homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad);
+    
+    matchState.firstHalfHomeScore = halfResult.homeScore;
+    matchState.firstHalfAwayScore = halfResult.awayScore;
 
-    if (awayTeamId === playerClub.id) { awayClubDetails = playerClub; awaySquadForMatch = playerSquad; }
-    else { awayClubDetails = allOpponentClubs.find(c => c.id === awayTeamId); awaySquadForMatch = opponentData.generateSeasonalOpponentPlayers(awayTeamId, awayClubDetails.overallTeamQuality); }
-
-    let homeAttack, homeDefense, awayAttack, awayDefense;
-    if (homeTeamId === playerClub.id) { homeAttack = calculateTeamAttackingRatingFromSquad(homeSquadForMatch) + (playerSquad.reduce((sum, p) => sum + p.status.morale, 0) / playerSquad.length - 50) / 20; homeDefense = calculateTeamDefensiveRatingFromSquad(homeSquadForMatch) + (playerSquad.reduce((sum, p) => sum + p.status.morale, 0) / playerSquad.length - 50) / 20; } // Morale bonus directly here
-    else { homeAttack = homeClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); homeDefense = homeClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); }
-    if (awayTeamId === playerClub.id) { awayAttack = calculateTeamAttackingRatingFromSquad(awaySquadForMatch) + (playerSquad.reduce((sum, p) => sum + p.status.morale, 0) / playerSquad.length - 50) / 20; awayDefense = calculateTeamDefensiveRatingFromSquad(awaySquadForMatch) + (playerSquad.reduce((sum, p) => sum + p.status.morale, 0) / playerSquad.length - 50) / 20; } // Morale bonus
-    else { awayAttack = awayClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); awayDefense = awayClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); }
-
-    const homeAdvantageFactor = 1;
-    const randomMatchVariance = dataGenerator.getRandomInt(-1, 1);
-
-    let homeScoreBase = Math.max(0, homeAttack - awayDefense + homeAdvantageFactor + randomMatchVariance);
-    let awayScoreBase = Math.max(0, awayAttack - homeDefense - homeAdvantageFactor + randomMatchVariance);
-
-    matchState.firstHalfHomeScore = Math.floor(homeScoreBase / 2) + dataGenerator.getRandomInt(0, 1);
-    matchState.firstHalfAwayScore = Math.floor(awayScoreBase / 2) + dataGenerator.getRandomInt(0, 1);
-
-    matchState.firstHalfHomeScore = Math.max(0, Math.min(matchState.firstHalfHomeScore, 3));
-    matchState.firstHalfAwayScore = Math.max(0, Math.min(matchState.firstHalfAwayScore, 3));
-
+    // Update player appearances for the half played
     playerSquad.forEach(player => { playerData.updatePlayerStats(player.id, { appearances: 0.5 }); });
 
     let halfTimeMessage = `The whistle blows for half-time!
@@ -184,48 +247,54 @@ function simulateFirstHalf(matchState) {
         halfTimeMessage += ` You're currently losing. A big second half is needed!`;
     }
 
-    renderers.showModal('Half-Time!', halfTimeMessage, [{ text: 'Go to Half-Time', action: () => halfTimeOptions(matchState), isPrimary: true }]);
+    renderers.showModal('Half-Time!', halfTimeMessage, [{ text: 'Go to Half-Time', action: (gs, uic, context) => halfTimeOptions(matchState, gs, uic, context), isPrimary: true }], gameState, updateUICallbacks, dismissalContext);
 }
 
 /**
  * Presents half-time options to the player.
  * @param {object} matchState - The current match state object.
+ * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {string} dismissalContext - Context for modal dismissal.
  */
-function halfTimeOptions(matchState) {
+function halfTimeOptions(matchState, gameState, updateUICallbacks, dismissalContext) {
     console.log("DEBUG: Half-time options presented.");
-    const facilities = Main.gameState.playerClub.facilities;
+    const facilities = gameState.playerClub.facilities; // Use provided gameState
     const choices = [];
 
     // All actions now explicitly trigger renderers.hideModal()
-    choices.push({ text: 'Talk to Players in Changing Room', action: () => { renderers.hideModal(); halfTimeAction(matchState, 'talk_players'); }, isPrimary: true });
+    choices.push({ text: 'Talk to Players in Changing Room', action: (gs, uic, context) => { renderers.hideModal(); halfTimeAction(matchState, 'talk_players', gs, uic, context); }, isPrimary: true });
 
     if (facilities[Constants.FACILITIES.CLUBHOUSE] && facilities[Constants.FACILITIES.CLUBHOUSE].level > 0) {
-        choices.push({ text: 'Head to the Committee Room', action: () => { renderers.hideModal(); halfTimeAction(matchState, 'committee_room'); } });
-        choices.push({ text: 'Grab a drink at the Bar', action: () => { renderers.hideModal(); halfTimeAction(matchState, 'bar'); } });
+        choices.push({ text: 'Head to the Committee Room', action: (gs, uic, context) => { renderers.hideModal(); halfTimeAction(matchState, 'committee_room', gs, uic, context); } });
+        choices.push({ text: 'Grab a drink at the Bar', action: (gs, uic, context) => { renderers.hideModal(); halfTimeAction(matchState, 'bar', gs, uic, context); } });
     } else if (facilities[Constants.FACILITIES.SNACKBAR] && facilities[Constants.FACILITIES.SNACKBAR].level > 0) {
-        choices.push({ text: 'Grab a Cuppa at the Tea Hut', action: () => { renderers.hideModal(); halfTimeAction(matchState, 'bar'); } });
+        choices.push({ text: 'Grab a Cuppa at the Tea Hut', action: (gs, uic, context) => { renderers.hideModal(); halfTimeAction(matchState, 'bar', gs, uic, context); } });
     }
 
-    choices.push({ text: 'Wait in the Stands', action: () => { renderers.hideModal(); halfTimeAction(matchState, 'stands'); } });
-    choices.push({ text: 'Talk to the Referee', action: () => { renderers.hideModal(); halfTimeAction(matchState, 'referee'); } });
-    choices.push({ text: 'Mingle with Fans', action: () => { renderers.hideModal(); halfTimeAction(matchState, 'fans'); } });
+    choices.push({ text: 'Wait in the Stands', action: (gs, uic, context) => { renderers.hideModal(); halfTimeAction(matchState, 'stands', gs, uic, context); } });
+    choices.push({ text: 'Talk to the Referee', action: (gs, uic, context) => { renderers.hideModal(); halfTimeAction(matchState, 'referee', gs, uic, context); } });
+    choices.push({ text: 'Mingle with Fans', action: (gs, uic, context) => { renderers.hideModal(); halfTimeAction(matchState, 'fans', gs, uic, context); } });
 
-    renderers.showModal('Half-Time: Your Decision', 'What do you want to do during the break?', choices);
+    renderers.showModal('Half-Time: Your Decision', 'What do you want to do during the break?', choices, gameState, updateUICallbacks, dismissalContext);
 }
 
 /**
  * Processes the player's chosen half-time action.
  * @param {object} matchState - The current match state object.
  * @param {string} actionType - The type of action chosen (e.g., 'talk_players', 'bar').
+ * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {string} dismissalContext - Context for modal dismissal.
  */
-function halfTimeAction(matchState, actionType) {
+function halfTimeAction(matchState, actionType, gameState, updateUICallbacks, dismissalContext) {
     let outcomeMessage = '';
     let moraleChange = 0;
     let financeChange = 0;
-    let committeeRelChange = 0;
+    let committeeRelChange = 0; // Not directly used yet, but kept for future
     let teamPerformanceBonus = 0; // Temporary boost for 2nd half
 
-    const teamMoraleAvg = Main.gameState.playerClub.squad.reduce((sum, p) => sum + p.status.morale, 0) / Main.gameState.playerClub.squad.length;
+    const teamMoraleAvg = gameState.playerClub.squad.reduce((sum, p) => sum + p.status.morale, 0) / gameState.playerClub.squad.length;
 
     switch (actionType) {
         case 'talk_players':
@@ -237,10 +306,10 @@ function halfTimeAction(matchState, actionType) {
                 moraleChange = dataGenerator.getRandomInt(1, 3);
                 outcomeMessage = "The players are already motivated. You reinforced their confidence.";
             }
-            Main.gameState.playerClub.squad.forEach(player => playerData.updatePlayerMorale(player.id, moraleChange));
+            gameState.playerClub.squad.forEach(player => playerData.updatePlayerMorale(player.id, moraleChange));
             break;
         case 'committee_room':
-            const chairman = Main.gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.CHAIR);
+            const chairman = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.CHAIR);
             if (chairman) {
                 committeeRelChange = dataGenerator.getRandomInt(2, 5);
                 outcomeMessage = "You discussed club matters with the committee. Relationships strengthened slightly.";
@@ -250,9 +319,9 @@ function halfTimeAction(matchState, actionType) {
             }
             break;
         case 'bar':
-            financeChange = clubData.calculateMatchDayRevenue(Main.gameState.playerClub.facilities, Main.gameState.playerClub.fanbase) * 0.2; // Small extra revenue
+            financeChange = clubData.calculateMatchDayRevenue(gameState.playerClub.facilities, gameState.playerClub.fanbase) * 0.2; // Small extra revenue
             outcomeMessage = "You enjoyed a quick drink, and saw some extra income from happy fans.";
-            Main.gameState.playerClub.finances = clubData.addTransaction(Main.gameState.playerClub.finances, financeChange, Constants.TRANSACTION_TYPE.MATCH_DAY_IN, 'Half-Time Bar Revenue');
+            gameState.playerClub.finances = clubData.addTransaction(gameState.playerClub.finances, financeChange, Constants.TRANSACTION_TYPE.MATCH_DAY_IN, 'Half-Time Bar Revenue');
             break;
         case 'stands':
             outcomeMessage = "You observed the game from the stands. Got a better view, perhaps a fresh perspective.";
@@ -275,49 +344,36 @@ function halfTimeAction(matchState, actionType) {
             break;
     }
 
-    renderers.showModal('Half-Time Action Outcome', outcomeMessage, [{ text: 'Begin Second Half', action: () => simulateSecondHalf(matchState, teamPerformanceBonus), isPrimary: true }]);
+    renderers.showModal('Half-Time Action Outcome', outcomeMessage, [{ text: 'Begin Second Half', action: (gs, uic, context) => simulateSecondHalf(matchState, teamPerformanceBonus, gs, uic, context), isPrimary: true }], gameState, updateUICallbacks, dismissalContext);
 }
 
 /**
  * Simulates the second half of the match and displays the full match report.
  * @param {object} matchState - The current match state object.
  * @param {number} performanceBonus - A bonus to apply to team performance in the second half (from half-time action).
+ * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {string} dismissalContext - Context for modal dismissal.
  */
-function simulateSecondHalf(matchState, performanceBonus = 0) {
+function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateUICallbacks, dismissalContext) {
     console.log("DEBUG: Simulating Second Half...");
     const { homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad } = matchState;
 
-    let homeClubDetails, awayClubDetails;
-    let homeSquadForMatch, awaySquadForMatch;
+    // Determine club details for display in match report
+    const homeClubDetails = (homeTeamId === playerClub.id) ? playerClub : allOpponentClubs.find(c => c.id === homeTeamId);
+    const awayClubDetails = (awayTeamId === playerClub.id) ? playerClub : allOpponentClubs.find(c => c.id === awayTeamId);
 
-    if (homeTeamId === playerClub.id) { homeClubDetails = playerClub; homeSquadForMatch = playerSquad; }
-    else { homeClubDetails = allOpponentClubs.find(c => c.id === homeTeamId); homeSquadForMatch = opponentData.generateSeasonalOpponentPlayers(homeTeamId, homeClubDetails.overallTeamQuality); }
+    // Use the simulateMatch function for the second half
+    const halfResult = simulateMatch(homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad);
 
-    if (awayTeamId === playerClub.id) { awayClubDetails = playerClub; awaySquadForMatch = playerSquad; }
-    else { awayClubDetails = allOpponentClubs.find(c => c.id === awayTeamId); awaySquadForMatch = opponentData.generateSeasonalOpponentPlayers(awayTeamId, awayClubDetails.overallTeamQuality); }
-
-    let homeAttack, homeDefense, awayAttack, awayDefense;
-    if (homeTeamId === playerClub.id) { homeAttack = calculateTeamAttackingRatingFromSquad(homeSquadForMatch) + performanceBonus; homeDefense = calculateTeamDefensiveRatingFromSquad(homeSquadForMatch) + performanceBonus; }
-    else { homeAttack = homeClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); homeDefense = homeClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); }
-    if (awayTeamId === playerClub.id) { awayAttack = calculateTeamAttackingRatingFromSquad(awaySquadForMatch) + performanceBonus; awayDefense = calculateTeamDefensiveRatingFromSquad(awaySquadForMatch) + performanceBonus; }
-    else { awayAttack = awayClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); awayDefense = awayClubDetails.overallTeamQuality + dataGenerator.getRandomInt(-2, 2); }
-
-    const homeAdvantageFactor = 1;
-    const randomMatchVariance = dataGenerator.getRandomInt(-1, 1);
-
-    let homeScoreSecondHalfBase = Math.max(0, homeAttack - awayDefense + homeAdvantageFactor + randomMatchVariance);
-    let awayScoreSecondHalfBase = Math.max(0, awayAttack - homeDefense - homeAdvantageFactor + randomMatchVariance);
-
-    matchState.secondHalfHomeScore = Math.floor(homeScoreSecondHalfBase / 2) + dataGenerator.getRandomInt(0, 1);
-    matchState.secondHalfAwayScore = Math.floor(awayScoreSecondHalfBase / 2) + dataGenerator.getRandomInt(0, 1);
-
-    matchState.secondHalfHomeScore = Math.max(0, Math.min(matchState.secondHalfHomeScore, 3));
-    matchState.secondHalfAwayScore = Math.max(0, Math.min(matchState.secondHalfAwayScore, 3));
+    matchState.secondHalfHomeScore = halfResult.homeScore;
+    matchState.secondHalfAwayScore = halfResult.awayScore;
 
     playerSquad.forEach(player => { playerData.updatePlayerStats(player.id, { appearances: 0.5 }); });
 
     const finalHomeScore = matchState.firstHalfHomeScore + matchState.secondHalfHomeScore;
     const finalAwayScore = matchState.firstHalfAwayScore + matchState.secondHalfAwayScore;
+
 
     let reportMessage = `**First Half:** ${homeClubDetails.name} ${matchState.firstHalfHomeScore} - ${matchState.firstHalfAwayScore} ${awayClubDetails.name}\n`;
     reportMessage += `**Second Half:** ${homeClubDetails.name} ${matchState.secondHalfHomeScore} - ${matchState.secondHalfAwayScore} ${awayClubDetails.name}\n\n`;
@@ -371,7 +427,8 @@ function simulateSecondHalf(matchState, performanceBonus = 0) {
     playerSquad.forEach(player => {
         if (player.status.injuryStatus === 'Fit' && !player.status.suspended && dataGenerator.getRandomInt(1, 100) < 5) {
             playerData.updatePlayerStats(player.id, { status: { ...player.status, injuryStatus: "Minor Knock", injuryReturnDate: "Next Week" } });
-            player.status.injuryStatus = "Minor Knock";
+            // The line below is redundant as updatePlayerStats already modifies the player object in the squad
+            // player.status.injuryStatus = "Minor Knock";
             Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${player.name} picked up a minor knock in the match!` });
         }
     });
@@ -383,11 +440,14 @@ function simulateSecondHalf(matchState, performanceBonus = 0) {
     renderers.showModal(
         `Full-Time Result: ${homeClubDetails.name} ${finalHomeScore} - ${finalAwayScore} ${awayClubDetails.name}`,
         reportMessage,
-        [{ text: 'Continue', action: () => {
+        [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal();
             // Match is over. Now process AI matches for this week and then finalize the week.
-            gameLoop.processAIMatchesAndFinalizeWeek(Main.gameState, Main.gameState.leagues[0].currentSeasonFixtures.find(wb => wb.week === (Main.gameState.currentWeek - Constants.PRE_SEASON_WEEKS)), matchState.matchId);
-        }, isPrimary: true }]
+            gameLoop.processAIMatchesAndFinalizeWeek(gs, gs.leagues[0].currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS)), matchState.matchId);
+        }, isPrimary: true }],
+        gameState, // Pass gameState
+        updateUICallbacks, // Pass callbacks
+        dismissalContext // Pass context
     );
 
     return {
@@ -395,4 +455,3 @@ function simulateSecondHalf(matchState, performanceBonus = 0) {
         homeTeamName: homeClubDetails.name, awayTeamName: awayClubDetails.name, report: reportMessage
     };
 }
-
