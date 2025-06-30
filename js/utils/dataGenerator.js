@@ -6,9 +6,9 @@
  */
 
 import * as Constants from './constants.js';
+import { UK_COUNTIES_DATA } from '../data/CountiesData.js'; // Import the new CountiesData
 
 // --- Helper Functions for Randomness ---
-// FIX: Ensure these are explicitly exported as individual functions.
 export function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -17,7 +17,7 @@ export function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-export function getRandomName(type = 'first') { // FIX: Explicitly export
+export function getRandomName(type = 'first') {
     const firstNames = ['Liam', 'Noah', 'Oliver', 'Elijah', 'James', 'William', 'Benjamin', 'Lucas', 'Henry', 'Alexander', 'Michael', 'Ethan', 'Daniel', 'Jacob', 'Logan', 'Jackson', 'Sebastian', 'Mateo', 'Jack', 'Aiden', 'Owen', 'Samuel', 'David', 'Joseph', 'Julian', 'Gabriel', 'John', 'Wyatt', 'Carter', 'Luke', 'Harry', 'George', 'Charlie', 'Oscar', 'Leo', 'Arthur', 'Freddie', 'Archie', 'Noah', 'Theo', 'Finley', 'Lewis', 'Reggie', 'Bobby', 'Frankie', 'Louie', 'Ronnie', 'Alfie', 'Ralph'];
     const lastNames = ['Smith', 'Jones', 'Williams', 'Brown', 'Davies', 'Evans', 'Wilson', 'Thomas', 'Roberts', 'Lewis', 'Walker', 'Hall', 'Wright', 'Green', 'Edwards', 'Hughes', 'Jackson', 'Clarke', 'Phillips', 'Cook', 'Miller', 'Shaw', 'Bell', 'Baker', 'Morgan', 'Young', 'Scott', 'Pugh', 'Cole', 'Harrison', 'Taylor', 'Wilson', 'Burgess', 'Bennett', 'Chapman', 'Dawson', 'Ellis', 'Fisher', 'Grant', 'Hayes', 'Jenkins', 'King', 'Lowe', 'Marsh', 'Newman', 'Palmer', 'Quinn', 'Richards', 'Stevens', 'Turner'];
     if (type === 'first') return getRandomElement(firstNames);
@@ -33,7 +33,7 @@ let nextTransactionId = 1;
 let nextLeagueId = 1;
 let nextMatchId = 1;
 
-export function generateUniqueId(prefix) { // FIX: Explicitly export
+export function generateUniqueId(prefix) {
     switch (prefix) {
         case 'P': return `P${nextPlayerId++}`;
         case 'C': return `C${nextClubId++}`;
@@ -83,35 +83,75 @@ export function generatePlayer(position = null, qualityTier = 1) {
     };
 }
 
+// --- Postcode/Location Lookup ---
+/**
+ * Finds the county data based on a postcode prefix.
+ * @param {string} postcode - The full postcode (e.g., "LE12 7TF").
+ * @returns {object|null} The matching county data object, or null if not found.
+ */
+export function getCountyDataFromPostcode(postcode) {
+    if (!postcode || typeof postcode !== 'string') return null;
+
+    // Normalize postcode to get the outward code (e.g., "LE12")
+    const cleanedPostcode = postcode.toUpperCase().replace(/\s/g, '');
+    let outwardCode = '';
+
+    // Common UK postcode formats: AA9A 9AA, A9A 9AA, A9 9AA, A99 9AA, AA9 9AA, AA99 9AA
+    // We need the part before the space, or the first 2-4 characters.
+    const postcodeMatch = cleanedPostcode.match(/^([A-Z]{1,2}[0-9]{1,2}[A-Z]?)/);
+    if (postcodeMatch && postcodeMatch[1]) {
+        outwardCode = postcodeMatch[1];
+    } else {
+        // Fallback for less common or malformed postcodes, try first 2 chars
+        outwardCode = cleanedPostcode.substring(0, 2);
+    }
+
+    // Find the county based on the postcode prefix
+    for (const countyData of UK_COUNTIES_DATA) {
+        if (countyData.postcodePrefixes.some(prefix => outwardCode.startsWith(prefix))) {
+            return countyData;
+        }
+    }
+
+    // Fallback if no specific postcode prefix match
+    // Try to find a county by matching the town name directly if provided in the playerClubDetails.hometown
+    // This is a less reliable fallback, but can catch some cases.
+    return null;
+}
+
+
 // --- Club Name Generation (for opponents) ---
-export function generateClubIdentity(baseLocation) {
-    const locationParts = baseLocation.split(' ');
-    const mainLocationWord = locationParts[0];
+/**
+ * Generates a club identity (name and nickname) based on a given region.
+ * Includes logic for color-based and reserve/youth team nicknames.
+ * @param {object} baseLocationRegion - The county data object for the base location.
+ * @returns {object} An object { name: string, nickname: string }.
+ */
+export function generateClubIdentity(baseLocationRegion) {
+    const townsInRegion = baseLocationRegion.towns;
 
     const suffixes = ['United', 'Rovers', 'Athletic', 'Town', 'City', 'Wanderers', 'Victoria', 'Amateurs', 'Corinthians', 'Sports', 'Albion', 'Park', 'FC', 'County', 'District'];
     const prefixes = ['', 'East ', 'West ', 'North ', 'South ', 'Royal ', 'Old ', 'Young ', 'St. ', 'AFC '];
     const middleWords = ['Park', 'Lane', 'Bridge', 'Field', 'Brook', 'Grange', 'Vale', 'Heath', 'Green', 'Spring', 'Heights', 'Wood', 'Hill', 'Central', 'Abbey', 'Grove', 'Meadow'];
-    const nicknames = ['The Reds', 'The Blues', 'The Whites', 'The Blacks', 'The Brewers', 'The Villagers', 'The Foxes', 'The Lions', 'The Pigeons', 'The Swans', 'The Robins', 'The Tigers', 'The Hornets', 'The Mariners', 'The Millers', 'The Railwaymen', 'The Oaks', 'The Pilgrims'];
+    const genericNicknames = ['The Reds', 'The Blues', 'The Whites', 'The Blacks', 'The Brewers', 'The Villagers', 'The Foxes', 'The Lions', 'The Pigeons', 'The Swans', 'The Robins', 'The Tigers', 'The Hornets', 'The Mariners', 'The Millers', 'The Railwaymen', 'The Oaks', 'The Pilgrims'];
 
     let clubNameParts = [];
-    let chosenLocation = mainLocationWord;
-
-    const nearbyLocations = [...possibleNearbyTowns(mainLocationWord), mainLocationWord];
-    chosenLocation = getRandomElement(nearbyLocations);
+    let chosenLocation = getRandomElement(townsInRegion); // Pick a town from the selected region
 
     const structureRoll = getRandomInt(1, 100);
 
-    if (structureRoll <= 40) {
+    // Prioritize single-location names to avoid geographically illogical combinations
+    if (structureRoll <= 60) { // Increased chance for single-location names
         clubNameParts.push(chosenLocation);
         clubNameParts.push(getRandomElement(suffixes));
-    } else if (structureRoll <= 70) {
+    } else if (structureRoll <= 85) { // Still good chance for simple Town/City names
         clubNameParts.push(chosenLocation);
         clubNameParts.push(getRandomElement(['Town', 'City', 'United', 'Athletic']));
-    } else if (structureRoll <= 90) {
+    } else if (structureRoll <= 95) { // Reduced chance for middle-word names
         clubNameParts.push(chosenLocation);
         clubNameParts.push(getRandomElement(middleWords));
         clubNameParts.push(getRandomElement(suffixes));
-    } else {
+    } else { // Lowest chance for prefixed names
         clubNameParts.push(getRandomElement(prefixes));
         clubNameParts.push(chosenLocation);
         clubNameParts.push(getRandomElement(suffixes));
@@ -119,35 +159,56 @@ export function generateClubIdentity(baseLocation) {
 
     let finalClubName = clubNameParts.filter(part => part.trim() !== '').join(' ').trim();
 
-    if (finalClubName.split(' ').length < 2 && getRandomInt(1, 100) < 70) {
-        if (getRandomInt(0,1) === 0 && middleWords.length > 0) {
-            finalClubName = `${mainLocationWord} ${getRandomElement(middleWords)} ${getRandomElement(suffixes)}`;
-        } else if (suffixes.length > 0) {
-            finalClubName = `${mainLocationWord} ${getRandomElement(suffixes)}`;
+    // Ensure at least two words for common club naming conventions if it ends up too short
+    if (finalClubName.split(' ').length < 2) {
+        finalClubName = `${chosenLocation} ${getRandomElement(suffixes)}`;
+    }
+
+    // Further refine combination names, making them less frequent and ensuring distinct towns
+    if (getRandomInt(1, 100) < 10) { // Very low chance for combined names
+        const connectors = [' & ', ' Utd ', ' FC '];
+        // Filter out the already chosen location to get a distinct second part
+        const secondPartOptions = townsInRegion.filter(t => t !== chosenLocation && !finalClubName.includes(t));
+        if (secondPartOptions.length > 0) {
+            finalClubName = `${finalClubName}${getRandomElement(connectors)}${getRandomElement(secondPartOptions).split(' ')[0]} ${getRandomElement(suffixes)}`;
         }
     }
 
-    if (getRandomInt(1, 100) < 15 && finalClubName.split(' ').length < 3) {
-        const connectors = [' & ', ' Utd ', ' FC '];
-        const secondPartOptions = [...possibleNearbyTowns(mainLocationWord), getRandomElement(middleWords)];
-        finalClubName = `${finalClubName}${getRandomElement(connectors)}${getRandomElement(secondPartOptions).split(' ')[0]} ${getRandomElement(suffixes)}`;
+    let clubNickname = getRandomElement(genericNicknames); // Start with a generic nickname
+
+    // --- Nickname Overrides based on Club Name ---
+
+    // 1. Color-based nicknames
+    const colorKeywords = {
+        'Red': ['Red', 'Scarlet', 'Crimson', 'Ruby'],
+        'Blue': ['Blue', 'Azure', 'Navy', 'Sky'],
+        'Green': ['Green', 'Emerald', 'Lime', 'Forest'],
+        'White': ['White', 'Lilywhite', 'Snow'],
+        'Black': ['Black', 'Ebony', 'Jet'],
+        'Yellow': ['Yellow', 'Gold', 'Amber'],
+        'Purple': ['Purple', 'Violet', 'Lavender'],
+        'Orange': ['Orange', 'Tangerine'],
+        'Silver': ['Silver', 'Grey'],
+        'Maroon': ['Maroon']
+    };
+
+    for (const colorName in colorKeywords) {
+        const keywords = colorKeywords[colorName];
+        if (keywords.some(keyword => finalClubName.toLowerCase().includes(keyword.toLowerCase()))) {
+            clubNickname = `The ${colorName}s`;
+            break; // Found a color, apply and exit
+        }
     }
 
-    const clubNickname = getRandomElement(nicknames);
+    // 2. Reserve/Youth team nicknames
+    if (finalClubName.toLowerCase().includes('reserves') || finalClubName.toLowerCase().includes('u23s')) {
+        clubNickname = getRandomElement(['Reserves', 'The Ressies', 'Old Boys']);
+    } else if (finalClubName.toLowerCase().includes('youth') || finalClubName.toLowerCase().includes('development') || finalClubName.toLowerCase().includes('juniors')) {
+        clubNickname = getRandomElement(['Juniors', 'Young Boys', 'The Future', 'Development Squad']);
+    }
+
 
     return { name: finalClubName.trim(), nickname: clubNickname };
-}
-
-// --- Kit Color Generation ---
-export function generateKitColors() {
-    const primary = getRandomElement(Constants.KIT_COLORS);
-    let secondary = getRandomElement(Constants.KIT_COLORS.filter(color => color !== primary));
-    if (primary !== '#FFFFFF' && primary !== '#000000' && getRandomInt(1,100) < 15) {
-        secondary = getRandomElement(['#FFFFFF', '#000000']);
-    } else if (primary === secondary) {
-        secondary = getRandomElement(Constants.KIT_COLORS.filter(color => color !== primary));
-    }
-    return { primary: primary, secondary: secondary };
 }
 
 // --- Committee Member Generation ---
@@ -248,14 +309,22 @@ export function generateWeeklyTasks(clubFacilities, committeeMembers) {
 
 
 // --- Match Schedule Generation (Circle Method for realistic fixtures) ---
-export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) {
-    const numTeams = allLeagueClubsData.length;
+/**
+ * Generates a match schedule for a given competition.
+ * @param {string} playerClubId - The ID of the player's club.
+ * @param {Array<object>} allTeamsData - All team objects participating in this competition.
+ * @param {number} season - The current season number.
+ * @param {string} competitionType - The type of competition (e.g., Constants.COMPETITION_TYPE.LEAGUE).
+ * @returns {Array<object>} An array of match week objects.
+ */
+export function generateMatchSchedule(playerClubId, allTeamsData, season, competitionType) {
+    const numTeams = allTeamsData.length;
     if (numTeams < 2) {
-        console.warn("Not enough clubs to generate a match schedule.");
+        console.warn("Not enough teams to generate a match schedule.");
         return [];
     }
 
-    let teams = [...allLeagueClubsData.map(c => c.id)];
+    let teams = [...allTeamsData.map(c => c.id)];
     const originalNumTeams = teams.length;
     const hasDummy = originalNumTeams % 2 !== 0;
     if (hasDummy) {
@@ -286,17 +355,18 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
         if (homeId_pivot !== 'DUMMY_TEAM' && awayId_pivot !== 'DUMMY_TEAM') {
             currentRoundMatches.push({
                 id: generateUniqueId('M'), week: round + 1, season: season,
-                homeTeamId: homeId_pivot, homeTeamName: allLeagueClubsData.find(c => c.id === homeId_pivot).name,
-                awayTeamId: awayId_pivot, awayTeamName: allLeagueClubsData.find(c => c.id === awayId_pivot).name,
-                competition: 'League', result: null, played: false
+                homeTeamId: homeId_pivot, homeTeamName: allTeamsData.find(c => c.id === homeId_pivot).name,
+                awayTeamId: awayId_pivot, awayTeamName: allTeamsData.find(c => c.id === awayId_pivot).name,
+                competition: competitionType, // Use the passed competition type
+                result: null, played: false
             });
         } else {
             const realTeamId = homeId_pivot === 'DUMMY_TEAM' ? team2_id_pivot : team1_id_pivot;
             if (realTeamId !== 'DUMMY_TEAM') {
                 currentRoundMatches.push({
                     id: generateUniqueId('M'), week: round + 1, season: season,
-                    homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
-                    awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
+                    homeTeamId: realTeamId, homeTeamName: allTeamsData.find(c => c.id === realTeamId).name,
+                    awayTeamId: 'BYE', awayTeamName: 'BYE', competition: competitionType, result: 'BYE', played: true
                 });
             }
         }
@@ -318,17 +388,18 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
             if (h !== 'DUMMY_TEAM' && a !== 'DUMMY_TEAM') {
                 currentRoundMatches.push({
                     id: generateUniqueId('M'), week: round + 1, season: season,
-                    homeTeamId: h, homeTeamName: allLeagueClubsData.find(c => c.id === h).name,
-                    awayTeamId: a, awayTeamName: allLeagueClubsData.find(c => c.id === a).name,
-                    competition: 'League', result: null, played: false
+                    homeTeamId: h, homeTeamName: allTeamsData.find(c => c.id === h).name,
+                    awayTeamId: a, awayTeamName: allTeamsData.find(c => c.id === a).name,
+                    competition: competitionType, // Use the passed competition type
+                    result: null, played: false
                 });
             } else {
                 const realTeamId = h === 'DUMMY_TEAM' ? a : h;
                 if (realTeamId !== 'DUMMY_TEAM') {
                     currentRoundMatches.push({
                         id: generateUniqueId('M'), week: round + 1, season: season,
-                        homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
-                        awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
+                        homeTeamId: realTeamId, homeTeamName: allTeamsData.find(c => c.id === realTeamId).name,
+                        awayTeamId: 'BYE', awayTeamName: 'BYE', competition: competitionType, result: 'BYE', played: true
                     });
                 }
             }
@@ -336,6 +407,7 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
         
         newSchedule.push({
             week: round + 1,
+            competition: competitionType, // Add competition type to the week block
             matches: currentRoundMatches.filter(match => match.homeTeamId !== 'DUMMY_TEAM' && match.awayTeamId !== 'DUMMY_TEAM')
         });
 
@@ -345,31 +417,41 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
         teams[0] = firstTeamId;
     }
 
-    console.log(`Generated ${newSchedule.length} match weeks.`, newSchedule);
+    console.log(`Generated ${newSchedule.length} match weeks for ${competitionType}.`, newSchedule);
     return newSchedule;
 }
 
 
 // --- Initial Opponent Club Generation (structural data) ---
-export function generateInitialOpponentClubs(playerClubLocation) {
+/**
+ * Generates initial opponent clubs based on the player's chosen county data.
+ * @param {object} playerCountyData - The county data object for the player's chosen location.
+ * @returns {Array<object>} An array of opponent club structural data.
+ */
+export function generateInitialOpponentClubs(playerCountyData) { // Now expects a countyData object
     const opponentClubs = [];
-    const baseLocationsPool = [...possibleNearbyTowns(playerClubLocation), playerClubLocation];
+    const townsPool = [...playerCountyData.towns]; // Use towns from the selected county
 
     for (let i = 0; i < Constants.DEFAULT_LEAGUE_SIZE - 1; i++) {
         const id = generateUniqueId('C');
-        let location = getRandomElement(baseLocationsPool);
-        let identity = generateClubIdentity(location);
+        let location = getRandomElement(townsPool); // Pick a town from the region
+        let identity = generateClubIdentity(playerCountyData); // Pass the county data object
         let name = identity.name;
         let nickname = identity.nickname;
         const kitColors = generateKitColors();
 
+        // Add a chance for "reserve" teams from major towns in the region
         if (getRandomInt(1, 100) < 30) {
-            const majorTown = getRandomElement(['Loughborough', 'Leicester', 'Melton Mowbray', 'Nottingham', 'Derby']);
-            name = `${majorTown} ${getRandomElement(['Reserves', 'Development', 'U23s'])}`;
-            location = majorTown;
-            nickname = getRandomElement(['The Young Guns', 'The Future', 'The Reserves']);
+            // Simple heuristic for "major" town: longer names, or specific known larger towns
+            const majorTownCandidates = townsPool.filter(t => t.length > 7 || ['Leicester', 'Nottingham', 'Derby', 'Birmingham', 'Sheffield', 'Manchester', 'Liverpool', 'Leeds', 'Bristol', 'Newcastle'].includes(t));
+            const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : townsPool); // Fallback to any town if no "major" ones
+            
+            if (majorTown) {
+                name = `${majorTown} ${getRandomElement(['Reserves', 'U23s', 'Development Squad'])}`;
+                location = majorTown;
+                // Nickname will be handled by generateClubIdentity's internal logic
+            }
         }
-
 
         opponentClubs.push({
             id: id, name: name, location: location, nickname: nickname, kitColors: kitColors,
@@ -381,34 +463,31 @@ export function generateInitialOpponentClubs(playerClubLocation) {
 }
 
 // --- Initial League Name Generation ---
-export function generateInitialLeagueName(playerClubLocation) {
+/**
+ * Generates an initial league name based on the player's chosen county data.
+ * @param {object} playerCountyData - The county data object for the player's chosen location.
+ * @returns {object} An object { id: string, name: string }.
+ */
+export function generateInitialLeagueName(playerCountyData) { // Now expects a countyData object
     const leagueId = generateUniqueId('L');
-    const locationParts = playerClubLocation.split(' ');
-    const mainLocationWord = locationParts[0];
+    const countyName = playerCountyData.county;
 
     const regionalPrefixes = ['County', 'District', 'Regional', 'Area'];
     const divisionSuffixes = ['Division Three', 'Division Two', 'South', 'North', 'East', 'West', 'Alliance'];
 
-    let leagueName = `${mainLocationWord} & ${getRandomElement(regionalPrefixes)} League ${getRandomElement(divisionSuffixes)}`;
+    let leagueName = `${countyName} & ${getRandomElement(regionalPrefixes)} League ${getRandomElement(divisionSuffixes)}`;
 
     return { id: leagueId, name: leagueName.trim() };
 }
 
-
-// --- Internal helper for plausible nearby towns ---
-function possibleNearbyTowns(centerTown) {
-    const nearbyMap = {
-        'Sileby': ['Loughborough', 'Mountsorrel', 'Rothley', 'Syston', 'Barrow upon Soar', 'Quorn', 'Anstey', 'Thurmaston', 'Melton Mowbray', 'Leicester'],
-        'Loughborough': ['Sileby', 'Shepshed', 'Quorn', 'Kegworth', 'Mountsorrel', 'Hathern'],
-        'Melton Mowbray': ['Asfordby', 'Wymondham', 'Somerby', 'Oakham', 'Syston'],
-        'Leicester': ['Oadby', 'Wigston', 'Blaby', 'Enderby', 'Braunstone', 'Anstey', 'Thurmaston', 'Glenfield'],
-        'Nottingham': ['Long Eaton', 'Beeston', 'West Bridgford', 'Arnold', 'Hucknall', 'Carlton'],
-        'Derby': ['Long Eaton', 'Ilkeston', 'Alfreton', 'Belper', 'Ripley']
-    };
-
-    const specificNearby = nearbyMap[centerTown] || [];
-
-    const genericVillages = ['Newton', 'Kingston', 'Charlton', 'Stanton', 'Hinton', 'Morton', 'Burton', 'Oakley', 'Ashley', 'Bradley'];
-    return [...new Set([...specificNearby, ...getRandomElement(genericVillages.slice(0, getRandomInt(3, 7)))])];
+// --- Kit Color Generation ---
+export function generateKitColors() {
+    const primary = getRandomElement(Constants.KIT_COLORS);
+    let secondary = getRandomElement(Constants.KIT_COLORS.filter(color => color !== primary));
+    if (primary !== '#FFFFFF' && primary !== '#000000' && getRandomInt(1,100) < 15) {
+        secondary = getRandomElement(['#FFFFFF', '#000000']);
+    } else if (primary === secondary) {
+        secondary = getRandomElement(Constants.KIT_COLORS.filter(color => color !== primary));
+    }
+    return { primary: primary, secondary: secondary };
 }
-

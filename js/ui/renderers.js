@@ -230,8 +230,13 @@ export function getModalDisplayStatus() {
 }
 
 // --- New Game Setup Modal ---
+/**
+ * Renders the New Game Setup modal.
+ * Map initialization removed as it's no longer used.
+ */
 export function renderNewGameModal() {
     renderGameScreen('newGameModal');
+    // No map to initialize anymore
 }
 
 // --- Opponent Customization Modal ---
@@ -443,8 +448,21 @@ export function renderFinancesScreen(finances) {
     transactionListContainer.innerHTML = tableHTML;
 }
 
-export function renderLeagueScreen(leagueTableData) {
-    console.log("DEBUG: renderLeagueScreen received leagueTableData:", leagueTableData);
+/**
+ * Renders the League Screen with the league name and table data.
+ * @param {string} leagueName - The name of the current league.
+ * @param {Array<object>} leagueTableData - Array of club objects for the league table.
+ */
+export function renderLeagueScreen(leagueName, leagueTableData) {
+    console.log("DEBUG: renderLeagueScreen received leagueName:", leagueName, "and leagueTableData:", leagueTableData);
+    
+    // Update the h2 heading to include the league name
+    const leagueScreenHeading = document.querySelector('#leagueScreen h2');
+    if (leagueScreenHeading) {
+        // Use innerHTML to allow <br> tag for a newline
+        leagueScreenHeading.innerHTML = `${leagueName}<br>League Table`;
+    }
+
     let tableHTML = `
         <table class="data-table">
             <thead>

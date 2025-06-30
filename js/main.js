@@ -50,6 +50,14 @@ import { getContrastingTextColor } from './utils/coloursUtils.js';
 export let gameState = {
     playerClub: null,
     leagues: [],
+    countyCup: {
+        competitionId: null,
+        teams: [], // All teams participating in the cup
+        fixtures: [], // Cup matches generated
+        currentRound: 0, // 0 = not started, 1-8 for rounds
+        playerTeamStatus: 'Not Entered', // 'Entered', 'Active', 'Eliminated', 'Winner'
+        opponentToCustomize: null // Stores info for the specific cup opponent to customize
+    },
     currentSeason: 1,
     currentWeek: 1,
     availableHours: 0,
@@ -59,6 +67,8 @@ export let gameState = {
     gamePhase: Constants.GAME_PHASE.SETUP,
     playerClubCustomized: false,
     opponentClubsCustomized: false,
+    // New: Store the player's chosen county data for consistent generation
+    playerCountyData: null, 
 };
 
 console.log("DEBUG: gameState object initialized.");
@@ -67,28 +77,45 @@ console.log("DEBUG: gameState object initialized.");
 // --- Helper for Calendar Conversion ---
 function getCalendarWeekString(weekNum) {
     if (weekNum <= 0) { return "Invalid Week"; }
-    if (weekNum <= Constants.PRE_SEASON_WEEKS) {
-        return `${Constants.MONTH_NAMES[Constants.SEASON_START_MONTH_INDEX]} Week ${weekNum} (Pre-Season)`;
-    }
-    const weekInRegularSeasonBlock = weekNum - Constants.PRE_SEASON_WEEKS;
-    let cumulativeWeeksInMap = 0;
+
+    let cumulativeWeeks = 0;
     for (let i = 0; i < Constants.GAME_WEEK_TO_MONTH_MAP.length; i++) {
         const monthBlock = Constants.GAME_WEEK_TO_MONTH_MAP[i];
-        const weeksInThisMonthBlock = monthBlock.weeks;
-        if (weekInRegularSeasonBlock > cumulativeWeeksInMap && weekInRegularSeasonBlock <= cumulativeWeeksInMap + weeksInThisMonthBlock) {
-            const monthIndex = (Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12;
-            const weekInMonth = weekInRegularSeasonBlock - cumulativeWeeksInMap;
-            return `${Constants.MONTH_NAMES[monthIndex]} Week ${weekInMonth}`;
+        const monthStartWeek = cumulativeWeeks + 1;
+        const monthEndWeek = cumulativeWeeks + monthBlock.weeks;
+
+        if (weekNum >= monthStartWeek && weekNum <= monthEndWeek) {
+            const weekInMonthBlock = weekNum - cumulativeWeeks;
+            const currentMonthName = Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12];
+            let weekString = `${currentMonthName} (Week ${weekInMonthBlock})`;
+
+            if (monthBlock.isPreSeason) {
+                weekString += ' - Pre-Season';
+            } else if (Constants.COUNTY_CUP_MATCH_WEEKS.includes(weekNum)) {
+                const roundName = Constants.COUNTY_CUP_ROUND_NAMES[weekNum];
+                if (gameState.countyCup.playerTeamStatus === 'Eliminated') {
+                    weekString += ` - ${roundName} (Week Off)`;
+                } else if (gameState.countyCup.playerTeamStatus === 'Winner' && Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(weekNum) > Constants.COUNTY_CUP_ROUND_NAMES.length - 1 - 1 ) { // Check if it's past the final
+                    weekString += ` - Week Off`;
+                }
+                else {
+                     weekString += ` - ${roundName}`;
+                }
+            } else if (Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(weekNum)) {
+                weekString += ` - County Cup Announced`;
+            } else if (monthBlock.isSpecialMonth && currentMonthName === 'December') {
+                 weekString += ' - Special Conditions (Winter)';
+            }
+            return weekString;
         }
-        cumulativeWeeksInMap += weeksInThisMonthBlock;
+        cumulativeWeeks += monthBlock.weeks;
     }
+    
+    // Handle Off-season beyond defined league weeks
     if (weekNum > Constants.TOTAL_LEAGUE_WEEKS) {
-        const offSeasonStartWeek = Constants.TOTAL_LEAGUE_WEEKS + 1;
-        const offSeasonWeekNum = weekNum - offSeasonStartWeek + 1;
-        if (offSeasonWeekNum <= 4) { return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 10) % 12]} Week ${offSeasonWeekNum} (Off-Season)`; }
-        else if (offSeasonWeekNum <= 8) { return `${Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + 11) % 12]} Week ${offSeasonWeekNum - 4} (Off-Season)`; }
-        else { return `Off-Season Week ${offSeasonWeekNum}`; }
+        return `Off-Season Week ${weekNum - Constants.TOTAL_LEAGUE_WEEKS}`;
     }
+
     return `Unknown Period Week ${weekNum}`;
 }
 
@@ -153,11 +180,16 @@ export function updateUI() { // Renamed from updateGameAndUI for clarity
                 const currentLeague = gameState.leagues[0];
                 const allClubsInCurrentLeague = currentLeague ? currentLeague.allClubsData : [];
                 renderers.renderLeagueScreen(
+                    currentLeague?.name, // Pass the league name here
                     leagueData.getLeagueTable(currentLeague?.id, allClubsInCurrentLeague)
                 );
                 break;
             case 'fixturesScreen':
-                renderers.renderFixturesScreen(leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id));
+                // Pass both league and cup fixtures
+                renderers.renderFixturesScreen([
+                    ...leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id),
+                    ...gameState.countyCup.fixtures // Add county cup fixtures
+                ]);
                 break;
             case 'committeeScreen':
                 renderers.renderCommitteeScreen(clubData.getCommittee());
@@ -247,6 +279,16 @@ function initGame() {
         if (gameState.playerClub) {
             playerData.setSquad(gameState.playerClub.squad || []);
             clubData.setCommittee(gameState.playerClub.committee || []);
+            // Ensure playerCountyData is loaded if available
+            if (loadedState.playerCountyData) {
+                gameState.playerCountyData = loadedState.playerCountyData;
+            } else {
+                // Fallback for old saves or if not set, try to derive from playerClub.location if it's a known town
+                // Or set a default
+                console.warn("playerCountyData not found in loaded state. Attempting to derive or set default.");
+                gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF'); // Try postcode or default
+            }
+
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
                  opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
                  const playerClubFromLeague = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
@@ -259,6 +301,7 @@ function initGame() {
             }
             applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
+
         renderers.hideLoadingScreen();
     } else {
         console.log("DEBUG: No save game found. Rendering new game modal.");
@@ -278,7 +321,7 @@ function initGame() {
 /**
  * Starts a brand new game, resetting all game state and populating initial data.
  * This is called from eventHandlers.js after the player provides initial club details.
- * @param {object} playerClubDetails - Object containing hometown, clubName, nickname, primaryColor, secondaryColor.
+ * @param {object} playerClubDetails - Object containing hometown, groundPostcode, countyData, clubName, nickname, primaryColor, secondaryColor.
  */
 export function startNewGame(playerClubDetails) {
     console.log("DEBUG: startNewGame() called with details:", playerClubDetails);
@@ -286,8 +329,27 @@ export function startNewGame(playerClubDetails) {
     renderers.showLoadingScreen();
     const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
 
+    // Store the determined county data in gameState
+    gameState.playerCountyData = playerClubDetails.countyData;
+    // Fallback if no county data was found (e.g., invalid postcode)
+    if (!gameState.playerCountyData) {
+        console.warn("No county data found for provided postcode. Falling back to default Leicestershire data for opponent generation.");
+        // Provide a default county data if lookup failed, to prevent errors in generation
+        gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode('LE12 7TF'); // Default to Sileby's area
+    }
+
+
     // 1. Initialize Player's Club
-    gameState.playerClub = clubData.createPlayerClub(playerClubDetails);
+    // Pass the actual hometown string and the determined countyData
+    gameState.playerClub = clubData.createPlayerClub({
+        hometown: playerClubDetails.hometown, // This is the user-entered town name
+        groundPostcode: playerClubDetails.groundPostcode, // Store the postcode
+        county: gameState.playerCountyData.county, // Store the determined county name
+        clubName: playerClubDetails.clubName,
+        nickname: playerClubDetails.nickname,
+        primaryColor: playerClubDetails.primaryColor,
+        secondaryColor: playerClubDetails.secondaryColor
+    });
     gameState.playerClubCustomized = true;
 
     applyThemeColors(playerClubDetails.primaryColor, playerClubDetails.secondaryColor);
@@ -298,14 +360,20 @@ export function startNewGame(playerClubDetails) {
     playerData.setSquad(initialSquad);
 
     // 3. Generate initial league structure and opponent clubs
+    // Pass the determined county data for opponent and league generation
     const { leagues, clubs } = leagueData.generateInitialLeagues(
-        gameState.playerClub.location,
+        gameState.playerCountyData, // Pass the county data object
         gameState.playerClub.id,
         gameState.playerClub.name
     );
     gameState.leagues = leagues;
     opponentData.setAllOpponentClubs(clubs);
 
+    // Initialize county cup for the first season
+    gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
+    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData]; // All league clubs for the cup initially
+    gameState.countyCup.playerTeamStatus = 'Active'; // Player team is active in cup
+    gameState.countyCup.currentRound = 0; // Not yet drawn for a round
 
     // 4. Set Initial Game State & Phase
     gameState.currentSeason = 1;
@@ -360,6 +428,17 @@ export function applyOpponentCustomization(customizedOpponents) {
             }
         });
         opponentData.setAllOpponentClubs(currentLeague.allClubsData);
+        // Also update the county cup teams with customized names
+        gameState.countyCup.teams.forEach(cupTeam => {
+            const custom = customizedOpponents.find(c => c.id === cupTeam.id);
+            if (custom) {
+                Object.assign(cupTeam, {
+                    name: custom.name,
+                    nickname: custom.nickname,
+                    kitColors: custom.kitColors
+                });
+            }
+        });
     }
 
     gameState.opponentClubsCustomized = true;
@@ -391,7 +470,7 @@ export function loadGame() {
 
     if (loadedState) {
         gameState = loadedState;
-        // Fix: Explicit action for showModal
+        // FIX: Action directly updates UI and navigates home
         renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal();
             renderers.renderGameScreen('homeScreen'); // Go to home screen
@@ -402,6 +481,16 @@ export function loadGame() {
         if (gameState.playerClub) {
             playerData.setSquad(gameState.playerClub.squad || []);
             clubData.setCommittee(gameState.playerClub.committee || []);
+            // Ensure playerCountyData is loaded if available
+            if (loadedState.playerCountyData) {
+                gameState.playerCountyData = loadedState.playerCountyData;
+            } else {
+                // Fallback for old saves or if not set, try to derive from playerClub.location if it's a known town
+                // Or set a default
+                console.warn("playerCountyData not found in loaded state. Attempting to derive or set default.");
+                gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF'); // Try postcode or default
+            }
+
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
                  opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
                  const playerClubFromLeague = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
@@ -417,19 +506,16 @@ export function loadGame() {
 
         renderers.hideLoadingScreen();
     } else {
-        // Fix: Explicit action for showModal
-        renderers.showModal('No Save Found!', 'Starting a new game instead.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
-            renderers.hideModal();
-            renderers.renderNewGameModal(); // Go to new game setup
-            uic.updateUI(); // Update UI for the new game modal
-        }, isPrimary: true }], gameState, updateUICallbacks, 'no_save_found'); // Pass gameState and callbacks
-        console.log("DEBUG: No game save found to load.");
-        gameState = {
-            playerClub: null, leagues: [], currentSeason: 1, currentWeek: 1,
-            availableHours: 0, weeklyTasks: [], clubHistory: [], messages: [],
-            gamePhase: Constants.GAME_PHASE.SETUP, playerClubCustomized: false, opponentClubsCustomized: false,
-        };
+        console.log("DEBUG: No save game found. Rendering new game modal.");
         renderers.hideLoadingScreen();
+        renderers.renderNewGameModal();
+        // FIX: Action directly updates UI and navigates home (or stays on modal)
+        renderers.showModal('Welcome, Chairman!', 'Please set up your club and begin your Non-League Journey.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
+            renderers.hideModal(); // Hide this modal
+            // No screen change here, newGameModal is already displayed
+        }, isPrimary: true }], gameState, updateUICallbacks, 'welcome_new_game'); // Pass gameState and callbacks
+        gameState.gamePhase = Constants.GAME_PHASE.SETUP;
+        applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
     }
     console.log("DEBUG: initGame() finished.");
 }
@@ -453,6 +539,15 @@ export function newGameConfirm() {
                     playerClub: null, leagues: [], currentSeason: 1, currentWeek: 1,
                     availableHours: 0, weeklyTasks: [], clubHistory: [], messages: [],
                     gamePhase: Constants.GAME_PHASE.SETUP, playerClubCustomized: false, opponentClubsCustomized: false,
+                    playerCountyData: null, // Reset county data
+                    countyCup: { // Reset county cup state
+                        competitionId: null,
+                        teams: [],
+                        fixtures: [],
+                        currentRound: 0,
+                        playerTeamStatus: 'Not Entered',
+                        opponentToCustomize: null
+                    },
                 };
                 renderers.renderNewGameModal();
                 applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);

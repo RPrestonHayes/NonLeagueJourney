@@ -115,7 +115,10 @@ export function createPlayerClub(details) {
     currentFinances = newClubFinances;
 
     return {
-        id: clubId, name: details.clubName, nickname: details.nickname, location: details.hometown,
+        id: clubId, name: details.clubName, nickname: details.nickname, 
+        location: details.hometown, // User-entered hometown name
+        groundPostcode: details.groundPostcode, // User-entered postcode
+        county: details.county, // Determined county name
         kitColors: { primary: details.primaryColor, secondary: details.secondaryColor },
         finances: newClubFinances,
         facilities: initialFacilities,
@@ -300,4 +303,3 @@ export function calculateMatchDayRevenue(facilities, currentFanbase) {
 
     return revenue;
 }
-

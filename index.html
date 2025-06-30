@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Non-League Journey</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Removed Leaflet CSS: <link rel="stylesheet" href="js/libs/leaflet/leaflet.css" /> -->
 </head>
 <body>
     <header class="app-header">
@@ -141,8 +142,12 @@
         <div class="modal-content">
             <h3>Start a New Journey!</h3>
             <div class="form-group">
-                <label for="hometownInput">Your Hometown:</label>
-                <input type="text" id="hometownInput" placeholder="e.g., Sileby, Loughborough, Melton Mowbray">
+                <label for="hometownInput">Your Club's Hometown/Village:</label>
+                <input type="text" id="hometownInput" placeholder="e.g., Sileby, Quorn, Syston">
+            </div>
+            <div class="form-group">
+                <label for="groundPostcodeInput">Club Ground Postcode (e.g., LE12 7TF):</label>
+                <input type="text" id="groundPostcodeInput" placeholder="e.g., LE12 7TF">
             </div>
             <div class="form-group">
                 <label for="clubNameInput">Club Name:</label>
@@ -178,9 +183,9 @@
 
     <!-- LZ-String library for save file compression (now local) -->
     <script src="js/libs/lzstring/lz-string.min.js"></script>
+    <!-- Removed Leaflet JS: <script src="js/libs/leaflet/leaflet.js"></script> -->
 
     <!-- Load main JavaScript module -->
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
-

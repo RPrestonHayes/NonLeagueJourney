@@ -473,3 +473,5 @@ body {
     width: 100%;
 }
 
+/* Removed Leaflet map container style: #hometownMap */
+/* Removed Leaflet default icon paths: .leaflet-default-icon-path */

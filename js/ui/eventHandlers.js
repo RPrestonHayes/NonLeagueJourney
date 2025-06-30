@@ -13,6 +13,8 @@ import * as renderers from './renderers.js';
 import * as Constants from '../utils/constants.js';
 // NEW: Import taskLogic to trigger task outcomes immediately
 import * as taskLogic from '../logic/taskLogic.js';
+// Import dataGenerator for postcode lookup
+import * as dataGenerator from '../utils/dataGenerator.js';
 
 
 // --- Cached DOM Elements ---
@@ -25,7 +27,8 @@ const modalCloseBtn = document.getElementById('modalCloseBtn');
 
 // New Game Modal elements
 const newGameModal = document.getElementById('newGameModal');
-const hometownInput = document.getElementById('hometownInput');
+const hometownInput = document.getElementById('hometownInput'); // Now a text input
+const groundPostcodeInput = document.getElementById('groundPostcodeInput'); // New postcode input
 const clubNameInput = document.getElementById('clubNameInput');
 const clubNicknameInput = document.getElementById('clubNicknameInput');
 const primaryColorInput = document.getElementById('primaryColorInput');
@@ -102,14 +105,15 @@ export function initGlobalListeners() {
  * Validates input and calls main.startNewGame.
  */
 function handleCreateGame() {
-    const hometown = hometownInput.value.trim();
+    const hometownName = hometownInput.value.trim();
+    const groundPostcode = groundPostcodeInput.value.trim();
     const clubName = clubNameInput.value.trim();
     const clubNickname = clubNicknameInput.value.trim();
     const primaryColor = primaryColorInput.value;
     const secondaryColor = secondaryColorInput.value;
 
-    if (!hometown || !clubName || !clubNickname) {
-        renderers.showModal('Input Error', 'Please fill in all club details: Hometown, Club Name, and Nickname.', [{ text: 'OK', action: renderers.hideModal }]);
+    if (!hometownName || !groundPostcode || !clubName || !clubNickname) {
+        renderers.showModal('Input Error', 'Please fill in all club details: Hometown, Ground Postcode, Club Name, and Nickname.', [{ text: 'OK', action: renderers.hideModal }]);
         return;
     }
 
@@ -118,8 +122,20 @@ function handleCreateGame() {
         return;
     }
 
+    // Attempt to get county data from the postcode
+    const playerCountyData = dataGenerator.getCountyDataFromPostcode(groundPostcode);
+
+    if (!playerCountyData) {
+        renderers.showModal('Location Error', 'Could not determine a valid county/region from the provided postcode. Please check the postcode or manually adjust opponent names later.', [{ text: 'OK', action: renderers.hideModal }]);
+        // Even if county data isn't found, we can proceed with a fallback.
+        // For now, we'll let the game start, but the generated opponents might be generic.
+        // You could also choose to prevent game start until a valid postcode is entered.
+    }
+
     const playerClubDetails = {
-        hometown: hometown,
+        hometown: hometownName, // This is now just the user-entered string
+        groundPostcode: groundPostcode, // Store the postcode
+        countyData: playerCountyData, // Pass the found county data (or null)
         clubName: clubName,
         nickname: clubNickname,
         primaryColor: primaryColor,
@@ -214,4 +230,3 @@ function handleCompleteTask(buttonElement) {
         }
     }
 }
-

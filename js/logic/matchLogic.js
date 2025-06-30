@@ -14,6 +14,7 @@ import * as Main from '../main.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
 // NEW: Import gameLoop directly for chaining
 import * as gameLoop from './gameLoop.js';
+import * as leagueData from '../data/leagueData.js'; // Import leagueData
 
 
 // --- Helper Functions ---
@@ -357,7 +358,7 @@ function halfTimeAction(matchState, actionType, gameState, updateUICallbacks, di
  */
 function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateUICallbacks, dismissalContext) {
     console.log("DEBUG: Simulating Second Half...");
-    const { homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad } = matchState;
+    const { homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad, matchId, leagueId } = matchState;
 
     // Determine club details for display in match report
     const homeClubDetails = (homeTeamId === playerClub.id) ? playerClub : allOpponentClubs.find(c => c.id === homeTeamId);
@@ -427,8 +428,6 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
     playerSquad.forEach(player => {
         if (player.status.injuryStatus === 'Fit' && !player.status.suspended && dataGenerator.getRandomInt(1, 100) < 5) {
             playerData.updatePlayerStats(player.id, { status: { ...player.status, injuryStatus: "Minor Knock", injuryReturnDate: "Next Week" } });
-            // The line below is redundant as updatePlayerStats already modifies the player object in the squad
-            // player.status.injuryStatus = "Minor Knock";
             Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${player.name} picked up a minor knock in the match!` });
         }
     });
@@ -437,17 +436,35 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
     if (playerAssistProviders.length > 0) reportMessage += ` Assists: ${playerAssistProviders.join(', ')}.`;
     if (playerYellowCards.length > 0 || playerRedCards.length > 0) reportMessage += `\nCards: Yellows: ${playerYellowCards.join(', ') || 'None'}, Reds: ${playerRedCards.join(', ') || 'None'}.`;
 
+    // --- CRUCIAL ADDITION: Update league table and match result for the player's match ---
+    Main.gameState.leagues = leagueData.updateLeagueTable(
+        Main.gameState.leagues,
+        leagueId, // Use the leagueId from matchState
+        homeTeamId,
+        awayTeamId,
+        finalHomeScore,
+        finalAwayScore
+    );
+    Main.gameState.leagues = leagueData.updateMatchResult(
+        Main.gameState.leagues,
+        leagueId, // Use the leagueId from matchState
+        matchId,  // Use the matchId from matchState
+        `${finalHomeScore}-${finalAwayScore}`
+    );
+    // --- END CRUCIAL ADDITION ---
+
+
     renderers.showModal(
         `Full-Time Result: ${homeClubDetails.name} ${finalHomeScore} - ${finalAwayScore} ${awayClubDetails.name}`,
         reportMessage,
-        [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
+        [{ text: 'Continue', action: (gs, uic, context) => {
             renderers.hideModal();
             // Match is over. Now process AI matches for this week and then finalize the week.
-            gameLoop.processAIMatchesAndFinalizeWeek(gs, gs.leagues[0].currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS)), matchState.matchId);
+            gameLoop.processAIMatchesAndFinalizeWeek(gs, gs.leagues[0].currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS)), matchId); // Pass matchId
         }, isPrimary: true }],
-        gameState, // Pass gameState
-        updateUICallbacks, // Pass callbacks
-        dismissalContext // Pass context
+        gameState,
+        updateUICallbacks,
+        dismissalContext
     );
 
     return {

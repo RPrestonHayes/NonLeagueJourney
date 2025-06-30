@@ -10,28 +10,32 @@ import * as clubData from '../data/clubData.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
 import * as Main from '../main.js';
-import * as dataGenerator from '../utils/dataGenerator.js'; // FIX: Import dataGenerator as a namespace
+import * as dataGenerator from '../utils/dataGenerator.js';
 
 
 /**
  * Triggers a random event for the current week.
  * @param {object} gameState - The mutable gameState object.
+ * @param {number} eventChanceMultiplier - Multiplier for event chance (e.g., from December conditions).
  * @returns {object|null} The triggered event object if an event occurs, otherwise null.
  */
-export function triggerRandomEvent(gameState) {
-    const eventRoll = dataGenerator.getRandomInt(1, 100); // Use dataGenerator.getRandomInt
-    const EVENT_CHANCE_PERCENT = 30;
+export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
+    const eventRoll = dataGenerator.getRandomInt(1, 100);
+    const baseEventChancePercent = 30; // Base chance
+    const actualEventChance = baseEventChancePercent * eventChanceMultiplier; // Apply multiplier
 
-    if (eventRoll > EVENT_CHANCE_PERCENT) {
+    if (eventRoll > actualEventChance) {
         return null;
     }
 
     const eventTypes = Object.values(Constants.EVENT_TYPES);
-    const chosenEventType = dataGenerator.getRandomElement(eventTypes); // Use dataGenerator.getRandomElement
+    const chosenEventType = dataGenerator.getRandomElement(eventTypes);
 
     let event = null;
     let eventDisplayTitle = '';
     let eventDisplayMessage = '';
+
+    const updateUICallbacks = Main.getUpdateUICallbacks(); // Get callbacks for modals
 
     switch (chosenEventType) {
         case Constants.EVENT_TYPES.BAD_PITCH_DAMAGE:
@@ -52,7 +56,7 @@ export function triggerRandomEvent(gameState) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Drat!', action: renderers.hideModal }]
+                choices: [{ text: 'Drat!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
             };
             break;
 
@@ -70,7 +74,7 @@ export function triggerRandomEvent(gameState) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Welcome them aboard!', action: renderers.hideModal }]
+                choices: [{ text: 'Welcome them aboard!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
             };
             break;
 
@@ -83,20 +87,20 @@ export function triggerRandomEvent(gameState) {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
                 choices: [
-                    { text: 'Grant Interview (Good PR chance)', action: () => {
+                    { text: 'Grant Interview (Good PR chance)', action: (gs, uic, context) => {
                         let outcomeMsg = '';
                         if (dataGenerator.getRandomInt(1, 100) > 50) {
-                            gameState.playerClub.reputation = Math.min(100, gameState.playerClub.reputation + dataGenerator.getRandomInt(1, 3));
-                            outcomeMsg = `The article was very positive, boosting club reputation slightly to ${gameState.playerClub.reputation}%.`;
+                            gs.playerClub.reputation = Math.min(100, gs.playerClub.reputation + dataGenerator.getRandomInt(1, 3));
+                            outcomeMsg = `The article was very positive, boosting club reputation slightly to ${gs.playerClub.reputation}%.`;
                         } else {
                             outcomeMsg = `The article was a bit mixed, nothing much changes.`;
                         }
-                        renderers.showModal('Publicity Outcome', outcomeMsg, [{ text: 'Continue', action: renderers.hideModal }]); // Use showModal
-                        Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `Journalist interview: ${outcomeMsg}` });
+                        renderers.showModal('Publicity Outcome', outcomeMsg, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => { renderers.hideModal(); uicInner.finalizeWeekProcessing(gsInner, contextInner); } }], gs, uic, context);
+                        gs.messages.push({ week: gs.currentWeek, text: `Journalist interview: ${outcomeMsg}` });
                     }},
-                    { text: 'Decline Interview (Safe)', action: () => {
-                        renderers.showModal('No Publicity', 'You politely declined the interview. No news is good news, right?', [{ text: 'Continue', action: renderers.hideModal }]); // Use showModal
-                        Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `Journalist interview declined.` });
+                    { text: 'Decline Interview (Safe)', action: (gs, uic, context) => {
+                        renderers.showModal('No Publicity', 'You politely declined the interview. No news is good news, right?', [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => { renderers.hideModal(); uicInner.finalizeWeekProcessing(gsInner, contextInner); } }], gs, uic, context);
+                        gs.messages.push({ week: gs.currentWeek, text: `Journalist interview declined.` });
                     }}
                 ]
             };
@@ -118,7 +122,7 @@ export function triggerRandomEvent(gameState) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Oh dear...', action: renderers.hideModal }]
+                choices: [{ text: 'Oh dear...', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
             };
             break;
 
@@ -141,7 +145,7 @@ export function triggerRandomEvent(gameState) {
                 event = {
                     title: eventDisplayTitle,
                     description: eventDisplayMessage,
-                    choices: [{ text: 'Drat!', action: renderers.hideModal }]
+                    choices: [{ text: 'Drat!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
                 };
             } else {
                 return null;
@@ -149,7 +153,7 @@ export function triggerRandomEvent(gameState) {
             break;
 
         case Constants.EVENT_TYPES.GOOD_SMALL_SPONSOR:
-            const sponsorName = `${dataGenerator.getRandomName('first')} ${dataGenerator.getRandomName('last')} Co.`; // Use getRandomName
+            const sponsorName = `${dataGenerator.getRandomName('first')} ${dataGenerator.getRandomName('last')} Co.`;
             const sponsorAmount = dataGenerator.getRandomInt(50, 200);
             gameState.playerClub.finances = clubData.addTransaction(
                 gameState.playerClub.finances,
@@ -164,7 +168,7 @@ export function triggerRandomEvent(gameState) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Accept with thanks!', action: renderers.hideModal }]
+                choices: [{ text: 'Accept with thanks!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
             };
             break;
 
@@ -174,8 +178,8 @@ export function triggerRandomEvent(gameState) {
     }
 
     if (event) {
-        renderers.showModal(event.title, event.description, event.choices);
+        // Pass gameState and updateUICallbacks to renderers.showModal
+        renderers.showModal(event.title, event.description, event.choices, gameState, updateUICallbacks, 'random_event');
     }
     return event;
 }
-

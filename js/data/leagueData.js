@@ -8,19 +8,21 @@
 import * as Constants from '../utils/constants.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
 import * as opponentData from './opponentData.js';
+import * as Main from '../main.js'; // Import Main for gameState access
 
 /**
  * Generates the initial league structure for a new game.
  * This includes the player's primary league and populates it with clubs.
- * @param {string} playerClubLocation - The player's chosen hometown.
+ * @param {object} playerCountyData - The county data object for the player's chosen location.
  * @param {string} playerClubId - The ID of the player's club.
  * @param {string} playerClubName - The name of the player's club.
  * @returns {object} An object containing { leagues: Array<object>, clubs: Array<object> }
  * where 'leagues' contains the league structural data and 'clubs' contains
  * all clubs within those leagues (including player's and opponents).
  */
-export function generateInitialLeagues(playerClubLocation, playerClubId, playerClubName) {
-    const initialLeague = dataGenerator.generateInitialLeagueName(playerClubLocation);
+export function generateInitialLeagues(playerCountyData, playerClubId, playerClubName) {
+    // Pass the county data object to generateInitialLeagueName
+    const initialLeague = dataGenerator.generateInitialLeagueName(playerCountyData);
     initialLeague.id = dataGenerator.generateUniqueId('L'); // Ensure league has a unique ID
     initialLeague.level = 1;
     initialLeague.numTeams = Constants.DEFAULT_LEAGUE_SIZE;
@@ -31,7 +33,7 @@ export function generateInitialLeagues(playerClubLocation, playerClubId, playerC
     const playerClubTemplate = { // Create a template for playerClub with initial leagueStats
         id: playerClubId,
         name: playerClubName,
-        location: playerClubLocation,
+        location: playerCountyData.towns[0] || playerCountyData.county, // Use a town from the county or the county name itself
         nickname: null, // These will be filled from actual playerClub object passed by main.js
         kitColors: null,
         overallTeamQuality: null, // This is player's quality, managed by playerData based on squad
@@ -40,7 +42,8 @@ export function generateInitialLeagues(playerClubLocation, playerClubId, playerC
         leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
     };
 
-    const initialOpponents = opponentData.initializeOpponentClubs(playerClubLocation);
+    // Pass the county data object to initializeOpponentClubs
+    const initialOpponents = opponentData.initializeOpponentClubs(playerCountyData);
 
     // Combine player club and opponent clubs for the league
     // Initialize leagueStats for all clubs if not already present
@@ -51,11 +54,12 @@ export function generateInitialLeagues(playerClubLocation, playerClubId, playerC
         leagueStats: club.leagueStats || { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
     }));
 
-    // Generate fixtures using the new algorithm
+    // Generate league fixtures using the new algorithm
     initialLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
         playerClubId,
         allLeagueClubsData,
-        1 // Season 1
+        1, // Season 1
+        Constants.COMPETITION_TYPE.LEAGUE // Specify competition type
     );
 
     initialLeague.clubs = allLeagueClubsData.map(c => c.id); // Store only IDs
@@ -64,6 +68,97 @@ export function generateInitialLeagues(playerClubLocation, playerClubId, playerC
     console.log("Initial league structure generated:", initialLeague);
     return { leagues: [initialLeague], clubs: allLeagueClubsData }; // Return array of leagues and all clubs
 }
+
+/**
+ * Generates cup fixtures for a given round.
+ * @param {string} competitionId - The ID of the cup competition.
+ * @param {Array<object>} teamsInCup - Array of club objects currently in the cup.
+ * @param {number} season - Current season number.
+ * @param {number} week - The week number for these matches.
+ * @returns {Array<object>} An array of match objects for the cup round.
+ */
+export function generateCupFixtures(competitionId, teamsInCup, season, week) {
+    const cupMatches = [];
+    let availableTeams = [...teamsInCup];
+    const playerClubId = Main.gameState.playerClub.id; // Access player club ID from Main.gameState
+
+    // Ensure even number of teams for pairing, if odd, one team gets a bye
+    if (availableTeams.length % 2 !== 0) {
+        const playerTeamIndex = availableTeams.findIndex(t => t.id === playerClubId);
+        if (playerTeamIndex !== -1) {
+            // If player team is present and odd number, player gets a bye
+            cupMatches.push({
+                id: dataGenerator.generateUniqueId('M'),
+                week: week,
+                season: season,
+                homeTeamId: playerClubId,
+                homeTeamName: Main.gameState.playerClub.name,
+                awayTeamId: 'BYE',
+                awayTeamName: 'BYE',
+                competition: Constants.COMPETITION_TYPE.COUNTY_CUP,
+                result: 'BYE',
+                played: true
+            });
+            availableTeams.splice(playerTeamIndex, 1); // Remove player from available teams
+            // Main.gameState.countyCup.playerTeamStatus is updated in gameLoop.handleCountyCupAnnouncement
+        } else {
+            // If player not present or already eliminated, a random AI team gets a bye
+            const byeTeam = dataGenerator.getRandomElement(availableTeams);
+            cupMatches.push({
+                id: dataGenerator.generateUniqueId('M'),
+                week: week,
+                season: season,
+                homeTeamId: byeTeam.id,
+                homeTeamName: byeTeam.name,
+                awayTeamId: 'BYE',
+                awayTeamName: 'BYE',
+                competition: Constants.COMPETITION_TYPE.COUNTY_CUP,
+                result: 'BYE',
+                played: true
+            });
+            availableTeams = availableTeams.filter(team => team.id !== byeTeam.id);
+        }
+    }
+
+    // Shuffle teams to ensure random draw
+    for (let i = availableTeams.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [availableTeams[i], availableTeams[j]] = [availableTeams[j], availableTeams[i]];
+    }
+
+    // Pair teams for matches
+    for (let i = 0; i < availableTeams.length; i += 2) {
+        const homeTeam = availableTeams[i];
+        const awayTeam = availableTeams[i + 1];
+
+        // Determine if this is a higher-tier opponent for customization
+        let opponentClubFromOutsideLeague = null;
+        const playerLeagueClubs = Main.gameState.leagues[0].allClubsData.map(c => c.id);
+
+        // Check if either home or away team is the player's team AND the opponent is not in the player's league
+        if (homeTeam.id === playerClubId && !playerLeagueClubs.includes(awayTeam.id)) {
+            opponentClubFromOutsideLeague = { ...awayTeam, fromOutsideLeague: true };
+        } else if (awayTeam.id === playerClubId && !playerLeagueClubs.includes(homeTeam.id)) {
+            opponentClubFromOutsideLeague = { ...homeTeam, fromOutsideLeague: true };
+        }
+        
+        cupMatches.push({
+            id: dataGenerator.generateUniqueId('M'),
+            week: week,
+            season: season,
+            homeTeamId: homeTeam.id,
+            homeTeamName: homeTeam.name,
+            awayTeamId: awayTeam.id,
+            awayTeamName: awayTeam.name,
+            competition: Constants.COMPETITION_TYPE.COUNTY_CUP,
+            result: null,
+            played: false,
+            opponentClubFromOutsideLeague: opponentClubFromOutsideLeague // Store for potential customization
+        });
+    }
+    return cupMatches;
+}
+
 
 /**
  * Retrieves the current league table for a given league ID.
@@ -254,4 +349,3 @@ export function processEndOfSeason(currentLeagues, allClubsInGame) {
 
     return updatedLeagues;
 }
-
