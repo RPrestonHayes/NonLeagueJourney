@@ -103,7 +103,7 @@ export function hideLoadingScreen() {
  */
 export function updateTopBarStats(season, weekString, balance) {
     currentSeasonDisplay.textContent = season;
-    currentWeekDisplay.textContent = weekString; // Now expects a string
+    currentWeekDisplay.textContent = weekString;
     currentBalanceDisplay.textContent = `£${balance.toFixed(2)}`;
 }
 
@@ -147,6 +147,7 @@ export function displayMessage(title, message) {
 // --- Generic Modal Display ---
 /**
  * Shows a generic modal with a title, message, and optional action choices.
+ * This is for interactive modals, unlike displayMessage for quick info.
  * @param {string} title - The modal title.
  * @param {string} message - The modal message/description.
  * @param {Array<object>} choices - Optional array of { text: string, action: function, isPrimary: boolean }
@@ -160,8 +161,15 @@ export function showModal(title, message, choices = []) {
         const button = document.createElement('button');
         button.textContent = choice.text;
         button.classList.add('modal-choice-btn', choice.isPrimary ? 'primary-btn' : 'secondary-btn');
+        // The action should typically hide the modal if it's a 'continue' or final decision.
+        // We ensure hideModal is called here if the action function itself doesn't.
         button.onclick = () => {
             choice.action();
+            // Check if modal is still open after action, if so, hide it.
+            // This is a safety measure if an action doesn't explicitly hide it.
+            if (modalOverlay.style.display === 'flex') {
+                hideModal();
+            }
         };
         modalChoices.appendChild(button);
     });
@@ -305,6 +313,10 @@ function calculateOverallPlayerRating(attributes) {
 }
 
 
+/**
+ * Renders the Facilities Screen.
+ * @param {object} facilities - The facilities object from playerClub.
+ */
 export function renderFacilitiesScreen(facilities) {
     console.log("DEBUG: renderFacilitiesScreen received facilities:", facilities);
     let tableHTML = `
@@ -312,8 +324,9 @@ export function renderFacilitiesScreen(facilities) {
             <thead>
                 <tr>
                     <th>Facility</th>
-                    <th>Level</th>
-                    <th>Status</th>
+                    <th>Grade</th> <!-- CHANGED: Display Grade -->
+                    <th>Condition</th> <!-- NEW: Display Condition -->
+                    <th>Status</th> <!-- Changed from old Status, now descriptive condition -->
                     <th>Next Upgrade Cost</th>
                 </tr>
             </thead>
@@ -322,14 +335,29 @@ export function renderFacilitiesScreen(facilities) {
 
     for (const key in facilities) {
         const facility = facilities[key];
-        tableHTML += `
-            <tr>
-                <td>${facility.name}</td>
-                <td>${facility.level}</td>
-                <td>${facility.status}</td>
-                <td>£${facility.currentUpgradeCost ? facility.currentUpgradeCost.toFixed(2) : 'N/A'}</td>
-            </tr>
-        `;
+        // Only render if level > 0 (facility exists or has been built)
+        if (facility.level > 0) {
+            tableHTML += `
+                <tr>
+                    <td>${facility.name}</td>
+                    <td>${facility.grade || 'N/A'}</td> <!-- Display the grade -->
+                    <td>${facility.condition}%</td> <!-- Display the condition -->
+                    <td>${facility.isUsable ? 'Usable' : 'Unplayable'}</td> <!-- Show usability status -->
+                    <td>£${facility.currentUpgradeCost ? facility.currentUpgradeCost.toFixed(2) : 'MAX'}</td>
+                </tr>
+            `;
+        } else if (facility.level === 0) {
+             // For facilities not yet built, display them with N/A or a build cost
+             tableHTML += `
+                <tr>
+                    <td>${facility.name}</td>
+                    <td>N/A</td>
+                    <td>0%</td>
+                    <td>Not Built</td>
+                    <td>£${facility.currentUpgradeCost ? facility.currentUpgradeCost.toFixed(2) : 'N/A'} (Build)</td>
+                </tr>
+            `;
+        }
     }
 
     tableHTML += `
@@ -443,43 +471,41 @@ export function renderFixturesScreen(groupedMatchSchedule) {
 
     if (groupedMatchSchedule && groupedMatchSchedule.length > 0) {
         groupedMatchSchedule.forEach(weekBlock => {
-            if (weekBlock.matches.length === 0) {
-                // If it's a BYE week for all, or no matches scheduled for this week, skip.
-                return;
-            }
-
-            htmlContent += `
-                <div class="fixture-week-block">
-                    <h3>Week ${weekBlock.week}</h3>
-                    <table class="data-table fixture-table">
-                        <thead>
-                            <tr>
-                                <th>Home Team</th>
-                                <th>Score</th>
-                                <th>Away Team</th>
-                                <th>Comp</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-
-            weekBlock.matches.forEach(match => {
-                const score = match.played && match.result ? match.result : 'vs';
+            // Only render week blocks that actually contain matches (excluding those with only BYEs if filtered)
+            if (weekBlock.matches.length > 0) {
                 htmlContent += `
-                    <tr>
-                        <td>${match.homeTeamName}</td>
-                        <td>${score}</td>
-                        <td>${match.awayTeamName}</td>
-                        <td>${match.competition}</td>
-                    </tr>
+                    <div class="fixture-week-block">
+                        <h3>Week ${weekBlock.week}</h3>
+                        <table class="data-table fixture-table">
+                            <thead>
+                                <tr>
+                                    <th>Home Team</th>
+                                    <th>Score</th>
+                                    <th>Away Team</th>
+                                    <th>Comp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
                 `;
-            });
 
-            htmlContent += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
+                weekBlock.matches.forEach(match => {
+                    const score = match.played && match.result ? match.result : 'vs';
+                    htmlContent += `
+                        <tr>
+                            <td>${match.homeTeamName}</td>
+                            <td>${score}</td>
+                            <td>${match.awayTeamName}</td>
+                            <td>${match.competition}</td>
+                        </tr>
+                    `;
+                });
+
+                htmlContent += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
         });
     } else {
         htmlContent += `<p>No fixtures scheduled for this season yet.</p>`;
@@ -570,6 +596,11 @@ export function renderHistoryScreen(clubHistory) {
     clubHistoryListContainer.innerHTML = tableHTML;
 }
 
+/**
+ * Updates the weekly tasks list on the home screen.
+ * @param {Array<object>} tasks - Array of task objects.
+ * @param {number} availableHours - Player's remaining hours for the week.
+ */
 export function updateWeeklyTasksDisplay(tasks, availableHours) {
     if (!weeklyTasksList) return;
 

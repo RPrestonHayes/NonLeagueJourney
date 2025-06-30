@@ -21,42 +21,30 @@ export const GAME_PHASE = {
 export const WEEKLY_BASE_HOURS = 10;
 
 // --- Season Length & Calendar ---
-export const PRE_SEASON_WEEKS = 4; // Weeks 1-4 are pre-season. Matches start in game Week 5.
-export const TOTAL_LEAGUE_MATCH_WEEKS = 22; // For a 12-team league (11 opponents * 2 matches) = 22 match weeks. These occur from game Week 5 onwards.
-export const TOTAL_LEAGUE_WEEKS = PRE_SEASON_WEEKS + TOTAL_LEAGUE_MATCH_WEEKS; // Total weeks in a league season (4 pre-season + 22 regular season = 26 weeks)
-
+export const PRE_SEASON_WEEKS = 4;
+export const TOTAL_LEAGUE_MATCH_WEEKS = 22;
+export const TOTAL_LEAGUE_WEEKS = PRE_SEASON_WEEKS + TOTAL_LEAGUE_MATCH_WEEKS;
 export const COMMITTEE_MEETING_FREQUENCY_WEEKS = 4;
 
-// NEW: Calendar Constants (Revised for clarity and accuracy)
-export const SEASON_START_MONTH_INDEX = 7; // August (0-indexed: Jan=0, Aug=7)
+export const SEASON_START_MONTH_INDEX = 7;
 export const MONTH_NAMES = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// This map defines weeks *relative to the start of the regular season (after pre-season)*.
-// So, the first entry (September) starts at week 1 of the "regular season block".
-// Example: Game Week 5 is Regular Season Week 1, which is September Week 1.
-// Total weeks in this map must sum up to TOTAL_LEAGUE_MATCH_WEEKS (22 weeks).
 export const GAME_WEEK_TO_MONTH_MAP = [
-    { monthIdxOffset: 1, weeks: 4, name: 'September' }, // Regular Season Weeks 1-4  (Game Weeks 5-8)
-    { monthIdxOffset: 2, weeks: 4, name: 'October' },    // Regular Season Weeks 5-8  (Game Weeks 9-12)
-    { monthIdxOffset: 3, weeks: 4, name: 'November' },   // Regular Season Weeks 9-12 (Game Weeks 13-16)
-    { monthIdxOffset: 4, weeks: 4, name: 'December' },   // Regular Season Weeks 13-16 (Game Weeks 17-20)
-    { monthIdxOffset: 5, weeks: 4, name: 'January' },    // Regular Season Weeks 17-20 (Game Weeks 21-24)
-    { monthIdxOffset: 6, weeks: 2, name: 'February' },   // Regular Season Weeks 21-22 (Game Weeks 25-26 - Season End)
-    // Total weeks so far: 4+4+4+4+4+2 = 22. This matches TOTAL_LEAGUE_MATCH_WEEKS.
-    // So, game week 26 is the last week of regular season matches (February Week 2, for example).
+    { monthIdxOffset: 1, weeks: 4, name: 'September' },
+    { monthIdxOffset: 2, weeks: 4, name: 'October' },
+    { monthIdxOffset: 3, weeks: 4, name: 'November' },
+    { monthIdxOffset: 4, weeks: 4, name: 'December' },
+    { monthIdxOffset: 5, weeks: 4, name: 'January' },
+    { monthIdxOffset: 6, weeks: 2, name: 'February' },
 ];
 
-// Total weeks in a full game year cycle (including off-season)
-// This will define how many weeks into off-season it will show before a new season truly starts.
-// For example, if season ends at Week 26, then Week 27 starts off-season.
-// A full year is 52 weeks.
 export const TOTAL_GAME_WEEKS_IN_YEAR = 52;
 
 
-// --- Player Attributes (Shortcodes for display/storage) ---
+// --- Player Attributes ---
 export const PLAYER_ATTRIBUTES = {
     PAC: 'Pace', STA: 'Stamina', STR: 'Strength', AGI: 'Agility', JUM: 'Jumping Reach',
     FT: 'First Touch', DRI: 'Dribbling', PAS: 'Passing', SHO: 'Shooting', TKL: 'Tackling',
@@ -66,7 +54,7 @@ export const PLAYER_ATTRIBUTES = {
     TMW: 'Teamwork', WRK: 'Work Rate',
 };
 
-// --- Player Positions (Shortcodes) ---
+// --- Player Positions ---
 export const PLAYER_POSITIONS = {
     GK: 'Goalkeeper', SW: 'Sweeper', CB: 'Centre Back', LB: 'Left Back', RB: 'Right Back',
     LWB: 'Left Wing Back', RWB: 'Right Wing Back', CDM: 'Defensive Midfielder', CM: 'Central Midfielder',
@@ -85,11 +73,21 @@ export const COMMITTEE_ROLES = {
     SOC: 'Social Secretary', PLYR_REP: 'Player Representative', V_COORD: 'Volunteer Coordinator'
 };
 
-// --- Facilities ---
+// --- Facilities (with new grades and condition properties) ---
 export const FACILITIES = {
-    PITCH: 'Pitch Condition', CHGRMS: 'Changing Rooms', TOILETS: 'Toilets', SNACKBAR: 'Snack Bar',
-    COVERED_STAND: 'Covered Standing', TURNSTILES: 'Turnstiles',
+    PITCH: 'Pitch Condition',
+    CHGRMS: 'Changing Rooms',
+    TOILETS: 'Toilets',
+    SNACKBAR: 'Snack Bar',
+    COVERED_STAND: 'Covered Standing',
+    TURNSTILES: 'Turnstiles',
+    // New types of tasks for facilities maintenance/improvement
+    IMPROVE_PITCH_COND: 'Improve Pitch Condition',
+    CLEAN_CHGRMS: 'Clean Changing Rooms',
+    REPAIR_EQUIPMENT: 'Repair Equipment',
 };
+
+export const FACILITY_GRADES = ['F', 'E', 'D', 'C', 'B', 'A']; // F is lowest, A is highest
 
 // --- Finance Transaction Types ---
 export const TRANSACTION_TYPE = {
@@ -99,11 +97,21 @@ export const TRANSACTION_TYPE = {
     OTHER_EXP: 'Other Expense', PRIZE_MONEY: 'Prize Money'
 };
 
-// --- Weekly Tasks ---
+// --- Weekly Tasks (updated with new types and context for facility maintenance) ---
 export const WEEKLY_TASK_TYPES = {
-    PITCH_MAINT: 'Pitch Maintenance', PLAYER_CONVO: 'Player Conversation', RECRUIT_PLYR: 'Recruit New Player',
-    PLAN_FUNDRAISE: 'Plan Fundraising Event', COMM_ENGAGE: 'Engage Committee',
-    FAC_CHECK: 'Facility Check', SPONSOR_SEARCH: 'Search for Sponsors', ADMIN_WORK: 'General Admin'
+    PITCH_MAINT: 'Pitch Maintenance (General)', // Renamed for clarity
+    PLAYER_CONVO: 'Player Conversation',
+    RECRUIT_PLYR: 'Recruit New Player',
+    PLAN_FUNDRAISE: 'Plan Fundraising Event',
+    COMM_ENGAGE: 'Engage Committee',
+    FAC_CHECK: 'Facility Check (General)', // Renamed
+    SPONSOR_SEARCH: 'Search for Sponsors',
+    ADMIN_WORK: 'General Admin',
+
+    // Specific maintenance tasks (these might be dynamically added)
+    FIX_PITCH_DAMAGE: 'Repair Pitch Damage',
+    CLEAN_CHGRMS_SPECIFIC: 'Deep Clean Changing Rooms', // More specific than FAC_CHECK
+    // REPAIR_EQUIPMENT is now a general event outcome rather than fixed task
 };
 
 // --- Random Event Types ---

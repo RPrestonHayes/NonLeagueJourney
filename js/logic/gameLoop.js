@@ -40,20 +40,23 @@ export function advanceWeek(gameState) {
          return;
     }
 
-    // 1. Process Player's Weekly Tasks (only those marked as assigned/completed)
+    // 1. Process Player's Weekly Tasks
     processPlayerTasks(gameState);
 
-    // 2. Apply Weekly Expenses
+    // 2. Apply Natural Facility Decay/Improvement & Check Grade Degradation (NEW)
+    applyNaturalFacilityChanges(gameState);
+
+    // 3. Apply Weekly Expenses
     applyWeeklyExpenses(gameState);
 
-    // 3. Check for Monthly Committee Meeting
+    // 4. Check for Monthly Committee Meeting
     if (gameState.currentWeek > 0 && gameState.currentWeek % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 0) {
         console.log("Monthly committee meeting scheduled.");
         committeeLogic.startCommitteeMeeting(gameState);
         gameState.messages.push({ week: gameState.currentWeek, text: `Monthly committee meeting held.` });
     }
 
-    // 4. Trigger Random Event
+    // 5. Trigger Random Event
     if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS || gameState.gamePhase === Constants.GAME_PHASE.PRE_SEASON_PLANNING) {
         const triggeredEvent = eventLogic.triggerRandomEvent(gameState);
         if (triggeredEvent) {
@@ -61,16 +64,12 @@ export function advanceWeek(gameState) {
         }
     }
 
-    // 5. Simulate Matches for the current week (if any)
+    // 6. Simulate Matches for the current week (if any)
     const currentLeague = gameState.leagues[0];
-    let matchesPlayedThisWeek = false; // Flag to track if any matches were played
+    let matchesPlayedThisWeek = false;
 
-    // Check if it's within match playing weeks (after pre-season, within total match weeks)
     if (gameState.currentWeek > Constants.PRE_SEASON_WEEKS && gameState.currentWeek <= Constants.TOTAL_LEAGUE_WEEKS && currentLeague) {
-        // Adjust the week for fixture lookup to be relative to league match start
-        const matchWeekIndex = gameState.currentWeek - Constants.PRE_SEASON_WEEKS; // 1-indexed for the fixtures array
-
-        // Find the week block for the current matchWeekIndex
+        const matchWeekIndex = gameState.currentWeek - Constants.PRE_SEASON_WEEKS;
         const currentWeekBlock = currentLeague.currentSeasonFixtures.find(
             weekBlock => weekBlock.week === matchWeekIndex
         );
@@ -79,23 +78,33 @@ export function advanceWeek(gameState) {
             console.log(`DEBUG: Matches scheduled for Game Week ${gameState.currentWeek} (Fixture Week ${matchWeekIndex}):`, currentWeekBlock.matches.length);
             gameState.gamePhase = Constants.GAME_PHASE.MATCH_DAY;
 
-            let playerMatchResult = null; // To store player's match result for modal
+            let playerMatchResult = null;
 
-            // Iterate through all matches scheduled for this specific week
             for (const match of currentWeekBlock.matches) {
-                // Skip if this match has already been played (e.g., BYE match handled earlier)
                 if (match.played) continue;
 
-                // Simulate match
+                // Check if player's pitch is unplayable BEFORE simulating match
+                if ((match.homeTeamId === gameState.playerClub.id) && !gameState.playerClub.facilities[Constants.FACILITIES.PITCH].isUsable) {
+                    renderers.showModal('Match Postponed!', `Your pitch is unplayable! The match against ${match.awayTeamName} has been postponed.`, [{ text: 'Drat!', action: renderers.hideModal }]);
+                    gameState.messages.push({ week: gameState.currentWeek, text: `Match against ${match.awayTeamName} postponed due to unplayable pitch.` });
+                    match.result = "P-P"; // Postponed
+                    match.played = true; // Mark as "handled"
+                    // This postponed match needs to be rescheduled later (future feature)
+                    continue; // Skip simulation for this match
+                }
+
                 const matchResult = matchLogic.simulateMatch(
                     match.homeTeamId,
                     match.awayTeamId,
                     gameState.playerClub,
-                    opponentData.getAllOpponentClubs(gameState.playerClub.id), // Ensure playerClubId is passed for filtering
+                    opponentData.getAllOpponentClubs(gameState.playerClub.id),
                     playerData.getSquad()
                 );
 
-                // Update league table for both teams involved
+                // Apply match-day damage to facilities (Pitch, Changing Rooms) (NEW)
+                applyMatchDayFacilityDamage(gameState, match.homeTeamId === gameState.playerClub.id);
+
+
                 gameState.leagues = leagueData.updateLeagueTable(
                     gameState.leagues,
                     currentLeague.id,
@@ -105,7 +114,6 @@ export function advanceWeek(gameState) {
                     matchResult.awayScore
                 );
 
-                // Mark this specific match object as played with its result
                 gameState.leagues = leagueData.updateMatchResult(
                     gameState.leagues,
                     currentLeague.id,
@@ -113,7 +121,6 @@ export function advanceWeek(gameState) {
                     `${matchResult.homeScore}-${matchResult.awayScore}`
                 );
 
-                // If this was the player's match, store its result for a dedicated modal
                 if (match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id) {
                     playerMatchResult = matchResult;
                     console.log(`DEBUG: Player match simulated. Result: ${matchResult.homeScore}-${matchResult.awayScore}`);
@@ -123,7 +130,6 @@ export function advanceWeek(gameState) {
                 matchesPlayedThisWeek = true;
             }
 
-            // After all matches for the week are simulated, display player's match result
             if (playerMatchResult) {
                 renderers.showModal(
                     `Match Result: ${playerMatchResult.homeTeamName} ${playerMatchResult.homeScore}-${playerMatchResult.awayScore} ${playerMatchResult.awayTeamName}`,
@@ -132,11 +138,9 @@ export function advanceWeek(gameState) {
                 );
                 gameState.messages.push({ week: gameState.currentWeek, text: `Match Result: ${playerMatchResult.homeTeamName} ${playerMatchResult.homeScore}-${playerMatchResult.awayScore} ${playerMatchResult.awayTeamName}` });
             } else if (currentWeekBlock.matches.filter(m => m.awayTeamId !== 'BYE').length > 0) {
-                // If there were matches but player had a BYE or no match this week but others played
                 renderers.displayMessage('League Matches Played', 'Other league matches were played this week.');
                 gameState.messages.push({ week: gameState.currentWeek, text: `Other league matches played this week.` });
             }
-
 
         } else {
             console.log(`DEBUG: No matches found in week block ${matchWeekIndex}. Player may have a BYE or it's a gap week.`);
@@ -145,25 +149,25 @@ export function advanceWeek(gameState) {
         }
     } else {
         console.log(`DEBUG: Not within league match weeks (Current Week: ${gameState.currentWeek}, Pre-Season Weeks: ${Constants.PRE_SEASON_WEEKS}, Total League Weeks: ${Constants.TOTAL_LEAGUE_WEEKS}).`);
-        // Only show 'Quiet Week' if not already showing an event modal etc.
-        if (!matchesPlayedThisWeek) { // Avoid double messages if random event already popped up
+        if (!matchesPlayedThisWeek) {
              renderers.displayMessage('Quiet Week', 'Focus on building your club!');
              gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
         }
     }
 
-    // 6. Update Player Fitness/Morale (Post-match/Weekly Decay)
+    // 7. Update Player Fitness/Morale (Post-match/Weekly Decay)
     updatePlayerStatus(gameState);
 
 
-    // 7. Advance Week Counter
+    // 8. Advance Week Counter
     gameState.currentWeek++;
 
-    // 8. Check for End of Season
+    // 9. Check for End of Season
     if (gameState.currentWeek > Constants.TOTAL_LEAGUE_WEEKS) {
         endSeason(gameState);
     } else {
         gameState.availableHours = Constants.WEEKLY_BASE_HOURS;
+        // Re-generate tasks based on new facility conditions
         gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
         gameState.gamePhase = Constants.GAME_PHASE.WEEKLY_PLANNING;
     }
@@ -174,8 +178,84 @@ export function advanceWeek(gameState) {
 }
 
 /**
+ * Applies natural weekly facility changes (decay/improvement) and checks for grade degradation. (NEW)
+ * @param {object} gameState - The current mutable gameState object.
+ */
+function applyNaturalFacilityChanges(gameState) {
+    const facilities = gameState.playerClub.facilities;
+    for (const key in facilities) {
+        const facility = facilities[key];
+        if (facility.level > 0) { // Only apply to built facilities
+            // Natural improvement (e.g., Groundsman for Pitch)
+            if (facility.naturalImprovementPerWeek > 0) {
+                const groundsman = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.GRNDS);
+                let improvementAmount = facility.naturalImprovementPerWeek;
+                if (groundsman) { // Groundsman improves pitch naturally
+                    improvementAmount += Math.round(groundsman.skills.groundsKeepingSkill / 2); // Bonus from skilled groundsman
+                }
+                gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, key, improvementAmount
+                );
+                // console.log(`DEBUG: ${facility.name} natural improvement: +${improvementAmount}%. New condition: ${gameState.playerClub.facilities[key].condition}`);
+            }
+
+            // Check for grade degradation
+            const degradedFacilities = clubData.degradeFacilityGrade(gameState.playerClub.facilities, key);
+            if (degradedFacilities) {
+                gameState.playerClub.facilities = degradedFacilities;
+                gameState.messages.push({ week: gameState.currentWeek, text: `${facility.name} condition has been poor, degrading to Grade ${gameState.playerClub.facilities[key].grade}.` });
+                renderers.displayMessage('Facility Degraded!', `${facility.name} has degraded to Grade ${gameState.playerClub.facilities[key].grade}!`);
+            }
+        }
+    }
+}
+
+/**
+ * Applies match-day specific facility damage (e.g., pitch wear, changing room mess). (NEW)
+ * Only applies if the match was played at the player's home ground.
+ * @param {object} gameState - The current mutable gameState object.
+ * @param {boolean} isHomeMatch - True if the match was played at player's home ground.
+ */
+function applyMatchDayFacilityDamage(gameState, isHomeMatch) {
+    if (!isHomeMatch) return; // Only home matches damage your facilities
+
+    const facilities = gameState.playerClub.facilities;
+    const teamMorale = gameState.playerClub.squad.reduce((sum, p) => sum + p.status.morale, 0) / gameState.playerClub.squad.length;
+
+    // Pitch damage
+    if (facilities[Constants.FACILITIES.PITCH].level > 0) {
+        let pitchDamage = facilities[Constants.FACILITIES.PITCH].damagePerMatch; // Base damage (e.g., 50%)
+        // Randomize damage slightly
+        pitchDamage = getRandomInt(Math.round(pitchDamage * 0.7), pitchDamage); // 70-100% of base damage
+
+        gameState.playerClub.facilities = clubData.updateFacilityCondition(
+            gameState.playerClub.facilities, Constants.FACILITIES.PITCH, -pitchDamage
+        );
+        // console.log(`DEBUG: Pitch damaged by match: -${pitchDamage}%. New condition: ${gameState.playerClub.facilities[Constants.FACILITIES.PITCH].condition}`);
+        gameState.messages.push({ week: gameState.currentWeek, text: `Pitch condition reduced by match wear.` });
+    }
+
+    // Changing Rooms damage (affected by team morale)
+    if (facilities[Constants.FACILITIES.CHGRMS].level > 0) {
+        let crDamage = facilities[Constants.FACILITIES.CHGRMS].damagePerMatch; // Base damage (e.g., 10%)
+        // If team morale is low (<50%), damage increases significantly
+        if (teamMorale < 50) {
+            const moralePenaltyFactor = (50 - teamMorale) / 100; // e.g., 1% below 50 means 1% more damage
+            crDamage += Math.round(facilities[Constants.FACILITIES.CHGRMS].damagePerMatch * 2 * moralePenaltyFactor); // Up to double base damage for very low morale
+        }
+        crDamage = getRandomInt(Math.round(crDamage * 0.7), crDamage); // Randomize final damage
+
+        gameState.playerClub.facilities = clubData.updateFacilityCondition(
+            gameState.playerClub.facilities, Constants.FACILITIES.CHGRMS, -crDamage
+        );
+        // console.log(`DEBUG: Changing Rooms damaged by match: -${crDamage}%. New condition: ${gameState.playerClub.facilities[Constants.FACILITIES.CHGRMS].condition}`);
+        gameState.messages.push({ week: gameState.currentWeek, text: `Changing rooms condition reduced by match activity.` });
+    }
+}
+
+
+/**
  * Processes the tasks that the player has allocated hours to for the current week.
- * Applies effects of tasks to game state.
  * @param {object} gameState - The current mutable gameState object.
  */
 function processPlayerTasks(gameState) {
@@ -191,16 +271,32 @@ function processPlayerTasks(gameState) {
         let taskMessage = '';
 
         switch (task.type) {
-            case Constants.WEEKLY_TASK_TYPES.PITCH_MAINT:
-                const maintenanceCost = 20 + (gameState.playerClub.facilities[Constants.FACILITIES.PITCH].level * 5);
-                gameState.playerClub.finances = clubData.addTransaction(
-                    gameState.playerClub.finances,
-                    -maintenanceCost,
-                    Constants.TRANSACTION_TYPE.PITCH_EXPENSE,
-                    'Weekly Pitch Maintenance'
+            case Constants.WEEKLY_TASK_TYPES.PITCH_MAINT: // This is now general pitch maintenance
+                // Improve pitch condition based on task hours (which is baseHours now)
+                let pitchImprovement = task.baseHours * 2; // e.g. 8 hrs task -> 16% improvement
+                const groundsman = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.GRNDS);
+                if (groundsman) {
+                    pitchImprovement += Math.round(groundsman.skills.groundsKeepingSkill); // Bonus from skilled groundsman
+                }
+                gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, Constants.FACILITIES.PITCH, pitchImprovement
                 );
-                taskMessage = `Pitch maintenance completed. Cost £${maintenanceCost.toFixed(2)}.`;
+                taskMessage = `Pitch condition improved by ${pitchImprovement}%.`;
                 break;
+            case Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE: // Specific task for damage
+                 let repairAmount = task.baseHours * 3; // More effective for specific damage
+                 gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, Constants.FACILITIES.PITCH, repairAmount
+                 );
+                 taskMessage = `Pitch damage repaired, condition improved by ${repairAmount}%.`;
+                 break;
+            case Constants.WEEKLY_TASK_TYPES.CLEAN_CHGRMS_SPECIFIC: // Specific task for changing rooms
+                 let cleanAmount = task.baseHours * 4; // Cleaning is quite effective
+                 gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, Constants.FACILITIES.CHGRMS, cleanAmount
+                 );
+                 taskMessage = `Changing rooms deep cleaned, condition improved by ${cleanAmount}%.`;
+                 break;
             case Constants.WEEKLY_TASK_TYPES.PLAYER_CONVO:
                 const eligiblePlayers = playerData.getSquad().filter(p => p.status.morale < 80);
                 const playerToTalkTo = dataGenerator.getRandomElement(eligiblePlayers.length > 0 ? eligiblePlayers : playerData.getSquad());
@@ -363,6 +459,7 @@ function endSeason(gameState) {
     gameState.leagues[0] = currentLeague;
 
     gameState.availableHours = Constants.WEEKLY_BASE_HOURS * 2;
+    // regenerate tasks based on potentially updated facilities after end of season
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
 
     renderers.renderGameScreen('homeScreen');

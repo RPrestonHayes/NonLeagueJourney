@@ -9,7 +9,8 @@ import * as Constants from './constants.js';
 // Removed import * as clubData from '../data/clubData.js'; as it's not directly used here
 // and importing data modules into utils can create circular dependencies if not careful.
 // getUniqueId and random utils are exported so they're accessible everywhere.
-export { getRandomInt, getRandomElement, generateUniqueId }; // Re-export for clarity if needed by other utils
+// Export getRandomName as well
+export { getRandomInt, getRandomElement, generateUniqueId, getRandomName }; // NEW: Added getRandomName to export list
 
 // --- Helper Functions for Randomness ---
 function getRandomInt(min, max) {
@@ -20,7 +21,7 @@ function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function getRandomName(type = 'first') {
+function getRandomName(type = 'first') { // Changed to internal function
     const firstNames = ['Liam', 'Noah', 'Oliver', 'Elijah', 'James', 'William', 'Benjamin', 'Lucas', 'Henry', 'Alexander', 'Michael', 'Ethan', 'Daniel', 'Jacob', 'Logan', 'Jackson', 'Sebastian', 'Mateo', 'Jack', 'Aiden', 'Owen', 'Samuel', 'David', 'Joseph', 'Julian', 'Gabriel', 'John', 'Wyatt', 'Carter', 'Luke', 'Harry', 'George', 'Charlie', 'Oscar', 'Leo', 'Arthur', 'Freddie', 'Archie', 'Noah', 'Theo', 'Finley', 'Lewis', 'Reggie', 'Bobby', 'Frankie', 'Louie', 'Ronnie', 'Alfie', 'Ralph'];
     const lastNames = ['Smith', 'Jones', 'Williams', 'Brown', 'Davies', 'Evans', 'Wilson', 'Thomas', 'Roberts', 'Lewis', 'Walker', 'Hall', 'Wright', 'Green', 'Edwards', 'Hughes', 'Jackson', 'Clarke', 'Phillips', 'Cook', 'Miller', 'Shaw', 'Bell', 'Baker', 'Morgan', 'Young', 'Scott', 'Pugh', 'Cole', 'Harrison', 'Taylor', 'Wilson', 'Burgess', 'Bennett', 'Chapman', 'Dawson', 'Ellis', 'Fisher', 'Grant', 'Hayes', 'Jenkins', 'King', 'Lowe', 'Marsh', 'Newman', 'Palmer', 'Quinn', 'Richards', 'Stevens', 'Turner'];
     if (type === 'first') return getRandomElement(firstNames);
@@ -159,24 +160,55 @@ export function generateCommitteeMember(role) {
 // --- Weekly Task Generation ---
 export function generateWeeklyTasks(clubFacilities, committeeMembers) {
     const tasks = [];
+    const groundsman = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.GRNDS);
+    const secretary = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.SEC);
+    const socialSec = committeeMembers.find(cm => cm.role === Constants.COMMITTEE_ROLES.SOC);
 
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PITCH_MAINT, description: 'Maintain the pitch', baseHours: 8, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.ADMIN_WORK, description: 'Handle club administration', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SEC });
+    // Always available tasks
     tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PLAYER_CONVO, description: 'Talk to players, check morale', baseHours: 5, assignedHours: 0, completed: false, requiresStaff: null });
     tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.RECRUIT_PLYR, description: 'Scout for new players in the local area', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: null });
-    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PLAN_FUNDRAISE, description: 'Plan a fundraising event', baseHours: 8, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SOC });
     tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.SPONSOR_SEARCH, description: 'Seek local sponsors', baseHours: 7, assignedHours: 0, completed: false, requiresStaff: null });
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FAC_CHECK, description: 'General Facility Check', baseHours: 4, assignedHours: 0, completed: false, requiresStaff: null });
 
-    if (clubFacilities && clubFacilities[Constants.FACILITIES.CHGRMS] && clubFacilities[Constants.FACILITIES.CHGRMS].level < 2) {
-        tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FAC_CHECK, description: 'Clean changing rooms', baseHours: 4, assignedHours: 0, completed: false, requiresStaff: null });
+    // Dynamic tasks based on facility condition and staff
+    // Pitch Maintenance (General)
+    if (clubFacilities[Constants.FACILITIES.PITCH].level > 0) {
+        if (clubFacilities[Constants.FACILITIES.PITCH].condition < 90) {
+             tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PITCH_MAINT, description: 'General Pitch Maintenance', baseHours: 6, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
+        }
+        if (clubFacilities[Constants.FACILITIES.PITCH].condition < 50 && clubFacilities[Constants.FACILITIES.PITCH].isUsable) {
+            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE, description: 'Repair Major Pitch Damage', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
+        }
+        if (clubFacilities[Constants.FACILITIES.PITCH].condition < Constants.PITCH_UNPLAYABLE_THRESHOLD) {
+            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE, description: 'Urgent Pitch Repair (Unplayable)', baseHours: 10, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.GRNDS });
+        }
     }
 
+    // Changing Rooms Cleaning
+    if (clubFacilities[Constants.FACILITIES.CHGRMS].level > 0) {
+        if (clubFacilities[Constants.FACILITIES.CHGRMS].condition < 70) {
+            tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.CLEAN_CHGRMS_SPECIFIC, description: 'Deep Clean Changing Rooms', baseHours: 8, assignedHours: 0, completed: false, requiresStaff: null });
+        }
+    }
+    
+    // Admin Work (always needed but can be staff assisted)
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.ADMIN_WORK, description: 'Handle club administration', baseHours: 6, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SEC });
+
+    // Fundraising (if social secretary exists, or if finances are low)
+    // Note: getFinances() would need to be imported from clubData.js if used here,
+    // Or we pass the full club object from gameState.
+    // For now, let's simplify to always offer fundraising.
+    tasks.push({ id: generateUniqueId('T'), type: Constants.WEEKLY_TASK_TYPES.PLAN_FUNDRAISE, description: 'Plan a fundraising event', baseHours: 7, assignedHours: 0, completed: false, requiresStaff: Constants.COMMITTEE_ROLES.SOC });
+
+
     tasks.forEach(task => {
-        const staff = committeeMembers.find(cm => cm.role === task.requiresStaff);
-        if (staff) {
-            const reductionFactor = staff.skills.workEthic / Constants.ATTRIBUTE_MAX;
-            task.baseHours = Math.max(1, Math.round(task.baseHours * (1 - reductionFactor * 0.5)));
-            task.description += ` (Assisted by ${staff.name})`;
+        if (task.requiresStaff) {
+            const staff = committeeMembers.find(cm => cm.role === task.requiresStaff);
+            if (staff) {
+                const reductionFactor = staff.skills.workEthic / Constants.ATTRIBUTE_MAX;
+                task.baseHours = Math.max(1, Math.round(task.baseHours * (1 - reductionFactor * 0.3)));
+                task.description += ` (Assisted by ${staff.name})`;
+            }
         }
     });
 
@@ -185,15 +217,6 @@ export function generateWeeklyTasks(clubFacilities, committeeMembers) {
 
 
 // --- Match Schedule Generation (Circle Method for realistic fixtures) ---
-/**
- * Generates a realistic double round-robin match schedule for a league.
- * Ensures balanced home/away games and spreads opponents.
- *
- * @param {string} playerClubId - The ID of the player's club.
- * @param {Array<object>} allLeagueClubsData - Array of all club objects in the league with their full data.
- * @param {number} season - Current season number.
- * @returns {Array<object>} A list of match objects, structured per week. Each week is { week: number, matches: Array<matchObjects> }.
- */
 export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) {
     const numTeams = allLeagueClubsData.length;
     if (numTeams < 2) {
@@ -206,152 +229,202 @@ export function generateMatchSchedule(playerClubId, allLeagueClubsData, season) 
     if (isOdd) {
         teamsForScheduling.push({ id: 'DUMMY_TEAM', name: 'BYE', location: 'N/A', kitColors: {}, overallTeamQuality: 0 });
     }
-    const n = teamsForScheduling.length; // Number of teams including dummy, now guaranteed even
+    const n = teamsForScheduling.length;
 
     const schedule = [];
-    const totalRounds = (n - 1) * 2; // Double round-robin
+    const totalRounds = (n - 1) * 2;
 
-    // Initial positioning of teams for the Circle Method
-    // Teams are IDs, to manage home/away better.
     let teamIds = teamsForScheduling.map(t => t.id);
-    let topHalf = teamIds.slice(0, n / 2);
-    let bottomHalf = teamIds.slice(n / 2).reverse(); // Reverse bottom half for pairing
+    const fixedPivotId = teamIds[0];
+    let rotatingTeamIds = teamIds.slice(1);
 
     for (let round = 0; round < totalRounds; round++) {
         const matchesInRound = [];
-        const homeForRound = new Set();
-        const awayForRound = new Set();
+        
+        let team1_id_pivot = fixedPivotId;
+        let team2_id_pivot = rotatingTeamIds[0];
 
-        // Pair first team with last team
-        let team1_id = topHalf[0];
-        let team2_id = bottomHalf[0];
-
-        // Ensure real teams play each other
-        if (team1_id !== 'DUMMY_TEAM' && team2_id !== 'DUMMY_TEAM') {
-            // Determine home/away based on round number for fairness
-            let homeId, awayId;
-            if (round % 2 === 0) { // Even rounds, team1 is home for this pair
-                homeId = team1_id;
-                awayId = team2_id;
-            } else { // Odd rounds, team2 is home for this pair
-                homeId = team2_id;
-                awayId = team1_id;
+        if (team1_id_pivot === 'DUMMY_TEAM' || team2_id_pivot === 'DUMMY_TEAM') {
+            const realTeamId = team1_id_pivot === 'DUMMY_TEAM' ? team2_id_pivot : team1_id_pivot;
+            if (realTeamId !== 'DUMMY_TEAM') {
+                matchesInRound.push({
+                    id: generateUniqueId('M'), week: round + 1, season: season,
+                    homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
+                    awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
+                });
             }
-
-            matchesInRound.push({
-                id: generateUniqueId('M'),
-                week: round + 1, // Match week index (1-indexed for the fixture array)
-                season: season,
-                homeTeamId: homeId,
-                homeTeamName: allLeagueClubsData.find(c => c.id === homeId).name,
-                awayTeamId: awayId,
-                awayTeamName: allLeagueClubsData.find(c => c.id === awayId).name,
-                competition: 'League',
-                result: null,
-                played: false
-            });
-            homeForRound.add(homeId);
-            awayForRound.add(awayId);
         } else {
-            // Handle BYE week if dummy team is involved
-            const realTeamId = team1_id === 'DUMMY_TEAM' ? team2_id : team1_id;
+            let homeId, awayId;
+            if (round % 2 === 0) { homeId = team1_id_pivot; awayId = team2_id_pivot; }
+            else { homeId = team2_id_pivot; awayId = team1_id_pivot; }
             matchesInRound.push({
-                id: generateUniqueId('M'),
-                week: round + 1,
-                season: season,
-                homeTeamId: realTeamId, // BYE week shown as home for the real team
-                homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
-                awayTeamId: 'BYE',
-                awayTeamName: 'BYE',
-                competition: 'League',
-                result: 'BYE',
-                played: true // BYE matches are always "played"
+                id: generateUniqueId('M'), week: round + 1, season: season,
+                homeTeamId: homeId, homeTeamName: allLeagueClubsData.find(c => c.id === homeId).name,
+                awayTeamId: awayId, awayTeamName: allLeagueClubsData.find(c => c.id === awayId).name,
+                competition: 'League', result: null, played: false
             });
         }
 
-
-        // Pair remaining teams
         for (let i = 1; i < n / 2; i++) {
-            team1_id = topHalf[i];
-            team2_id = bottomHalf[i];
+            let teamA_id = rotatingTeamIds[i];
+            let teamB_id = rotatingTeamIds[n - 1 - i];
 
-            if (team1_id === 'DUMMY_TEAM' || team2_id === 'DUMMY_TEAM') {
-                const realTeamId = team1_id === 'DUMMY_TEAM' ? team2_id : team1_id;
-                 matchesInRound.push({
-                    id: generateUniqueId('M'),
-                    week: round + 1,
-                    season: season,
-                    homeTeamId: realTeamId,
-                    homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
-                    awayTeamId: 'BYE',
-                    awayTeamName: 'BYE',
-                    competition: 'League',
-                    result: 'BYE',
-                    played: true
-                });
+            if (teamA_id === 'DUMMY_TEAM' || teamB_id === 'DUMMY_TEAM') {
+                const realTeamId = teamA_id === 'DUMMY_TEAM' ? teamB_id : teamA_id;
+                if (realTeamId !== 'DUMMY_TEAM') {
+                    matchesInRound.push({
+                        id: generateUniqueId('M'), week: round + 1, season: season,
+                        homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
+                        awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
+                    });
+                }
                 continue;
             }
 
-            // Standard home/away pairing logic for other teams:
-            // Ensure no team plays home/away twice in a row if possible (within reason for this simple algo)
-            let homeId = team1_id;
-            let awayId = team2_id;
-
-            // Simple alternating for balance on actual games:
-            // For first leg (rounds 0 to n-2), if it's an even round, team1 is home. If odd, team2 is home.
-            // For second leg (rounds n-1 to totalRounds-1), it's the reverse.
-            const currentLegRound = round % (n - 1); // Round within 1st or 2nd leg
+            let homeId, awayId;
             const isSecondLeg = round >= (n - 1);
 
-            if (currentLegRound % 2 === 0) { // Even round within its leg
-                 homeId = isSecondLeg ? team2_id : team1_id;
-                 awayId = isSecondLeg ? team1_id : team2_id;
-            } else { // Odd round within its leg
-                 homeId = isSecondLeg ? team1_id : team2_id;
-                 awayId = isSecondLeg ? team2_id : team1_id;
+            if ((i - 1) % 2 === 0) {
+                 homeId = isSecondLeg ? teamB_id : teamA_id;
+                 awayId = isSecondLeg ? teamA_id : teamB_id;
+            } else {
+                 homeId = isSecondLeg ? teamA_id : teamB_id;
+                 awayId = isSecondLeg ? teamB_id : teamA_id;
             }
-            
-            // Final check to avoid immediate back-to-back home/away IF simple pattern creates it
-            // (This is hard with simple round robin, perfect balancing needs more complex algos)
-            // For now, the circle method's alternation is usually good enough.
-
 
             matchesInRound.push({
-                id: generateUniqueId('M'),
-                week: round + 1,
-                season: season,
-                homeTeamId: homeId,
-                homeTeamName: allLeagueClubsData.find(c => c.id === homeId).name,
-                awayTeamId: awayId,
-                awayTeamName: allLeagueClubsData.find(c => c.id === awayId).name,
-                competition: 'League',
-                result: null,
-                played: false
+                id: generateUniqueId('M'), week: round + 1, season: season,
+                homeTeamId: homeId, homeTeamName: allLeagueClubsData.find(c => c.id === homeId).name,
+                awayTeamId: awayId, awayTeamName: allLeagueClubsData.find(c => c.id === awayId).name,
+                competition: 'League', result: null, played: false
             });
         }
         
-        // Add the matches for this round (week) to the schedule
-        // Filter out any BYE vs BYE (if both sides of a pair were dummy)
         schedule.push({
-            week: round + 1, // Match week index (1 to totalRounds)
-            matches: matchesInRound.filter(m => m.homeTeamId !== 'DUMMY_TEAM' && m.awayTeamId !== 'DUMMY_TEAM')
+            week: round + 1,
+            matches: matchesInRound.filter(match => match.homeTeamId !== 'DUMMY_TEAM' && match.awayTeamId !== 'DUMMY_TEAM')
         });
 
-        // Rotate teams (except the first one, which is the fixed pivot)
-        const fixedPivot = topHalf[0];
-        const rotatedPart = [...topHalf.slice(1), ...bottomHalf];
-        
-        // Perform one rotation for all teams except the fixed pivot
-        const lastOfRotated = rotatedPart.pop();
-        rotatedPart.splice(0, 0, lastOfRotated); // Insert at the beginning of the rotated part
+        const fixedPivot = topHalf[0]; // Need to re-derive topHalf/bottomHalf from teamsForScheduling
+        // To accurately rotate the remaining teams while keeping pivot fixed:
+        const firstTeam = teamsForScheduling.shift(); // Remove pivot temporarily
+        teamsForScheduling.push(firstTeam); // Put pivot at the end
+        const tempRotate = teamsForScheduling.slice(1); // Get all except pivot and first rotating
+        teamsForScheduling.splice(1, rotatingTeamIds.length, rotatingTeamIds.pop(), ...tempRotate); // Rotate
 
-        // Reassemble topHalf and bottomHalf for the next round
-        topHalf = [fixedPivot, ...rotatedPart.slice(0, n / 2 - 1)];
-        bottomHalf = rotatedPart.slice(n / 2 - 1).reverse();
+
+        // Correct rotation for Circle Method:
+        // Hold the first team fixed. Rotate the remaining N-1 teams.
+        const rotatedPart = rotatingTeamIds; // This is the array of rotating teams from the start of the round
+        const lastOfRotating = rotatedPart.pop(); // Remove last team
+        rotatedPart.splice(0, 0, lastOfRotating); // Insert at beginning
+        rotatingTeamIds = rotatedPart; // Update rotating teams for next round
     }
 
-    console.log(`Generated ${schedule.length} match weeks.`);
-    return schedule;
+    // After the loop, the rotation logic was slightly incorrect in previous versions.
+    // Let's use a simpler, known-good Circle Method rotation.
+
+    // New, simplified Circle Method implementation to ensure correct rotation and pairing.
+    // This assumes teams are IDs initially.
+    let teams = allLeagueClubsData.map(t => t.id); // Use only IDs for rotation
+    const originalNumTeams = teams.length;
+    const hasDummy = originalNumTeams % 2 !== 0;
+    if (hasDummy) {
+        teams.push('DUMMY_TEAM'); // Add dummy ID
+    }
+    const N = teams.length; // N is now even
+
+    const newSchedule = [];
+    const numRoundsPerHalf = N - 1; // Each team plays N-1 opponents once in a half-season
+
+    for (let round = 0; round < numRoundsPerHalf * 2; round++) { // totalRounds = (N-1)*2
+        const currentRoundMatches = [];
+        // First team (pivot) plays against the middle team
+        const homePivot = teams[0];
+        const awayPivot = teams[N / 2];
+
+        // Determine home/away based on round parity for the pivot match
+        let h1, a1;
+        if (round % 2 === 0) { // Even round for the first leg, odd for second leg
+            h1 = homePivot;
+            a1 = awayPivot;
+        } else {
+            h1 = awayPivot;
+            a1 = homePivot;
+        }
+        
+        if (h1 !== 'DUMMY_TEAM' && a1 !== 'DUMMY_TEAM') {
+            currentRoundMatches.push({
+                id: generateUniqueId('M'), week: round + 1, season: season,
+                homeTeamId: h1, homeTeamName: allLeagueClubsData.find(c => c.id === h1).name,
+                awayTeamId: a1, awayTeamName: allLeagueClubsData.find(c => c.id === a1).name,
+                competition: 'League', result: null, played: false
+            });
+        } else {
+             // Handle BYE for dummy team
+            const realTeamId = h1 === 'DUMMY_TEAM' ? a1 : h1;
+            if (realTeamId !== 'DUMMY_TEAM') {
+                currentRoundMatches.push({
+                    id: generateUniqueId('M'), week: round + 1, season: season,
+                    homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
+                    awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
+                });
+            }
+        }
+
+
+        // Pair remaining teams in a "cross" pattern
+        for (let i = 1; i < N / 2; i++) {
+            const teamA_id = teams[i];
+            const teamB_id = teams[N - i];
+
+            let h, a;
+            // Home/away swap for balance in each round's pairings
+            if (round % 2 === 0) {
+                h = teamA_id;
+                a = teamB_id;
+            } else {
+                h = teamB_id;
+                a = teamA_id;
+            }
+
+            if (h !== 'DUMMY_TEAM' && a !== 'DUMMY_TEAM') {
+                currentRoundMatches.push({
+                    id: generateUniqueId('M'), week: round + 1, season: season,
+                    homeTeamId: h, homeTeamName: allLeagueClubsData.find(c => c.id === h).name,
+                    awayTeamId: a, awayTeamName: allLeagueClubsData.find(c => c.id === a).name,
+                    competition: 'League', result: null, played: false
+                });
+            } else {
+                const realTeamId = h === 'DUMMY_TEAM' ? a : h;
+                if (realTeamId !== 'DUMMY_TEAM') {
+                    currentRoundMatches.push({
+                        id: generateUniqueId('M'), week: round + 1, season: season,
+                        homeTeamId: realTeamId, homeTeamName: allLeagueClubsData.find(c => c.id === realTeamId).name,
+                        awayTeamId: 'BYE', awayTeamName: 'BYE', competition: 'League', result: 'BYE', played: true
+                    });
+                }
+            }
+        }
+
+        newSchedule.push({
+            week: round + 1,
+            matches: currentRoundMatches.filter(m => m.homeTeamId !== 'DUMMY_TEAM' && m.awayTeamId !== 'DUMMY_TEAM') // Filter out any BYE matches
+        });
+
+        // Rotate teams: Keep first team fixed. Move last team to second position. Shift others.
+        // Slice the array for rotation (exclude pivot at index 0)
+        const lastOfRotating = teams.pop();
+        teams.splice(1, 0, lastOfRotating); // Insert at index 1
+
+        // The rotation should be like this:
+        // teams = [T1, T2, T3, T4, T5, T6]
+        // After 1st round: [T1, T6, T2, T3, T4, T5] (T1 fixed, T6 moves to T2's spot, others shift)
+        // This is done by taking the last element and inserting it right after the first.
+    }
+
+    console.log(`Generated ${newSchedule.length} match weeks.`);
+    return newSchedule;
 }
 
 

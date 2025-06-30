@@ -8,78 +8,136 @@
 
 import * as Constants from '../utils/constants.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
+import { getRandomInt } from '../utils/dataGenerator.js'; // Ensure getRandomInt is imported here
 
 // --- Initial Club Setup Data ---
 
 // Base properties for each facility, with their initial level, status, and base costs.
-// This forms the template for a new club's facilities.
+// Added grade, condition, decay, and degradation properties.
 const BASE_FACILITIES_PROPERTIES = {
     [Constants.FACILITIES.PITCH]: {
         name: 'Pitch',
-        level: 1, // 1: Basic field, 2: Maintained, 3: Good, 4: Excellent, 5: Pro-grade
-        status: 'Unkempt Field',
-        baseUpgradeCost: 200, // Base cost for Level 1->2 upgrade
-        maintenanceCost: 10, // Weekly maintenance cost
-        capacityContribution: 0 // No direct capacity from pitch
+        level: 1, // 1: Unkempt Field, 2: Basic Pitch, ..., 5: Pro-Grade
+        grade: 'G', // Initial grade
+        condition: 60, // % 0-100
+        maxCondition: 100,
+        baseUpgradeCost: 200,
+        maintenanceCost: 10, // Weekly running cost
+        naturalImprovementPerWeek: 10, // Default improvement by Groundsman
+        damagePerMatch: 50, // Max % damage per match if ignored
+        degradeThreshold: 10, // Condition below which it's unplayable
+        degradeWeeks: 4, // Weeks below condition to lose grade
+        gradeReductionFactor: 0.5, // How much condition improves/degrades a grade
+        capacityContribution: 0,
+        conditionBelow50Weeks: 0, // Tracker for grade degradation
+        isUsable: true // Can be set to false if condition is too low
     },
     [Constants.FACILITIES.CHGRMS]: {
         name: 'Changing Rooms',
-        level: 1, // 1: Basic Hut, 2: Small Rooms, 3: Decent, 4: Modern
-        status: 'Basic Hut',
+        level: 1, // 1: Basic Hut, 2: Small Rooms, ...
+        grade: 'F', // Initial grade (lowest without being non-existent)
+        condition: 60,
+        maxCondition: 100,
         baseUpgradeCost: 150,
         maintenanceCost: 5,
-        capacityContribution: 0
+        naturalImprovementPerWeek: 0, // No natural improvement for cleaning, requires task
+        damagePerMatch: 10, // Base % damage per match
+        degradeThreshold: 10,
+        degradeWeeks: 4,
+        gradeReductionFactor: 0.5,
+        capacityContribution: 0,
+        conditionBelow50Weeks: 0,
+        isUsable: true
     },
     [Constants.FACILITIES.TOILETS]: {
         name: 'Toilets',
-        level: 0, // 0: None, 1: Basic Portables, 2: Small Block, 3: Modern Facilities
-        status: 'None',
+        level: 0, // 0: None, 1: Basic Portables, ...
+        grade: 'N/A', // No grade until built
+        condition: 0,
+        maxCondition: 100,
         baseUpgradeCost: 100,
         maintenanceCost: 3,
-        capacityContribution: 0
+        naturalImprovementPerWeek: 0,
+        damagePerMatch: 0,
+        degradeThreshold: 10,
+        degradeWeeks: 4,
+        gradeReductionFactor: 0.5,
+        capacityContribution: 0,
+        conditionBelow50Weeks: 0,
+        isUsable: true
     },
     [Constants.FACILITIES.SNACKBAR]: {
         name: 'Snack Bar',
-        level: 0, // 0: None, 1: Tea Hut, 2: Basic Kiosk, 3: Full Snack Bar
-        status: 'None',
+        level: 0,
+        grade: 'N/A',
+        condition: 0,
+        maxCondition: 100,
         baseUpgradeCost: 250,
         maintenanceCost: 8,
+        naturalImprovementPerWeek: 0,
+        damagePerMatch: 0,
+        degradeThreshold: 10,
+        degradeWeeks: 4,
+        gradeReductionFactor: 0.5,
         capacityContribution: 0,
-        revenuePerMatch: 15 // Example base revenue
+        revenuePerMatch: 15,
+        conditionBelow50Weeks: 0,
+        isUsable: true
     },
     [Constants.FACILITIES.COVERED_STAND]: {
         name: 'Covered Standing Area',
-        level: 0, // 0: None, 1: Small Cover, 2: Medium Cover
-        status: 'None',
+        level: 0,
+        grade: 'N/A',
+        condition: 0,
+        maxCondition: 100,
         baseUpgradeCost: 300,
         maintenanceCost: 15,
-        capacityContribution: 50 // Adds 50 standing capacity
+        naturalImprovementPerWeek: 0,
+        damagePerMatch: 0,
+        degradeThreshold: 10,
+        degradeWeeks: 4,
+        gradeReductionFactor: 0.5,
+        capacityContribution: 50,
+        conditionBelow50Weeks: 0,
+        isUsable: true
     },
     [Constants.FACILITIES.TURNSTILES]: {
         name: 'Turnstiles',
-        level: 0, // 0: None, 1: Basic, 2: Modern
-        status: 'None',
+        level: 0,
+        grade: 'N/A',
+        condition: 0,
+        maxCondition: 100,
         baseUpgradeCost: 120,
         maintenanceCost: 2,
-        capacityContribution: 0 // Enables controlled entry for tickets
+        naturalImprovementPerWeek: 0,
+        damagePerMatch: 0,
+        degradeThreshold: 10,
+        degradeWeeks: 4,
+        gradeReductionFactor: 0.5,
+        capacityContribution: 0,
+        conditionBelow50Weeks: 0,
+        isUsable: true
     }
 };
 
-// Internal reference for the club's committee
 let currentCommittee = [];
 
 // --- Club Creation ---
-/**
- * Creates and initializes a new player club object.
- * @param {object} details - Object with hometown, clubName, nickname, primaryColor, secondaryColor.
- * @returns {object} The newly created player club object.
- */
 export function createPlayerClub(details) {
     const clubId = dataGenerator.generateUniqueId('PC');
 
     const initialFacilities = {};
     for (const key in BASE_FACILITIES_PROPERTIES) {
         initialFacilities[key] = { ...BASE_FACILITIES_PROPERTIES[key] };
+        // Ensure grade is set correctly for initial level. For level 0, no grade.
+        if (initialFacilities[key].level === 0) {
+            initialFacilities[key].grade = 'N/A';
+            initialFacilities[key].condition = 0;
+            initialFacilities[key].isUsable = false;
+        } else {
+            // Map initial level to a grade if grade is dynamic
+            initialFacilities[key].grade = Constants.FACILITY_GRADES[initialFacilities[key].level]; // e.g. level 1 = F, level 2 = E etc.
+        }
         initialFacilities[key].currentUpgradeCost = calculateUpgradeCost(initialFacilities[key].baseUpgradeCost, initialFacilities[key].level);
     }
 
@@ -89,93 +147,42 @@ export function createPlayerClub(details) {
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.GRNDS),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.SOC)
     ];
-    currentCommittee = initialCommittee; // Set internal state on creation
+    currentCommittee = initialCommittee;
 
     return {
-        id: clubId,
-        name: details.clubName,
-        nickname: details.nickname,
-        location: details.hometown,
-        kitColors: {
-            primary: details.primaryColor,
-            secondary: details.secondaryColor
-        },
-        finances: {
-            balance: Constants.DEFAULT_STARTING_BALANCE,
-            transactions: []
-        },
+        id: clubId, name: details.clubName, nickname: details.nickname, location: details.hometown,
+        kitColors: { primary: details.primaryColor, secondary: details.secondaryColor },
+        finances: { balance: Constants.DEFAULT_STARTING_BALANCE, transactions: [] },
         facilities: initialFacilities,
-        committee: initialCommittee, // Stored directly in club object for consistency
-        reputation: 10,
-        fanbase: 0,
-        customizationHistory: {
-            nameChanges: 0,
-            colorChanges: 0
-        },
-        leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }, // Initialize here
+        committee: initialCommittee,
+        reputation: 10, fanbase: 0,
+        customizationHistory: { nameChanges: 0, colorChanges: 0 },
+        leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
         finalLeaguePosition: null
     };
 }
 
 // --- Finance Management ---
-/**
- * Adds a transaction to the club's finance log and updates the balance.
- * Returns a new finances object to be assigned back to gameState.
- * @param {object} currentFinances - The current finances object (from gameState.playerClub.finances).
- * @param {number} amount - The amount of the transaction (positive for income, negative for expense).
- * @param {string} type - The type of transaction (from Constants.TRANSACTION_TYPE).
- * @param {string} description - A short description of the transaction.
- * @returns {object} A new finances object with updated balance and transaction log.
- */
 export function addTransaction(currentFinances, amount, type, description) {
     const newTransaction = {
         id: dataGenerator.generateUniqueId('TR'),
-        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
-        type: type,
-        description: description,
-        amount: amount
+        date: new Date().toISOString().split('T')[0],
+        type: type, description: description, amount: amount
     };
-
     const updatedTransactions = [...currentFinances.transactions, newTransaction];
     const newBalance = currentFinances.balance + amount;
-
-    return {
-        balance: newBalance,
-        transactions: updatedTransactions
-    };
+    return { balance: newBalance, transactions: updatedTransactions };
 }
 
 // --- Facility Management ---
-/**
- * Calculates the cost for the next upgrade level of a facility.
- * Cost increases with level.
- * @param {number} baseCost - The base cost of the facility upgrade.
- * @param {number} currentLevel - The current level of the facility.
- * @returns {number} The calculated upgrade cost.
- */
 function calculateUpgradeCost(baseCost, currentLevel) {
-    return baseCost * Math.pow(1.5, currentLevel - 1);
+    return baseCost * Math.pow(1.5, currentLevel); // Cost for Level 0->1 is baseCost * 1.5^0. For 1->2 is baseCost * 1.5^1.
 }
 
-/**
- * Attempts to upgrade a specific facility for the player's club.
- * Returns a new facilities object if successful, or the original if not.
- * Assumes finance check and deduction happens externally in main.js/gameLoop.
- * @param {object} currentFacilities - The current facilities object.
- * @param {string} facilityKey - The key of the facility to upgrade (from Constants.FACILITIES).
- * @returns {object|null} The updated facilities object if upgrade is possible, null otherwise.
- */
 export function upgradeFacility(currentFacilities, facilityKey) {
     const facility = currentFacilities[facilityKey];
-
-    if (!facility) {
-        console.error(`Facility key "${facilityKey}" not found.`);
-        return null;
-    }
-    // Assume maxLevel is defined per facility in BASE_FACILITIES_PROPERTIES if needed,
-    // otherwise use a generic max like 5 or adjust logic.
-    // For now, level < 4 is max check in committeeLogic.js
-    if (facility.level >= 5) { // Generic max level for now
+    if (!facility) { console.error(`Facility key "${facilityKey}" not found.`); return null; }
+    if (facility.level >= (Constants.FACILITY_GRADES.length - 1)) { // Max level is tied to number of grades
         console.warn(`${facility.name} is already at max level.`);
         return null;
     }
@@ -184,77 +191,102 @@ export function upgradeFacility(currentFacilities, facilityKey) {
     const updatedFacility = updatedFacilities[facilityKey];
 
     updatedFacility.level++;
+    updatedFacility.grade = Constants.FACILITY_GRADES[updatedFacility.level]; // Update grade based on new level
     updatedFacility.status = getFacilityStatusByLevel(facilityKey, updatedFacility.level);
     updatedFacility.currentUpgradeCost = calculateUpgradeCost(updatedFacility.baseUpgradeCost, updatedFacility.level);
+    updatedFacility.isUsable = true; // Mark as usable once built/upgraded
+    updatedFacility.condition = Math.min(updatedFacility.maxCondition, updatedFacility.condition + 20); // Small condition boost on upgrade
 
     return updatedFacilities;
 }
 
-/**
- * Gets the descriptive status string for a facility based on its key and level.
- * @param {string} facilityKey - The key of the facility.
- * @param {number} level - The level of the facility.
- * @returns {string} The descriptive status.
- */
 export function getFacilityStatusByLevel(facilityKey, level) {
     switch (facilityKey) {
         case Constants.FACILITIES.PITCH:
-            return ['None', 'Unkempt Field', 'Basic Pitch', 'Good Pitch', 'Excellent Pitch', 'Pro-Grade Pitch'][level];
+            return ['Non-Existent', 'Unkempt Field', 'Basic Pitch', 'Good Pitch', 'Excellent Pitch', 'Pro-Grade Pitch'][level];
         case Constants.FACILITIES.CHGRMS:
-            return ['None', 'Basic Hut', 'Small Rooms', 'Decent Rooms', 'Modern Facilities'][level];
+            return ['Non-Existent', 'Basic Hut', 'Small Rooms', 'Decent Rooms', 'Modern Facilities'][level];
         case Constants.FACILITIES.TOILETS:
-            return ['None', 'Portable Toilets', 'Basic Toilet Block', 'Modern Toilets'][level];
+            return ['Non-Existent', 'Portable Toilets', 'Basic Toilet Block', 'Modern Toilets'][level];
         case Constants.FACILITIES.SNACKBAR:
-            return ['None', 'Tea Hut', 'Basic Kiosk', 'Full Snack Bar'][level];
+            return ['Non-Existent', 'Tea Hut', 'Basic Kiosk', 'Full Snack Bar'][level];
         case Constants.FACILITIES.COVERED_STAND:
-            return ['None', 'Small Covered Area', 'Medium Covered Area'][level];
+            return ['Non-Existent', 'Small Covered Area', 'Medium Covered Area', 'Large Covered Area'][level];
         case Constants.FACILITIES.TURNSTILES:
-            return ['None', 'Basic Turnstile', 'Modern Turnstiles'][level];
+            return ['Non-Existent', 'Basic Turnstile', 'Modern Turnstiles'][level];
         default:
             return `Level ${level}`;
     }
 }
 
-// --- Committee Management ---
 /**
- * Sets the current committee. Used when loading a game.
- * @param {Array<object>} committee - The new committee array to set.
+ * Updates a facility's condition.
+ * @param {object} currentFacilities - The current facilities object.
+ * @param {string} facilityKey - The key of the facility.
+ * @param {number} change - The amount to change condition by (positive for improve, negative for degrade).
+ * @returns {object} Updated facilities object.
  */
-export function setCommittee(committee) { // ADDED EXPORT KEYWORD HERE
+export function updateFacilityCondition(currentFacilities, facilityKey, change) {
+    const updatedFacilities = JSON.parse(JSON.stringify(currentFacilities));
+    const facility = updatedFacilities[facilityKey];
+
+    if (!facility || facility.level === 0) return currentFacilities; // Cannot change condition of non-existent facility
+
+    facility.condition = Math.max(0, Math.min(facility.maxCondition, facility.condition + change));
+
+    // Update usability based on threshold
+    facility.isUsable = facility.condition >= facility.degradeThreshold;
+
+    // Manage conditionBelow50Weeks for grade degradation
+    if (facility.condition < 50) {
+        facility.conditionBelow50Weeks++;
+    } else {
+        facility.conditionBelow50Weeks = 0;
+    }
+
+    return updatedFacilities;
+}
+
+/**
+ * Attempts to degrade a facility's grade if its condition is persistently low.
+ * @param {object} currentFacilities - The current facilities object.
+ * @param {string} facilityKey - The key of the facility.
+ * @returns {object|null} Updated facilities object if grade changed, null otherwise.
+ */
+export function degradeFacilityGrade(currentFacilities, facilityKey) {
+    const updatedFacilities = JSON.parse(JSON.stringify(currentFacilities));
+    const facility = updatedFacilities[facilityKey];
+
+    if (!facility || facility.level <= 1 || facility.conditionBelow50Weeks < facility.degradeWeeks) {
+        return null; // Cannot degrade if at lowest level 1, or condition not persistently low
+    }
+
+    // Degrade grade and reset conditionWeeks counter
+    facility.level = Math.max(1, facility.level - 1); // Grade cannot go below level 1
+    facility.grade = Constants.FACILITY_GRADES[facility.level];
+    facility.status = getFacilityStatusByLevel(facilityKey, facility.level);
+    facility.conditionBelow50Weeks = 0; // Reset counter after degradation
+
+    return updatedFacilities;
+}
+
+
+// --- Committee Management ---
+export function setCommittee(committee) {
     currentCommittee = [...committee];
     console.log("Committee set/updated in clubData module.");
 }
 
-/**
- * Retrieves the current committee.
- * @returns {Array<object>} A copy of the current committee array.
- */
-export function getCommittee() { // Added this export for renderers to get data
+export function getCommittee() {
     return [...currentCommittee];
 }
 
-/**
- * Adds a new committee member to the club's committee.
- * Returns a new committee array.
- * @param {Array<object>} currentCommitteeArray - The current array of committee members (from gameState.playerClub.committee).
- * @param {object} memberObject - The committee member object to add.
- * @returns {Array<object>} A new array with the added committee member.
- */
 export function addCommitteeMember(currentCommitteeArray, memberObject) {
-    // Note: currentCommitteeArray is passed from gameState, ensuring updates
     currentCommittee = [...currentCommitteeArray, memberObject];
-    return currentCommittee; // Return the updated internal state
+    return currentCommittee;
 }
 
 // --- Club Identity Management ---
-/**
- * Updates the player club's name and nickname.
- * Returns a new club object with updated identity.
- * @param {object} currentPlayerClub - The current player club object.
- * @param {string} newName - The new club name.
- * @param {string} newNickname - The new club nickname.
- * @returns {object} A new player club object with updated identity.
- */
 export function updateClubIdentity(currentPlayerClub, newName, newNickname) {
     const updatedClub = { ...currentPlayerClub };
     updatedClub.name = newName;
@@ -263,29 +295,13 @@ export function updateClubIdentity(currentPlayerClub, newName, newNickname) {
     return updatedClub;
 }
 
-/**
- * Updates the player club's kit colors.
- * Returns a new club object with updated colors.
- * @param {object} currentPlayerClub - The current player club object.
- * @param {string} newPrimaryColor - The new primary kit color (hex).
- * @param {string} newSecondaryColor - The new secondary kit color (hex).
- * @returns {object} A new player club object with updated kit colors.
- */
 export function updateClubKitColors(currentPlayerClub, newPrimaryColor, newSecondaryColor) {
     const updatedClub = { ...currentPlayerClub };
-    updatedClub.kitColors = {
-        primary: newPrimaryColor,
-        secondary: newSecondaryColor
-    };
+    updatedClub.kitColors = { primary: newPrimaryColor, secondary: newSecondaryColor };
     updatedClub.customizationHistory.colorChanges++;
     return updatedClub;
 }
 
-/**
- * Calculates the current total capacity of the club's ground.
- * @param {object} facilities - The facilities object.
- * @returns {number} The total current capacity.
- */
 export function calculateTotalCapacity(facilities) {
     let totalCapacity = 0;
     totalCapacity += 50; // Base capacity for a field
@@ -296,15 +312,11 @@ export function calculateTotalCapacity(facilities) {
     return totalCapacity;
 }
 
-/**
- * Calculates the current total weekly maintenance cost for all facilities.
- * @param {object} facilities - The facilities object.
- * @returns {number} The total weekly maintenance cost.
- */
 export function calculateTotalMaintenanceCost(facilities) {
     let totalCost = 0;
     for (const key in facilities) {
         const facility = facilities[key];
+        // Only count maintenance for built and non-zero level facilities
         if (facility.level > 0) {
             totalCost += facility.maintenanceCost * facility.level;
         }
@@ -312,12 +324,6 @@ export function calculateTotalMaintenanceCost(facilities) {
     return totalCost;
 }
 
-/**
- * Calculates potential match day revenue based on facilities (snackbar, turnstiles).
- * @param {object} facilities - The facilities object.
- * @param {number} currentFanbase - The number of fans currently attending.
- * @returns {number} Estimated match day revenue.
- */
 export function calculateMatchDayRevenue(facilities, currentFanbase) {
     let revenue = 0;
 

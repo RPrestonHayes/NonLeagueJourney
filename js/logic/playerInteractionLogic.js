@@ -8,16 +8,8 @@
 import * as Constants from '../utils/constants.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
-import * as Main from '../main.js'; // Import Main to update game state after interaction if necessary, or trigger UI update
-
-// --- Helper Functions ---
-function getRandomInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function getRandomElement(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
+import * as Main from '../main.js';
+import { getRandomInt, getRandomElement } from '../utils/dataGenerator.js'; // Ensure these are imported
 
 /**
  * Initiates a conversation with a specific player.
@@ -28,7 +20,7 @@ function getRandomElement(arr) {
 export function startPlayerConversation(player, interactionType) {
     let title = `Talking to ${player.name}`;
     let message = '';
-    let choices = []; // Declare choices here
+    let choices = [];
 
     switch (interactionType) {
         case 'motivate':
@@ -40,7 +32,7 @@ export function startPlayerConversation(player, interactionType) {
                         let moraleChange = getRandomInt(3, 8);
                         let feedback = '';
                         if (player.status.morale < 50) {
-                            moraleChange = getRandomInt(8, 15); // Bigger boost if very low
+                            moraleChange = getRandomInt(8, 15);
                             feedback = `"${player.name} seems re-energized after your talk, morale greatly improved."`;
                         } else {
                             feedback = `"${player.name} appreciates the support. Morale slightly boosted."`;
@@ -117,7 +109,7 @@ export function startPlayerConversation(player, interactionType) {
                     action: () => {
                         let moraleChange = -getRandomInt(5, 10);
                         let feedback = '';
-                        if (player.traits.temperament < 5) { // Fiery player might react badly
+                        if (player.traits.temperament < 5) {
                             moraleChange = -getRandomInt(10, 15);
                             feedback = `"${player.name} seems agitated and morale drops significantly."`;
                         } else {
@@ -160,7 +152,7 @@ export function startPlayerConversation(player, interactionType) {
 export function attemptRecruitment(newPlayer, playerClubId) {
     const title = `Recruiting ${newPlayer.name}`;
     let message = '';
-    let choices = []; // <-- ADD THIS LINE! Declare choices here
+    let choices = [];
     let successChance = 50 + (Main.gameState.playerClub.reputation - newPlayer.traits.ambition * 2);
 
     successChance = Math.max(10, Math.min(90, successChance));
@@ -172,7 +164,6 @@ export function attemptRecruitment(newPlayer, playerClubId) {
             text: 'Offer a compelling vision',
             action: () => {
                 let outcomeMessage = '';
-                // Higher chance with compelling vision
                 if (getRandomInt(1, 100) < successChance + getRandomInt(5,15)) {
                     Main.gameState.playerClub.squad = playerData.addPlayer(newPlayer, playerClubId);
                     outcomeMessage = `${newPlayer.name} is impressed by your vision and agrees to join the club! Welcome aboard!`;
@@ -190,7 +181,6 @@ export function attemptRecruitment(newPlayer, playerClubId) {
             text: 'Emphasize local camaraderie',
             action: () => {
                 let outcomeMessage = '';
-                // Standard chance with camaraderie, maybe slight bonus for loyalty trait
                 let actualChance = successChance;
                 if (newPlayer.traits.loyalty > 15) actualChance += getRandomInt(2, 5);
 
@@ -210,7 +200,4 @@ export function attemptRecruitment(newPlayer, playerClubId) {
 
     renderers.showModal(title, message, choices);
 }
-
-// NOTE: This module might directly modify gameState.playerClub.squad via playerData functions.
-// It relies on Main.updateUI() to reflect changes.
 
