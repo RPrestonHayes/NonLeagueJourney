@@ -9,23 +9,82 @@
 import * as Constants from '../utils/constants.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
 // Import specific functions needed from dataGenerator
-import { getRandomInt, getRandomElement } from '../utils/dataGenerator.js'; // NEW: Import specific helper functions
+import { getRandomInt, getRandomElement } from '../utils/dataGenerator.js';
 
 // Internal collection of all clubs' structural data (including player's for consistency, but filtered when returned as 'opponents')
 let allClubsInGameWorld = [];
 
 /**
- * Initializes the list of opponent clubs at the start of a new game.
+ * Initializes the list of opponent clubs for the player's starting league.
  * Only structural data is stored here. Player lists are seasonal.
  * This is called from leagueData.js initially.
- * @param {string} playerClubLocation - The player's chosen hometown.
+ * @param {object} playerCountyData - The county data object for the player's chosen location.
  * @returns {Array<object>} An array of opponent club structural data.
  */
-export function initializeOpponentClubs(playerClubLocation) {
-    const generatedOpponents = dataGenerator.generateInitialOpponentClubs(playerClubLocation);
+export function initializeOpponentClubs(playerCountyData) {
+    const generatedOpponents = [];
+    // Generate DEFAULT_LEAGUE_SIZE - 1 opponents for the player's starting league
+    for (let i = 0; i < Constants.DEFAULT_LEAGUE_SIZE - 1; i++) {
+        const id = dataGenerator.generateUniqueId('C');
+        let identity = dataGenerator.generateClubIdentity(playerCountyData); // Pass the county data object
+        let name = identity.name;
+        let nickname = identity.nickname;
+        const kitColors = dataGenerator.generateKitColors();
+
+        // Add a chance for "reserve" teams from major towns in the region
+        if (getRandomInt(1, 100) < 30) {
+            const majorTownCandidates = playerCountyData.towns.filter(t => t.length > 7 || ['Leicester', 'Nottingham', 'Derby', 'Birmingham', 'Sheffield', 'Manchester', 'Liverpool', 'Leeds', 'Bristol', 'Newcastle'].includes(t));
+            const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : playerCountyData.towns);
+            
+            if (majorTown) {
+                name = `${majorTown} ${getRandomElement(['Reserves', 'U23s', 'Development Squad'])}`;
+                // Nickname will be handled by generateClubIdentity's internal logic
+            }
+        }
+
+        generatedOpponents.push({
+            id: id, name: name, location: getRandomElement(playerCountyData.towns), nickname: nickname, kitColors: kitColors,
+            overallTeamQuality: getRandomInt(5, 10), // Initial league opponents are lower quality
+            currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
+            leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+            inCup: true, // Assume all initial league teams are in the cup
+            eliminatedFromCup: false
+        });
+    }
     console.log("Initial opponent clubs generated:", generatedOpponents.map(c => c.name));
     return [...generatedOpponents];
 }
+
+/**
+ * Generates a single new opponent club. Useful for cup draws or new league teams.
+ * @param {object} playerCountyData - The county data object for the player's chosen location.
+ * @param {number} qualityTier - The base quality tier for player generation for this club (e.g., 8-15 for cup).
+ * @returns {object} A single opponent club structural data object.
+ */
+export function generateSingleOpponentClub(playerCountyData, qualityTier = 10) {
+    const id = dataGenerator.generateUniqueId('C');
+    let identity = dataGenerator.generateClubIdentity(playerCountyData);
+    let name = identity.name;
+    let nickname = identity.nickname;
+    const kitColors = dataGenerator.generateKitColors();
+
+    // Chance for a higher quality team to be a "City" or "United" type
+    if (qualityTier > 12 && getRandomInt(1, 100) < 50) {
+        name = `${getRandomElement(playerCountyData.towns.filter(t => t.length > 5))} ${getRandomElement(['City', 'United', 'Athletic'])}`;
+    } else if (qualityTier > 8 && getRandomInt(1, 100) < 20) {
+        name = `${getRandomElement(playerCountyData.towns)} ${getRandomElement(['Rovers', 'Wanderers'])}`;
+    }
+
+    return {
+        id: id, name: name, location: getRandomElement(playerCountyData.towns), nickname: nickname, kitColors: kitColors,
+        overallTeamQuality: getRandomInt(qualityTier - 3, qualityTier + 3), // Vary quality around the tier
+        currentLeagueId: null, finalLeaguePosition: null,
+        leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+        inCup: true, // New teams are assumed to be in cup
+        eliminatedFromCup: false
+    };
+}
+
 
 /**
  * Sets the full list of ALL clubs (player and opponents) in the game world.
@@ -149,7 +208,3 @@ export function resetOpponentSeasonalStats() {
     console.log("Opponent seasonal stats reset.");
     return [...allClubsInGameWorld];
 }
-
-// NOTE: getRandomInt and getRandomElement are now imported, no longer defined internally.
-// Ensure dataGenerator.js exports them.
-

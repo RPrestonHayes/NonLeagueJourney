@@ -67,7 +67,6 @@ export let gameState = {
     gamePhase: Constants.GAME_PHASE.SETUP,
     playerClubCustomized: false,
     opponentClubsCustomized: false,
-    // New: Store the player's chosen county data for consistent generation
     playerCountyData: null, 
 };
 
@@ -81,34 +80,24 @@ function getCalendarWeekString(weekNum) {
     let cumulativeWeeks = 0;
     for (let i = 0; i < Constants.GAME_WEEK_TO_MONTH_MAP.length; i++) {
         const monthBlock = Constants.GAME_WEEK_TO_MONTH_MAP[i];
-        const monthStartWeek = cumulativeWeeks + 1;
-        const monthEndWeek = cumulativeWeeks + monthBlock.weeks;
+        const monthStartWeekAbsolute = monthBlock.startWeek; // Use the absolute startWeek from constants
+        const monthEndWeekAbsolute = monthBlock.startWeek + monthBlock.weeks - 1;
 
-        if (weekNum >= monthStartWeek && weekNum <= monthEndWeek) {
-            const weekInMonthBlock = weekNum - cumulativeWeeks;
+        if (weekNum >= monthStartWeekAbsolute && weekNum <= monthEndWeekAbsolute) {
+            const weekInMonthBlock = weekNum - monthStartWeekAbsolute + 1; // Corrected calculation for week within month
             const currentMonthName = Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12];
             let weekString = `${currentMonthName} (Week ${weekInMonthBlock})`;
 
             if (monthBlock.isPreSeason) {
                 weekString += ' - Pre-Season';
-            } else if (Constants.COUNTY_CUP_MATCH_WEEKS.includes(weekNum)) {
-                const roundName = Constants.COUNTY_CUP_ROUND_NAMES[weekNum];
-                if (gameState.countyCup.playerTeamStatus === 'Eliminated') {
-                    weekString += ` - ${roundName} (Week Off)`;
-                } else if (gameState.countyCup.playerTeamStatus === 'Winner' && Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(weekNum) > Constants.COUNTY_CUP_ROUND_NAMES.length - 1 - 1 ) { // Check if it's past the final
-                    weekString += ` - Week Off`;
-                }
-                else {
-                     weekString += ` - ${roundName}`;
-                }
-            } else if (Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(weekNum)) {
-                weekString += ` - County Cup Announced`;
             } else if (monthBlock.isSpecialMonth && currentMonthName === 'December') {
                  weekString += ' - Special Conditions (Winter)';
             }
+            // IMPORTANT: Do NOT add cup announcement/match text to the main header string here.
+            // This text is only for the modal dialogs.
+
             return weekString;
         }
-        cumulativeWeeks += monthBlock.weeks;
     }
     
     // Handle Off-season beyond defined league weeks
@@ -185,11 +174,13 @@ export function updateUI() { // Renamed from updateGameAndUI for clarity
                 );
                 break;
             case 'fixturesScreen':
-                // Pass both league and cup fixtures
-                renderers.renderFixturesScreen([
+                // Combine league and cup fixtures, then sort by week
+                const allFixtures = [
                     ...leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id),
-                    ...gameState.countyCup.fixtures // Add county cup fixtures
-                ]);
+                    ...gameState.countyCup.fixtures
+                ].sort((a, b) => a.week - b.week); // Sort chronologically by week
+
+                renderers.renderFixturesScreen(allFixtures);
                 break;
             case 'committeeScreen':
                 renderers.renderCommitteeScreen(clubData.getCommittee());
@@ -268,7 +259,6 @@ function initGame() {
     const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
 
     if (loadedState) {
-        console.log("DEBUG: Game loaded from localStorage.");
         gameState = loadedState;
         // FIX: Action directly updates UI and navigates home
         renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
@@ -334,17 +324,15 @@ export function startNewGame(playerClubDetails) {
     // Fallback if no county data was found (e.g., invalid postcode)
     if (!gameState.playerCountyData) {
         console.warn("No county data found for provided postcode. Falling back to default Leicestershire data for opponent generation.");
-        // Provide a default county data if lookup failed, to prevent errors in generation
         gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode('LE12 7TF'); // Default to Sileby's area
     }
 
 
     // 1. Initialize Player's Club
-    // Pass the actual hometown string and the determined countyData
     gameState.playerClub = clubData.createPlayerClub({
-        hometown: playerClubDetails.hometown, // This is the user-entered town name
-        groundPostcode: playerClubDetails.groundPostcode, // Store the postcode
-        county: gameState.playerCountyData.county, // Store the determined county name
+        hometown: playerClubDetails.hometown,
+        groundPostcode: playerClubDetails.groundPostcode,
+        county: gameState.playerCountyData.county,
         clubName: playerClubDetails.clubName,
         nickname: playerClubDetails.nickname,
         primaryColor: playerClubDetails.primaryColor,
@@ -360,9 +348,8 @@ export function startNewGame(playerClubDetails) {
     playerData.setSquad(initialSquad);
 
     // 3. Generate initial league structure and opponent clubs
-    // Pass the determined county data for opponent and league generation
     const { leagues, clubs } = leagueData.generateInitialLeagues(
-        gameState.playerCountyData, // Pass the county data object
+        gameState.playerCountyData,
         gameState.playerClub.id,
         gameState.playerClub.name
     );
@@ -371,9 +358,25 @@ export function startNewGame(playerClubDetails) {
 
     // Initialize county cup for the first season
     gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
-    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData]; // All league clubs for the cup initially
-    gameState.countyCup.playerTeamStatus = 'Active'; // Player team is active in cup
-    gameState.countyCup.currentRound = 0; // Not yet drawn for a round
+    // Start with a base pool of teams from the player's league, plus some new regional ones
+    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData];
+    
+    const numInitialCupOpponents = 20;
+    for (let i = 0; i < numInitialCupOpponents; i++) {
+        const newOpponent = opponentData.generateSingleOpponentClub(gameState.playerCountyData, dataGenerator.getRandomInt(8, 18));
+        if (!gameState.countyCup.teams.some(team => team.id === newOpponent.id)) {
+            newOpponent.inCup = true;
+            newOpponent.eliminatedFromCup = false;
+            gameState.countyCup.teams.push(newOpponent);
+            opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
+        }
+    }
+    
+    gameState.countyCup.teams = Array.from(new Map(gameState.countyCup.teams.map(team => [team.id, team])).values());
+
+
+    gameState.countyCup.playerTeamStatus = 'Active';
+    gameState.countyCup.currentRound = 0;
 
     // 4. Set Initial Game State & Phase
     gameState.currentSeason = 1;
@@ -405,7 +408,7 @@ export function startNewGame(playerClubDetails) {
 
 /**
  * Applies customization changes to opponent clubs and transitions to pre-season.
- * This is called from eventHandlers.js after the player customizes opponents.
+ * This is called from eventHandlers.js after the player provides initial club details.
  * @param {Array<object>} customizedOpponents - Array of objects with id, name, nickname, kitColors for customized opponents.
  */
 export function applyOpponentCustomization(customizedOpponents) {

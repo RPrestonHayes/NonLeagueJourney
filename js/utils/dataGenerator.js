@@ -165,14 +165,9 @@ export function generateClubIdentity(baseLocationRegion) {
     }
 
     // Further refine combination names, making them less frequent and ensuring distinct towns
-    if (getRandomInt(1, 100) < 10) { // Very low chance for combined names
-        const connectors = [' & ', ' Utd ', ' FC '];
-        // Filter out the already chosen location to get a distinct second part
-        const secondPartOptions = townsInRegion.filter(t => t !== chosenLocation && !finalClubName.includes(t));
-        if (secondPartOptions.length > 0) {
-            finalClubName = `${finalClubName}${getRandomElement(connectors)}${getRandomElement(secondPartOptions).split(' ')[0]} ${getRandomElement(suffixes)}`;
-        }
-    }
+    // Removed specific combination logic to avoid geographically illogical combinations
+    // The current logic prioritizes single-location names and avoids combining unrelated towns.
+
 
     let clubNickname = getRandomElement(genericNicknames); // Start with a generic nickname
 
@@ -338,6 +333,27 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
     for (let round = 0; round < numRoundsPerHalf * 2; round++) {
         const currentRoundMatches = [];
         
+        // Calculate the absolute game week number for this fixture block
+        // League matches are offset by PRE_SEASON_WEEKS
+        const absoluteGameWeek = Constants.PRE_SEASON_WEEKS + (round + 1);
+
+        // --- NEW: Skip generating league matches for weeks designated as COUNTY_CUP_MATCH_WEEKS ---
+        if (competitionType === Constants.COMPETITION_TYPE.LEAGUE && Constants.COUNTY_CUP_MATCH_WEEKS.includes(absoluteGameWeek)) {
+            newSchedule.push({
+                week: round + 1, // Still push a week block to maintain structure
+                competition: competitionType,
+                matches: [] // No league matches this week
+            });
+            // Rotate teams to ensure correct pairings for subsequent weeks, even if no matches are generated this week
+            const firstTeamId = teams[0];
+            const lastRotatingId = teams.pop();
+            teams.splice(1, 0, lastRotatingId);
+            teams[0] = firstTeamId;
+            continue; // Skip to next round iteration
+        }
+        // --- END NEW ---
+
+
         const team1_id_pivot = teams[0];
         const team2_id_pivot = teams[N / 2];
 
@@ -434,7 +450,6 @@ export function generateInitialOpponentClubs(playerCountyData) { // Now expects 
 
     for (let i = 0; i < Constants.DEFAULT_LEAGUE_SIZE - 1; i++) {
         const id = generateUniqueId('C');
-        let location = getRandomElement(townsPool); // Pick a town from the region
         let identity = generateClubIdentity(playerCountyData); // Pass the county data object
         let name = identity.name;
         let nickname = identity.nickname;
@@ -448,14 +463,14 @@ export function generateInitialOpponentClubs(playerCountyData) { // Now expects 
             
             if (majorTown) {
                 name = `${majorTown} ${getRandomElement(['Reserves', 'U23s', 'Development Squad'])}`;
-                location = majorTown;
                 // Nickname will be handled by generateClubIdentity's internal logic
             }
         }
 
         opponentClubs.push({
-            id: id, name: name, location: location, nickname: nickname, kitColors: kitColors,
-            overallTeamQuality: getRandomInt(5, 10), currentLeagueId: null, finalLeaguePosition: null,
+            id: id, name: name, location: getRandomElement(townsPool), nickname: nickname, kitColors: kitColors,
+            overallTeamQuality: getRandomInt(5, 10), // Initial league opponents are lower quality
+            currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
             leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
         });
     }

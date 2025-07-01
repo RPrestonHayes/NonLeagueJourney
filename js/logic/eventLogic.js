@@ -10,6 +10,7 @@ import * as clubData from '../data/clubData.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
 import * as Main from '../main.js';
+import * as gameLoop from './gameLoop.js'; // Import gameLoop to call processRemainingWeekEvents
 import * as dataGenerator from '../utils/dataGenerator.js';
 
 
@@ -56,7 +57,10 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Drat!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
+                choices: [{ text: 'Drat!', action: (gs, uic, context) => {
+                    renderers.hideModal();
+                    gameLoop.processRemainingWeekEvents(gs, 'random_event'); // Call processRemainingWeekEvents
+                } }]
             };
             break;
 
@@ -74,7 +78,10 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Welcome them aboard!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
+                choices: [{ text: 'Welcome them aboard!', action: (gs, uic, context) => {
+                    renderers.hideModal();
+                    gameLoop.processRemainingWeekEvents(gs, 'random_event'); // Call processRemainingWeekEvents
+                } }]
             };
             break;
 
@@ -95,11 +102,17 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
                         } else {
                             outcomeMsg = `The article was a bit mixed, nothing much changes.`;
                         }
-                        renderers.showModal('Publicity Outcome', outcomeMsg, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => { renderers.hideModal(); uicInner.finalizeWeekProcessing(gsInner, contextInner); } }], gs, uic, context);
+                        renderers.showModal('Publicity Outcome', outcomeMsg, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
+                            renderers.hideModal();
+                            gameLoop.processRemainingWeekEvents(gsInner, 'random_event'); // Call processRemainingWeekEvents
+                        } }], gs, uic, context);
                         gs.messages.push({ week: gs.currentWeek, text: `Journalist interview: ${outcomeMsg}` });
                     }},
                     { text: 'Decline Interview (Safe)', action: (gs, uic, context) => {
-                        renderers.showModal('No Publicity', 'You politely declined the interview. No news is good news, right?', [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => { renderers.hideModal(); uicInner.finalizeWeekProcessing(gsInner, contextInner); } }], gs, uic, context);
+                        renderers.showModal('No Publicity', 'You politely declined the interview. No news is good news, right?', [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
+                            renderers.hideModal();
+                            gameLoop.processRemainingWeekEvents(gsInner, 'random_event'); // Call processRemainingWeekEvents
+                        } }], gs, uic, context);
                         gs.messages.push({ week: gs.currentWeek, text: `Journalist interview declined.` });
                     }}
                 ]
@@ -122,7 +135,10 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Oh dear...', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
+                choices: [{ text: 'Oh dear...', action: (gs, uic, context) => {
+                    renderers.hideModal();
+                    gameLoop.processRemainingWeekEvents(gs, 'random_event'); // Call processRemainingWeekEvents
+                } }]
             };
             break;
 
@@ -145,7 +161,10 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
                 event = {
                     title: eventDisplayTitle,
                     description: eventDisplayMessage,
-                    choices: [{ text: 'Drat!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
+                    choices: [{ text: 'Drat!', action: (gs, uic, context) => {
+                        renderers.hideModal();
+                        gameLoop.processRemainingWeekEvents(gs, 'random_event'); // Call processRemainingWeekEvents
+                    } }]
                 };
             } else {
                 return null;
@@ -168,7 +187,10 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
             event = {
                 title: eventDisplayTitle,
                 description: eventDisplayMessage,
-                choices: [{ text: 'Accept with thanks!', action: (gs, uic, context) => { renderers.hideModal(); uic.finalizeWeekProcessing(gs, context); } }]
+                choices: [{ text: 'Accept with thanks!', action: (gs, uic, context) => {
+                    renderers.hideModal();
+                    gameLoop.processRemainingWeekEvents(gs, 'random_event'); // Call processRemainingWeekEvents
+                } }]
             };
             break;
 
@@ -178,7 +200,6 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1) {
     }
 
     if (event) {
-        // Pass gameState and updateUICallbacks to renderers.showModal
         renderers.showModal(event.title, event.description, event.choices, gameState, updateUICallbacks, 'random_event');
     }
     return event;

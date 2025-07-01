@@ -12,9 +12,8 @@ import * as opponentData from '../data/opponentData.js';
 import * as renderers from '../ui/renderers.js';
 import * as Main from '../main.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
-// NEW: Import gameLoop directly for chaining
-import * as gameLoop from './gameLoop.js';
-import * as leagueData from '../data/leagueData.js'; // Import leagueData
+import * as gameLoop from './gameLoop.js'; // Import gameLoop module
+import * as leagueData from '../data/leagueData.js';
 
 
 // --- Helper Functions ---
@@ -191,6 +190,7 @@ export function preMatchBriefing(gameState, playerMatch) {
         opponentClub: opponentClub,
         matchId: playerMatch.id,
         leagueId: gameState.leagues[0].id, // Assuming one league
+        competitionType: playerMatch.competition, // Store competition type
         // Scores will be determined in halves
         firstHalfHomeScore: 0,
         firstHalfAwayScore: 0,
@@ -358,7 +358,7 @@ function halfTimeAction(matchState, actionType, gameState, updateUICallbacks, di
  */
 function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateUICallbacks, dismissalContext) {
     console.log("DEBUG: Simulating Second Half...");
-    const { homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad, matchId, leagueId } = matchState;
+    const { homeTeamId, awayTeamId, playerClub, allOpponentClubs, playerSquad, matchId, leagueId, competitionType } = matchState;
 
     // Determine club details for display in match report
     const homeClubDetails = (homeTeamId === playerClub.id) ? playerClub : allOpponentClubs.find(c => c.id === homeTeamId);
@@ -436,21 +436,63 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
     if (playerAssistProviders.length > 0) reportMessage += ` Assists: ${playerAssistProviders.join(', ')}.`;
     if (playerYellowCards.length > 0 || playerRedCards.length > 0) reportMessage += `\nCards: Yellows: ${playerYellowCards.join(', ') || 'None'}, Reds: ${playerRedCards.join(', ') || 'None'}.`;
 
-    // --- CRUCIAL ADDITION: Update league table and match result for the player's match ---
-    Main.gameState.leagues = leagueData.updateLeagueTable(
-        Main.gameState.leagues,
-        leagueId, // Use the leagueId from matchState
-        homeTeamId,
-        awayTeamId,
-        finalHomeScore,
-        finalAwayScore
-    );
-    Main.gameState.leagues = leagueData.updateMatchResult(
-        Main.gameState.leagues,
-        leagueId, // Use the leagueId from matchState
-        matchId,  // Use the matchId from matchState
-        `${finalHomeScore}-${finalAwayScore}`
-    );
+    // --- Update gameState based on competition type ---
+    if (competitionType === Constants.COMPETITION_TYPE.LEAGUE) {
+        Main.gameState.leagues = leagueData.updateLeagueTable(
+            Main.gameState.leagues,
+            leagueId,
+            homeTeamId,
+            awayTeamId,
+            finalHomeScore,
+            finalAwayScore
+        );
+        Main.gameState.leagues = leagueData.updateMatchResult(
+            Main.gameState.leagues,
+            leagueId,
+            matchId,
+            `${finalHomeScore}-${finalAwayScore}`
+        );
+    } else if (competitionType === Constants.COMPETITION_TYPE.COUNTY_CUP) {
+        // Update cup fixture result
+        const cupFixtureBlockIndex = Main.gameState.countyCup.fixtures.findIndex(fb => fb.week === Main.gameState.currentWeek);
+        if (cupFixtureBlockIndex !== -1) {
+            const matchIndex = Main.gameState.countyCup.fixtures[cupFixtureBlockIndex].matches.findIndex(m => m.id === matchId);
+            if (matchIndex !== -1) {
+                Main.gameState.countyCup.fixtures[cupFixtureBlockIndex].matches[matchIndex].result = `${finalHomeScore}-${finalAwayScore}`;
+                Main.gameState.countyCup.fixtures[cupFixtureBlockIndex].matches[matchIndex].played = true;
+            }
+        }
+
+        // Determine winner/loser for cup progression
+        const playerTeamId = Main.gameState.playerClub.id;
+        let playerWonCupMatch = false;
+        if (homeTeamId === playerTeamId && finalHomeScore > finalAwayScore) playerWonCupMatch = true;
+        if (awayTeamId === playerTeamId && finalAwayScore > finalHomeScore) playerWonCupMatch = true;
+
+        if (finalHomeScore === finalAwayScore) {
+            playerWonCupMatch = false; // Player loses on a draw in cup
+            reportMessage += `\nIt's a draw! You are eliminated on penalties/replay.`;
+        }
+
+        if (playerWonCupMatch) {
+            Main.gameState.countyCup.playerTeamStatus = 'Active'; // Still in cup
+            Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `You won your County Cup match!` });
+        } else {
+            Main.gameState.countyCup.playerTeamStatus = 'Eliminated'; // Knocked out
+            Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `You lost your County Cup match and are eliminated!` });
+        }
+
+        // Update status for the opponent in the cup teams list
+        const opponentOfPlayer = (homeTeamId === playerTeamId) ? allOpponentClubs.find(c => c.id === awayTeamId) : allOpponentClubs.find(c => c.id === homeTeamId);
+        if (opponentOfPlayer) {
+            Main.gameState.countyCup.teams = Main.gameState.countyCup.teams.map(team => {
+                if (team.id === opponentOfPlayer.id) {
+                    return { ...team, inCup: playerWonCupMatch }; // Opponent is in cup if player lost, out if player won
+                }
+                return team;
+            });
+        }
+    }
     // --- END CRUCIAL ADDITION ---
 
 
@@ -459,8 +501,12 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
         reportMessage,
         [{ text: 'Continue', action: (gs, uic, context) => {
             renderers.hideModal();
-            // Match is over. Now process AI matches for this week and then finalize the week.
-            gameLoop.processAIMatchesAndFinalizeWeek(gs, gs.leagues[0].currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS)), matchId); // Pass matchId
+            // After match report, process AI matches for this week, then finalize the week.
+            // Pass the correct week block (league or cup) to processAIMatchesAndFinalizeWeek
+            const currentWeekBlock = gs.leagues[0]?.currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE) ||
+                                     gs.countyCup.fixtures.find(wb => wb.week === gs.currentWeek && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
+            
+            gameLoop.processAIMatchesAndFinalizeWeek(gs, currentWeekBlock, matchId);
         }, isPrimary: true }],
         gameState,
         updateUICallbacks,
@@ -468,7 +514,8 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
     );
 
     return {
-        homeScore: finalHomeScore, awayScore: finalAwayScore, homeTeamId: homeTeamId, awayTeamId: awayTeamId,
+        homeScore: finalHomeScore, awayScore: finalAwayScore, homeTeamId: homeTeamId, awayTeamId: awayClubDetails.id,
         homeTeamName: homeClubDetails.name, awayTeamName: awayClubDetails.name, report: reportMessage
     };
 }
+

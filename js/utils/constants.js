@@ -22,9 +22,9 @@ export const WEEKLY_BASE_HOURS = 10;
 export const DECEMBER_HOURS_REDUCTION = 5; // Hours reduced during December
 
 // --- Season Length & Calendar ---
-export const PRE_SEASON_WEEKS = 4;
-export const LEAGUE_MATCH_WEEKS = 40; // Total weeks for league matches (assuming 20 teams playing home/away once)
-export const TOTAL_LEAGUE_WEEKS = PRE_SEASON_WEEKS + LEAGUE_MATCH_WEEKS; // Total weeks covering pre-season and league matches
+export const PRE_SEASON_WEEKS = 4; // June Weeks 1-4
+export const LEAGUE_MATCH_WEEKS = 40; // Total weeks for league matches (approx. 38 matches + buffer)
+export const TOTAL_LEAGUE_WEEKS = PRE_SEASON_WEEKS + LEAGUE_MATCH_WEEKS; // Total weeks covering pre-season and league matches (44 weeks)
 
 export const SEASON_START_MONTH_INDEX = 5; // June (0-indexed: Jan=0, Feb=1...June=5)
 export const MONTH_NAMES = [
@@ -34,52 +34,51 @@ export const MONTH_NAMES = [
 
 // New Calendar Flow (approximate weeks, adjust as needed)
 // This map helps the calendar string generation and event scheduling
+// Week numbers here are the absolute gameState.currentWeek values
 export const GAME_WEEK_TO_MONTH_MAP = [
     // June: Pre-season (Weeks 1-4)
-    { monthIdxOffset: 0, weeks: 4, name: 'June', isPreSeason: true },
+    { monthIdxOffset: 0, weeks: 4, name: 'June', isPreSeason: true, startWeek: 1 },
     // July: League starts (Weeks 5-8, which is July Week 1-4)
-    { monthIdxOffset: 1, weeks: 4, name: 'July', isLeague: true },
+    { monthIdxOffset: 1, weeks: 4, name: 'July', isLeague: true, startWeek: 5 },
     // August: League + Cup Round 1 (Weeks 9-12)
-    { monthIdxOffset: 2, weeks: 4, name: 'August', isLeague: true },
+    { monthIdxOffset: 2, weeks: 4, name: 'August', isLeague: true, startWeek: 9 },
     // September: League + Cup Round 2 (Weeks 13-16)
-    { monthIdxOffset: 3, weeks: 4, name: 'September', isLeague: true },
+    { monthIdxOffset: 3, weeks: 4, name: 'September', isLeague: true, startWeek: 13 },
     // October: League + Cup Round 3 (Weeks 17-20)
-    { monthIdxOffset: 4, weeks: 4, name: 'October', isLeague: true },
+    { monthIdxOffset: 4, weeks: 4, name: 'October', isLeague: true, startWeek: 17 },
     // November: League + Cup Round 4 (Weeks 21-24)
-    { monthIdxOffset: 5, weeks: 4, name: 'November', isLeague: true },
+    { monthIdxOffset: 5, weeks: 4, name: 'November', isLeague: true, startWeek: 21 },
     // December: League + Special Conditions (Weeks 25-28)
-    { monthIdxOffset: 6, weeks: 4, name: 'December', isLeague: true, isSpecialMonth: true },
+    { monthIdxOffset: 6, weeks: 4, name: 'December', isLeague: true, isSpecialMonth: true, startWeek: 25 },
     // January: League + Cup Round 5 (Weeks 29-32)
-    { monthIdxOffset: 7, weeks: 4, name: 'January', isLeague: true },
+    { monthIdxOffset: 7, weeks: 4, name: 'January', isLeague: true, startWeek: 29 },
     // February: League + Cup QF (Weeks 33-36)
-    { monthIdxOffset: 8, weeks: 4, name: 'February', isLeague: true },
+    { monthIdxOffset: 8, weeks: 4, name: 'February', isLeague: true, startWeek: 33 },
     // March: League + Cup SF (Weeks 37-40)
-    { monthIdxOffset: 9, weeks: 4, name: 'March', isLeague: true },
+    { monthIdxOffset: 9, weeks: 4, name: 'March', isLeague: true, startWeek: 37 },
     // April: League + Cup Final (Weeks 41-44)
-    { monthIdxOffset: 10, weeks: 4, name: 'April', isLeague: true },
+    { monthIdxOffset: 10, weeks: 4, name: 'April', isLeague: true, startWeek: 41 },
     // May: League Ends, Final weeks (Weeks 45-48)
-    { monthIdxOffset: 11, weeks: 4, name: 'May', isLeague: true }
-    // Total weeks in season cycle: 48. Assuming a league of 20 teams (19 games home, 19 away = 38 matches).
-    // We can adjust TOTAL_LEAGUE_MATCH_WEEKS to 38 + a few buffer weeks, or have bye weeks.
-    // Let's set TOTAL_LEAGUE_MATCH_WEEKS to 40 for now, implying some weeks without league games or buffer.
+    { monthIdxOffset: 11, weeks: 4, name: 'May', isLeague: true, startWeek: 45 }
+    // Total weeks in season cycle: 48.
 ];
 
 
-// Cup Schedule (Relative to League Match Weeks, where league match week 1 is currentWeek 5)
-// County Cup Announced: Aug W2 (currentWeek 9), Sept W2 (currentWeek 13), Oct W2 (currentWeek 17), Nov W2 (currentWeek 21), Jan W2 (currentWeek 29), Feb W2 (currentWeek 33), Mar W2 (currentWeek 37), Apr W2 (currentWeek 41)
-export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [9, 13, 17, 21, 29, 33, 37, 41];
-// County Cup Match: Aug W4 (currentWeek 11), Sept W4 (currentWeek 15), Oct W4 (currentWeek 19), Nov W4 (currentWeek 23), Jan W4 (currentWeek 31), Feb W4 (currentWeek 35), Mar W4 (currentWeek 39), Apr W4 (currentWeek 43)
-export const COUNTY_CUP_MATCH_WEEKS = [11, 15, 19, 23, 31, 35, 39, 43]; // Match is always 2 weeks after announcement
+// County Cup Schedule (Absolute gameState.currentWeek values)
+// Announcement Week: Always Month Week 2 (e.g., August W2 is game week 10)
+export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [10, 14, 18, 22, 30, 34, 38, 42];
+// Match Week: Always Month Week 4 (e.g., August W4 is game week 12)
+export const COUNTY_CUP_MATCH_WEEKS = [12, 16, 20, 24, 32, 36, 40, 44];
 
 export const COUNTY_CUP_ROUND_NAMES = {
-    11: 'Round 1',
-    15: 'Round 2',
-    19: 'Round 3',
-    23: 'Round 4',
-    31: 'Round 5',
-    35: 'Quarter-Finals',
-    39: 'Semi-Finals',
-    43: 'Final'
+    12: 'Round 1',
+    16: 'Round 2',
+    20: 'Round 3',
+    24: 'Round 4',
+    32: 'Round 5',
+    36: 'Quarter-Finals',
+    40: 'Semi-Finals',
+    44: 'Final'
 };
 
 export const COMMITTEE_MEETING_FREQUENCY_WEEKS = 4; // Unchanged
