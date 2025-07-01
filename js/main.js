@@ -227,6 +227,13 @@ export function saveGame(showMessage = true) { // Exported for gameLoop to call
     }
 }
 
+// NEW: Internal helper function to break direct circular dependency for processRemainingWeekEvents
+function _triggerProcessRemainingWeekEvents(gs, dismissalContext) {
+    // This function will be called by modal actions
+    // It safely calls gameLoop.processRemainingWeekEvents
+    gameLoop.processRemainingWeekEvents(gs, dismissalContext);
+}
+
 /**
  * Provides an object of functions for renderers.js to call back to Main/gameLoop.
  * This prevents circular dependencies and provides a clear API for UI interactions.
@@ -236,6 +243,7 @@ export function getUpdateUICallbacks() {
         updateUI: updateUI,
         saveGame: saveGame,
         finalizeWeekProcessing: gameLoop.finalizeWeekProcessing, // Reference to gameLoop's finalizer
+        processRemainingWeekEvents: _triggerProcessRemainingWeekEvents, // <--- CHANGED THIS LINE
         renderHomeScreen: () => renderers.renderGameScreen('homeScreen') // Example, if needed
     };
 }

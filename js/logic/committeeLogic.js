@@ -8,7 +8,9 @@ import * as Constants from '../utils/constants.js';
 import * as clubData from '../data/clubData.js';
 import * as renderers from '../ui/renderers.js';
 import * as Main from '../main.js';
-import * as gameLoop from './gameLoop.js'; // Import gameLoop to call processRemainingWeekEvents
+import * as gameLoop from './gameLoop.js'; 
+// The direct import of gameLoop is still here, but processRemainingWeekEvents
+// is now called via the uic (updateUICallbacks) object to avoid circular dependency issues.
 import { getRandomInt } from '../utils/dataGenerator.js';
 
 /**
@@ -28,7 +30,8 @@ export function startCommitteeMeeting(gameState) {
         message += "\n\nCurrently, there are no affordable proposals to discuss. Focus on fundraising!";
         renderers.showModal(title, message, [{ text: 'End Meeting', action: (gs, uic, context) => {
             renderers.hideModal();
-            gameLoop.processRemainingWeekEvents(gs, 'monthly_committee_meeting'); // Call processRemainingWeekEvents
+            // CORRECTED: Call via uic.processRemainingWeekEvents
+            uic.processRemainingWeekEvents(gs, 'monthly_committee_meeting'); 
         }}], gameState, updateUICallbacks, 'committee_no_proposals');
         return;
     }
@@ -199,7 +202,8 @@ function voteOnProposal(gameState, proposal, playerArgumentStyle, updateUICallba
         outcomeTitle = 'Proposal Failed!';
         renderers.showModal(outcomeTitle, outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
             renderers.hideModal();
-            gameLoop.processRemainingWeekEvents(gs, 'proposal_failed'); // Call processRemainingWeekEvents
+            // CORRECTED: Call via uic.processRemainingWeekEvents
+            uic.processRemainingWeekEvents(gs, 'proposal_failed'); 
         }}], gameState, updateUICallbacks, dismissalContext);
     }
 }
@@ -229,7 +233,8 @@ function applyProposalEffect(gameState, proposal, updateUICallbacks, dismissalCo
             renderers.updateNewsFeed(`Committee approves ${proposal.name}!`);
             renderers.showModal('Facility Upgrade Approved', `Your committee approved the upgrade to ${proposal.name}!`, [{ text: 'OK', action: (gs, uic, context) => {
                 renderers.hideModal();
-                gameLoop.processRemainingWeekEvents(gs, 'proposal_passed'); // Call processRemainingWeekEvents
+                // CORRECTED: Call via uic.processRemainingWeekEvents
+                uic.processRemainingWeekEvents(gs, 'proposal_passed'); 
             }}], gameState, updateUICallbacks, dismissalContext);
             break;
         case 'fundraising':
@@ -237,7 +242,8 @@ function applyProposalEffect(gameState, proposal, updateUICallbacks, dismissalCo
             renderers.updateNewsFeed(`Major fundraiser approved!`);
             renderers.showModal('Fundraiser Approved', `Your committee approved the ${proposal.name}!`, [{ text: 'OK', action: (gs, uic, context) => {
                 renderers.hideModal();
-                gameLoop.processRemainingWeekEvents(gs, 'proposal_passed'); // Call processRemainingWeekEvents
+                // CORRECTED: Call via uic.processRemainingWeekEvents
+                uic.processRemainingWeekEvents(gs, 'proposal_passed'); 
             }}], gameState, updateUICallbacks, dismissalContext);
             break;
         case 'club_identity':
@@ -256,13 +262,15 @@ function applyProposalEffect(gameState, proposal, updateUICallbacks, dismissalCo
                                 gs.messages.push({ week: gs.currentWeek, text: `Club name changed to ${newNameInput.value}.` });
                                 renderers.showModal('Club Identity Updated', `Your club is now known as ${newNameInput.value} (${newNicknameInput.value}).`, [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
                                     renderers.hideModal();
-                                    gameLoop.processRemainingWeekEvents(gsInner, 'club_identity_updated'); // Call processRemainingWeekEvents
+                                    // CORRECTED: Call via uicInner.processRemainingWeekEvents
+                                    uicInner.processRemainingWeekEvents(gsInner, 'club_identity_updated'); 
                                 }}], gs, uic, context);
                                 uic.updateUI();
                             } else {
                                 renderers.showModal('Input Error', 'Please enter both new name and nickname.', [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
                                     renderers.hideModal();
-                                    gameLoop.processRemainingWeekEvents(gsInner, 'input_error'); // Call processRemainingWeekEvents
+                                    // CORRECTED: Call via uicInner.processRemainingWeekEvents
+                                    uicInner.processRemainingWeekEvents(gsInner, 'input_error'); 
                                 }}], gs, uic, context);
                             }
                         }, isPrimary: true}
@@ -283,14 +291,16 @@ function applyProposalEffect(gameState, proposal, updateUICallbacks, dismissalCo
                                 gs.messages.push({ week: gs.currentWeek, text: `Club kit colors updated.` });
                                 renderers.showModal('Kit Colors Updated', `Your club kit has been updated.`, [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
                                     renderers.hideModal();
-                                    gameLoop.processRemainingWeekEvents(gsInner, 'kit_colors_updated'); // Call processRemainingWeekEvents
+                                    // CORRECTED: Call via uicInner.processRemainingWeekEvents
+                                    uicInner.processRemainingWeekEvents(gsInner, 'kit_colors_updated'); 
                                 }}], gs, uic, context);
                                 Main.applyThemeColors(newPrimaryInput.value, newSecondaryInput.value);
                                 uic.updateUI();
                             } else {
                                 renderers.showModal('Input Error', 'Please choose two different colors.', [{ text: 'OK', action: (gsInner, uicInner, contextInner) => {
                                     renderers.hideModal();
-                                    gameLoop.processRemainingWeekEvents(gsInner, 'input_error'); // Call processRemainingWeekEvents
+                                    // CORRECTED: Call via uicInner.processRemainingWeekEvents
+                                    uicInner.processRemainingWeekEvents(gsInner, 'input_error'); 
                                 }}], gs, uic, context);
                             }
                         }, isPrimary: true}
