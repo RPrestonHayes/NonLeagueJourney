@@ -18,7 +18,7 @@ import * as Main from '../main.js'; // Import Main for gameState access
  * @param {string} playerClubName - The name of the player's club.
  * @returns {object} An object containing { leagues: Array<object>, clubs: Array<object> }
  * where 'leagues' contains the league structural data and 'clubs' contains
- * all clubs within those leagues (including player's and opponents).\
+ * all clubs within those leagues (including player's and opponents).
  */
 export function generateInitialLeagues(playerCountyData, playerClubId, playerClubName) {
     // Pass the county data object to generateInitialLeagueName
@@ -105,26 +105,32 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
     const numTeamsToGenerate = targetDrawSize - currentPoolSize;
 
     // --- FIX: Generate new external opponents to fill the draw, prioritizing player's opponent ---
-    let playerOpponent = null;
-    let newlyGeneratedTeams = [];
+    let playerOpponentCandidate = null; // This will hold the *newly generated* opponent for the player
+    let newlyGeneratedTeams = []; // Collect all newly generated teams in this draw
 
     // Prioritize generating a new external opponent for the player's match if it's Round 1
-    // and if there aren't enough external teams already in the pool.
+    // and if there aren't enough *existing* external teams to guarantee a non-league opponent.
     const isRoundOne = Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(week) === 0; // Check if it's the first cup match week
 
-    if (isRoundOne && externalTeamsInPool.length === 0 && numTeamsToGenerate > 0) {
-        playerOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(10, 20)); // High quality for initial cup opponent
-        playerOpponent.inCup = true;
-        playerOpponent.eliminatedFromCup = false;
-        newlyGeneratedTeams.push(playerOpponent);
+    // If player is in the draw and we need more teams for an even draw, and it's Round 1,
+    // try to generate a specific opponent for the player.
+    if (availableTeamsForDraw.some(t => t.id === playerClubId) && isRoundOne && numTeamsToGenerate > 0) {
+        // Generate a high-quality external opponent for the player
+        playerOpponentCandidate = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(10, 20)); // Higher quality for cup
+        playerOpponentCandidate.inCup = true;
+        playerOpponentCandidate.eliminatedFromCup = false;
+        newlyGeneratedTeams.push(playerOpponentCandidate);
         // Add to global list immediately
-        opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), playerOpponent]);
-        Main.gameState.countyCup.teams.push(playerOpponent); // Add to persistent cup teams
-        externalTeamsInPool.push(playerOpponent); // Add to current external pool for draw
+        opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), playerOpponentCandidate]);
+        Main.gameState.countyCup.teams.push(playerOpponentCandidate); // Add to persistent cup teams
+        externalTeamsInPool.push(playerOpponentCandidate); // Add to current external pool for draw
+        console.log(`DEBUG: Generated specific external opponent for player: ${playerOpponentCandidate.name}`);
     }
 
     // Generate remaining new teams if needed to reach targetDrawSize
-    for (let i = 0; i < numTeamsToGenerate - newlyGeneratedTeams.length; i++) {
+    // Ensure we don't generate more than needed, and account for the playerOpponentCandidate if generated
+    const remainingToGenerate = targetDrawSize - (availableTeamsForDraw.length + newlyGeneratedTeams.length);
+    for (let i = 0; i < remainingToGenerate; i++) {
         const newTeamQuality = dataGenerator.getRandomInt(8, 18);
         const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, newTeamQuality);
         
@@ -151,8 +157,9 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
         [availableTeamsForDraw[i], availableTeamsForDraw[j]] = [availableTeamsForDraw[j], availableTeamsForDraw[i]];
     }
 
-    // --- FIX: Logic to ensure player always has a match (no BYE) ---
-    // If after generating teams, the count is still odd, we need to add one more to avoid BYE for player
+    // --- FIX: Ensure player always has a match (no BYE) ---
+    // If after all generation and shuffles, the count is still odd, add one more team
+    // This should ideally not be hit if targetDrawSize logic is correct, but as a safeguard.
     if (availableTeamsForDraw.length % 2 !== 0 && availableTeamsForDraw.length > 0) {
         const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(8, 18));
         newOpponent.inCup = true;
@@ -181,13 +188,22 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
             const playerTeam = isHomePlayer ? homeTeam : awayTeam;
             const currentOpponent = isHomePlayer ? awayTeam : homeTeam;
 
-            // If the current opponent is a league team, try to swap it with an external one
-            if (currentLeagueClubIdsMap.has(currentOpponent.id)) {
-                const availableExternalTeams = externalTeamsInPool.filter(t => t.id !== playerOpponent?.id && t.id !== currentOpponent.id);
+            // If playerOpponentCandidate was specifically generated for the player, use it.
+            if (playerOpponentCandidate && (playerOpponentCandidate.id === currentOpponent.id)) {
+                opponentClubFromOutsideLeague = playerOpponentCandidate;
+            }
+            // If current opponent is a league team and we need to swap for an external one
+            else if (currentLeagueClubIdsMap.has(currentOpponent.id)) {
+                // Find an external team that is not the player's team and not already assigned
+                const availableExternalTeams = externalTeamsInPool.filter(t => 
+                    t.id !== playerClubId && 
+                    !cupMatches.some(m => m.homeTeamId === t.id || m.awayTeamId === t.id)
+                );
+                
                 if (availableExternalTeams.length > 0) {
-                    const newExternalOpponent = getRandomElement(availableExternalTeams);
+                    const newExternalOpponent = dataGenerator.getRandomElement(availableExternalTeams);
                     
-                    // Swap: newExternalOpponent takes currentOpponent's place
+                    // Assign the new external opponent
                     if (isHomePlayer) {
                         awayTeam = newExternalOpponent;
                     } else {
@@ -198,12 +214,12 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
                     opponentClubFromOutsideLeague = newExternalOpponent; // This is the external opponent
                     console.log(`DEBUG: Player's Round 1 opponent swapped to external team: ${newExternalOpponent.name}`);
                 } else {
-                    // Fallback: If no external teams are left, player might still face a league team, but this is less likely now.
+                    // Fallback: If no external teams are left, player might still face a league team.
                     console.warn("WARNING: Could not find an external opponent for player's Round 1 match. Player might face a league team.");
                     opponentClubFromOutsideLeague = undefined; // Not an external opponent in this case
                 }
             } else {
-                // Opponent is already external (e.g., newly generated or from a prior round)
+                // Opponent is already external (e.g., from initial pool or prior round)
                 opponentClubFromOutsideLeague = currentOpponent;
             }
         } else if ((isHomePlayer && !currentLeagueClubIdsMap.has(awayTeam.id)) || (isAwayPlayer && !currentLeagueClubIdsMap.has(homeTeam.id))) {
@@ -470,7 +486,7 @@ export function updateLeagueTable(currentLeagues, leagueId, homeClubId, awayClub
 /**
  * Retrieves the current season's match schedule for a specific league.
  * Returns the schedule grouped by week as generated by dataGenerator.
- * @param {Array<object>} currentLeagues - The current array of league objects (from gameState.leagues).
+ * @param {Array<object>} currentLeagues - The current array of league objects.
  * @param {string} leagueId - The ID of the league.
  * @returns {Array<object>} An array of match week objects, each containing an array of matches.
  */

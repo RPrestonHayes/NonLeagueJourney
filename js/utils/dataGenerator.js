@@ -97,7 +97,6 @@ export function getCountyDataFromPostcode(postcode) {
     let outwardCode = '';
 
     // Common UK postcode formats: AA9A 9AA, A9A 9AA, A9 9AA, A99 9AA, AA9 9AA, AA99 9AA
-    // We need the part before the space, or the first 2-4 characters.
     const postcodeMatch = cleanedPostcode.match(/^([A-Z]{1,2}[0-9]{1,2}[A-Z]?)/);
     if (postcodeMatch && postcodeMatch[1]) {
         outwardCode = postcodeMatch[1];
@@ -114,8 +113,6 @@ export function getCountyDataFromPostcode(postcode) {
     }
 
     // Fallback if no specific postcode prefix match
-    // Try to find a county by matching the town name directly if provided in the playerClubDetails.hometown
-    // Or set a default. This logic is handled in main.js if playerCountyData is null.
     return null;
 }
 
@@ -163,11 +160,6 @@ export function generateClubIdentity(baseLocationRegion) {
     if (finalClubName.split(' ').length < 2) {
         finalClubName = `${chosenLocation} ${getRandomElement(suffixes)}`;
     }
-
-    // Further refine combination names, making them less frequent and ensuring distinct towns
-    // Removed specific combination logic to avoid geographically illogical combinations
-    // The current logic prioritizes single-location names and avoids combining unrelated towns.
-
 
     let clubNickname = getRandomElement(genericNicknames); // Start with a generic nickname
 
@@ -335,7 +327,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
         
         // Calculate the absolute game week number for league fixtures
         // League internal fixture week (round + 1) is offset by PRE_SEASON_WEEKS
-        const absoluteGameWeekForLeague = Constants.PRE_SEASON_WEEKS + (round + 1); 
+        const absoluteGameWeek = Constants.PRE_SEASON_WEEKS + (round + 1); 
 
         const team1_id_pivot = teams[0];
         const team2_id_pivot = teams[N / 2];
@@ -353,7 +345,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
         
         if (homeId_pivot !== 'DUMMY_TEAM' && awayId_pivot !== 'DUMMY_TEAM') {
             currentRoundMatches.push({
-                id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
+                id: generateUniqueId('M'), week: absoluteGameWeek, season: season, // Use absoluteGameWeek
                 homeTeamId: homeId_pivot, homeTeamName: allTeamsData.find(c => c.id === homeId_pivot).name,
                 awayTeamId: awayId_pivot, awayTeamName: allTeamsData.find(c => c.id === awayId_pivot).name,
                 competition: competitionType, // Use the passed competition type
@@ -363,7 +355,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
             const realTeamId = homeId_pivot === 'DUMMY_TEAM' ? team2_id_pivot : team1_id_pivot;
             if (realTeamId !== 'DUMMY_TEAM') {
                 currentRoundMatches.push({
-                    id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
+                    id: generateUniqueId('M'), week: absoluteGameWeek, season: season, // Use absoluteGameWeek
                     homeTeamId: realTeamId, homeTeamName: allTeamsData.find(c => c.id === realTeamId).name,
                     awayTeamId: 'BYE', awayTeamName: 'BYE', competition: competitionType, result: 'BYE', played: true
                 });
@@ -386,7 +378,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
 
             if (h !== 'DUMMY_TEAM' && a !== 'DUMMY_TEAM') {
                 currentRoundMatches.push({
-                    id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
+                    id: generateUniqueId('M'), week: absoluteGameWeek, season: season, // Use absoluteGameWeek
                     homeTeamId: h, homeTeamName: allTeamsData.find(c => c.id === h).name,
                     awayTeamId: a, awayTeamName: allTeamsData.find(c => c.id === a).name,
                     competition: competitionType, // Use the passed competition type
@@ -396,7 +388,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
                 const realTeamId = h === 'DUMMY_TEAM' ? a : h;
                 if (realTeamId !== 'DUMMY_TEAM') {
                     currentRoundMatches.push({
-                        id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
+                        id: generateUniqueId('M'), week: absoluteGameWeek, season: season, // Use absoluteGameWeek
                         homeTeamId: realTeamId, homeTeamName: allTeamsData.find(c => c.id === realTeamId).name,
                         awayTeamId: 'BYE', awayTeamName: 'BYE', competition: competitionType, result: 'BYE', played: true
                     });
@@ -405,7 +397,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
         }
         
         newSchedule.push({
-            week: absoluteGameWeekForLeague, // Use absolute game week
+            week: absoluteGameWeek, // Use absolute game week
             competition: competitionType, // Add competition type to the week block
             matches: currentRoundMatches.filter(match => match.homeTeamId !== 'DUMMY_TEAM' && match.awayTeamId !== 'DUMMY_TEAM')
         });
@@ -454,7 +446,9 @@ export function generateInitialOpponentClubs(playerCountyData) { // Now expects 
             id: id, name: name, location: getRandomElement(townsPool), nickname: nickname, kitColors: kitColors,
             overallTeamQuality: getRandomInt(5, 10), // Initial league opponents are lower quality
             currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
-            leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
+            leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+            inCup: true, // Assume all initial league teams are in the cup
+            eliminatedFromCup: false
         });
     }
     return opponentClubs;

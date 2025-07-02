@@ -9,7 +9,8 @@
 import * as Constants from '../utils/constants.js';
 import * as gameLoop from '../logic/gameLoop.js';
 import * as Main from '../main.js'; // Import Main to access gameState and other functions
-import { getCalendarWeekString } from '../main.js'; // Import getCalendarWeekString for fixtures display
+// Import getCalendarWeekString directly from Main, as it is defined there
+import { getCalendarWeekString } from '../main.js'; 
 
 // --- DOM Element References (Cache for performance and correct ID access) ---
 const gameScreens = document.querySelectorAll('.game-screen');
@@ -520,6 +521,9 @@ export function renderFixturesScreen(groupedMatchSchedule) {
     let htmlContent = '';
 
     if (groupedMatchSchedule && groupedMatchSchedule.length > 0) {
+        // Sort the weekBlocks by their week number to ensure chronological display
+        groupedMatchSchedule.sort((a, b) => a.week - b.week);
+
         groupedMatchSchedule.forEach(weekBlock => {
             if (weekBlock.matches.length === 0) {
                 return;
