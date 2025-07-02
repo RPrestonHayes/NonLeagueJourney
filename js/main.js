@@ -52,7 +52,7 @@ export let gameState = {
     leagues: [],
     countyCup: {
         competitionId: null,
-        teams: [], // All teams participating in the cup
+        teams: [], // All teams participating in the cup (will grow as new teams are drawn)
         fixtures: [], // Cup matches generated
         currentRound: 0, // 0 = not started, 1-8 for rounds
         playerTeamStatus: 'Not Entered', // 'Entered', 'Active', 'Eliminated', 'Winner'
@@ -68,6 +68,7 @@ export let gameState = {
     playerClubCustomized: false,
     opponentClubsCustomized: false,
     playerCountyData: null, 
+    isProcessingWeek: false, // Flag to prevent re-entry into week processing
 };
 
 console.log("DEBUG: gameState object initialized.");
@@ -393,23 +394,13 @@ export function startNewGame(playerClubDetails) {
 
     // Initialize county cup for the first season
     gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
-    // Start with a base pool of teams from the player's league, plus some new regional ones
-    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData];
+    // Start with a base pool of teams from the player's league, but no extra generated teams here yet
+    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData]; // Only league teams initially in cup pool
     
-    const numInitialCupOpponents = 20;
-    for (let i = 0; i < numInitialCupOpponents; i++) {
-        const newOpponent = opponentData.generateSingleOpponentClub(gameState.playerCountyData, dataGenerator.getRandomInt(8, 18));
-        if (!gameState.countyCup.teams.some(team => team.id === newOpponent.id)) {
-            newOpponent.inCup = true;
-            newOpponent.eliminatedFromCup = false;
-            gameState.countyCup.teams.push(newOpponent);
-            // Ensure newly generated cup opponents are also added to the global list
-            // This will be part of the comprehensive list built below for opponentData
-            // opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
-        }
-    }
+    // The bulk generation of 20 initial cup opponents is removed from here.
+    // They will be generated dynamically in leagueData.generateCupFixtures as needed.
     
-    // Ensure uniqueness in countyCup.teams if duplicates were added
+    // Ensure uniqueness in countyCup.teams if duplicates were added (from leagueData.allClubsData)
     gameState.countyCup.teams = Array.from(new Map(gameState.countyCup.teams.map(team => [team.id, team])).values());
 
     // --- CRITICAL FIX START: Build comprehensive allClubsInGameWorld for new game ---
@@ -425,7 +416,7 @@ export function startNewGame(playerClubDetails) {
         });
     }
 
-    // Add all cup teams (ensuring uniqueness)
+    // Add all cup teams (ensuring uniqueness) - at this point, these are just league teams
     if (gameState.countyCup && gameState.countyCup.teams) {
         gameState.countyCup.teams.forEach(cupTeam => {
             if (!allClubsForNewGame.some(c => c.id === cupTeam.id)) {
@@ -650,6 +641,7 @@ export function newGameConfirm() {
                         playerTeamStatus: 'Not Entered',
                         opponentToCustomize: null
                     },
+                    isProcessingWeek: false, // Reset flag on new game
                 };
                 renderers.renderNewGameModal();
                 applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
@@ -669,6 +661,12 @@ export function newGameConfirm() {
  */
 export function advanceWeek() {
     console.log("DEBUG: advanceWeek() called.");
+    // NEW: Prevent re-entry if already processing
+    if (gameState.isProcessingWeek) {
+        console.warn("DEBUG: Already processing week. Ignoring duplicate advanceWeek call.");
+        return;
+    }
+
     const currentAvailableHours = gameState.availableHours;
     const baseWeeklyHours = Constants.WEEKLY_BASE_HOURS;
     const allocatedHours = baseWeeklyHours - currentAvailableHours;

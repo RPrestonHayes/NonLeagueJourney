@@ -45,7 +45,7 @@ export const UK_COUNTIES_DATA = [
     },
     {
         county: 'Greater London (North)',
-        postcodePrefixes: ['N', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16', 'N17', 'N19', 'N20', 'N21', 'N22'],
+        postcodePrefixes: ['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16', 'N17', 'N19', 'N20', 'N21', 'N22'],
         towns: [
             'Islington', 'Finchley', 'Highgate', 'Holloway', 'Hornsey', 'Palmers Green', 'Southgate',
             'Tottenham', 'Wood Green', 'Archway', 'Barnsbury', 'Crouch End', 'East Finchley', 'Edmonton',
