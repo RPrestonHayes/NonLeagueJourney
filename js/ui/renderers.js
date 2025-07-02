@@ -9,6 +9,7 @@
 import * as Constants from '../utils/constants.js';
 import * as gameLoop from '../logic/gameLoop.js';
 import * as Main from '../main.js'; // Import Main to access gameState and other functions
+import { getCalendarWeekString } from '../main.js'; // Import getCalendarWeekString for fixtures display
 
 // --- DOM Element References (Cache for performance and correct ID access) ---
 const gameScreens = document.querySelectorAll('.game-screen');
@@ -524,9 +525,11 @@ export function renderFixturesScreen(groupedMatchSchedule) {
                 return;
             }
 
+            // weekBlock.week is now always the absolute game week
+            const displayWeekString = getCalendarWeekString(weekBlock.week); 
             htmlContent += `
                 <div class="fixture-week-block">
-                    <h3>Week ${weekBlock.week}</h3>
+                    <h3>Week ${displayWeekString}</h3>
                     <table class="data-table fixture-table">
                         <thead>
                             <tr>

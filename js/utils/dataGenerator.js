@@ -115,7 +115,7 @@ export function getCountyDataFromPostcode(postcode) {
 
     // Fallback if no specific postcode prefix match
     // Try to find a county by matching the town name directly if provided in the playerClubDetails.hometown
-    // This is a less reliable fallback, but can catch some cases.
+    // Or set a default. This logic is handled in main.js if playerCountyData is null.
     return null;
 }
 
@@ -333,26 +333,9 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
     for (let round = 0; round < numRoundsPerHalf * 2; round++) {
         const currentRoundMatches = [];
         
-        // Calculate the absolute game week number for this fixture block
-        // League matches are offset by PRE_SEASON_WEEKS
-        const absoluteGameWeek = Constants.PRE_SEASON_WEEKS + (round + 1);
-
-        // --- NEW: Skip generating league matches for weeks designated as COUNTY_CUP_MATCH_WEEKS ---
-        if (competitionType === Constants.COMPETITION_TYPE.LEAGUE && Constants.COUNTY_CUP_MATCH_WEEKS.includes(absoluteGameWeek)) {
-            newSchedule.push({
-                week: round + 1, // Still push a week block to maintain structure
-                competition: competitionType,
-                matches: [] // No league matches this week
-            });
-            // Rotate teams to ensure correct pairings for subsequent weeks, even if no matches are generated this week
-            const firstTeamId = teams[0];
-            const lastRotatingId = teams.pop();
-            teams.splice(1, 0, lastRotatingId);
-            teams[0] = firstTeamId;
-            continue; // Skip to next round iteration
-        }
-        // --- END NEW ---
-
+        // Calculate the absolute game week number for league fixtures
+        // League internal fixture week (round + 1) is offset by PRE_SEASON_WEEKS
+        const absoluteGameWeekForLeague = Constants.PRE_SEASON_WEEKS + (round + 1); 
 
         const team1_id_pivot = teams[0];
         const team2_id_pivot = teams[N / 2];
@@ -370,7 +353,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
         
         if (homeId_pivot !== 'DUMMY_TEAM' && awayId_pivot !== 'DUMMY_TEAM') {
             currentRoundMatches.push({
-                id: generateUniqueId('M'), week: round + 1, season: season,
+                id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
                 homeTeamId: homeId_pivot, homeTeamName: allTeamsData.find(c => c.id === homeId_pivot).name,
                 awayTeamId: awayId_pivot, awayTeamName: allTeamsData.find(c => c.id === awayId_pivot).name,
                 competition: competitionType, // Use the passed competition type
@@ -380,7 +363,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
             const realTeamId = homeId_pivot === 'DUMMY_TEAM' ? team2_id_pivot : team1_id_pivot;
             if (realTeamId !== 'DUMMY_TEAM') {
                 currentRoundMatches.push({
-                    id: generateUniqueId('M'), week: round + 1, season: season,
+                    id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
                     homeTeamId: realTeamId, homeTeamName: allTeamsData.find(c => c.id === realTeamId).name,
                     awayTeamId: 'BYE', awayTeamName: 'BYE', competition: competitionType, result: 'BYE', played: true
                 });
@@ -403,7 +386,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
 
             if (h !== 'DUMMY_TEAM' && a !== 'DUMMY_TEAM') {
                 currentRoundMatches.push({
-                    id: generateUniqueId('M'), week: round + 1, season: season,
+                    id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
                     homeTeamId: h, homeTeamName: allTeamsData.find(c => c.id === h).name,
                     awayTeamId: a, awayTeamName: allTeamsData.find(c => c.id === a).name,
                     competition: competitionType, // Use the passed competition type
@@ -413,7 +396,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
                 const realTeamId = h === 'DUMMY_TEAM' ? a : h;
                 if (realTeamId !== 'DUMMY_TEAM') {
                     currentRoundMatches.push({
-                        id: generateUniqueId('M'), week: round + 1, season: season,
+                        id: generateUniqueId('M'), week: absoluteGameWeekForLeague, season: season, // Use absoluteGameWeekForLeague
                         homeTeamId: realTeamId, homeTeamName: allTeamsData.find(c => c.id === realTeamId).name,
                         awayTeamId: 'BYE', awayTeamName: 'BYE', competition: competitionType, result: 'BYE', played: true
                     });
@@ -422,7 +405,7 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
         }
         
         newSchedule.push({
-            week: round + 1,
+            week: absoluteGameWeekForLeague, // Use absolute game week
             competition: competitionType, // Add competition type to the week block
             matches: currentRoundMatches.filter(match => match.homeTeamId !== 'DUMMY_TEAM' && match.awayTeamId !== 'DUMMY_TEAM')
         });
@@ -481,7 +464,7 @@ export function generateInitialOpponentClubs(playerCountyData) { // Now expects 
 /**
  * Generates an initial league name based on the player's chosen county data.
  * @param {object} playerCountyData - The county data object for the player's chosen location.
- * @returns {object} An object { id: string, name: string }.
+ * @returns {object} An object { id: string, name: string }.\
  */
 export function generateInitialLeagueName(playerCountyData) { // Now expects a countyData object
     const leagueId = generateUniqueId('L');

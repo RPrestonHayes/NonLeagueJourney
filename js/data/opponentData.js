@@ -48,7 +48,8 @@ export function initializeOpponentClubs(playerCountyData) {
             currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
             leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
             inCup: true, // Assume all initial league teams are in the cup
-            eliminatedFromCup: false
+            eliminatedFromCup: false,
+            potentialLeagueLevel: 0 // Default for league teams
         });
     }
     console.log("Initial opponent clubs generated:", generatedOpponents.map(c => c.name));
@@ -75,13 +76,29 @@ export function generateSingleOpponentClub(playerCountyData, qualityTier = 10) {
         name = `${getRandomElement(playerCountyData.towns)} ${getRandomElement(['Rovers', 'Wanderers'])}`;
     }
 
+    // Determine potentialLeagueLevel based on qualityTier
+    let potentialLeagueLevel;
+    if (qualityTier >= 18) {
+        potentialLeagueLevel = 1; // Top tier non-league (e.g., National League)
+    } else if (qualityTier >= 15) {
+        potentialLeagueLevel = 2; // High non-league (e.g., NPL Premier)
+    } else if (qualityTier >= 12) {
+        potentialLeagueLevel = 3; // Mid non-league (e.g., NPL Division 1)
+    } else if (qualityTier >= 9) {
+        potentialLeagueLevel = 4; // Lower non-league (e.g., County League Premier)
+    } else {
+        potentialLeagueLevel = 5; // Grassroots/Local Leagues
+    }
+
+
     return {
         id: id, name: name, location: getRandomElement(playerCountyData.towns), nickname: nickname, kitColors: kitColors,
         overallTeamQuality: getRandomInt(qualityTier - 3, qualityTier + 3), // Vary quality around the tier
         currentLeagueId: null, finalLeaguePosition: null,
         leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
         inCup: true, // New teams are assumed to be in cup
-        eliminatedFromCup: false
+        eliminatedFromCup: false,
+        potentialLeagueLevel: potentialLeagueLevel // NEW: Store the potential league level
     };
 }
 
@@ -93,7 +110,7 @@ export function generateSingleOpponentClub(playerCountyData, qualityTier = 10) {
  */
 export function setAllOpponentClubs(clubs) {
     allClubsInGameWorld = clubs;
-    console.log("All clubs in game world set in opponentData:", allClubsInGameWorld.map(c => c.name));
+    console.log("All clubs in game world set in opponentData:", allClubsInGameWorld.length, allClubsInGameWorld.map(c => c.name));
 }
 
 /**

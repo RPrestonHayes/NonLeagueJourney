@@ -75,7 +75,7 @@ console.log("DEBUG: gameState object initialized.");
 
 
 // --- Helper for Calendar Conversion ---
-function getCalendarWeekString(weekNum) {
+export function getCalendarWeekString(weekNum) { // Exported for renderers.js
     if (weekNum <= 0) { return "Invalid Week"; }
 
     let cumulativeWeeks = 0;
@@ -220,7 +220,8 @@ export function saveGame(showMessage = true) { // Exported for gameLoop to call
             renderers.displayMessage('Game Saved!', 'Your progress has been secured.');
         }
         console.log("DEBUG: Game saved successfully.");
-    } catch (error) {
+    }
+    catch (error) {
         console.error("DEBUG: Failed to save game:", error);
         if (showMessage) {
             renderers.displayMessage('Save Failed!', 'Could not save game. Check browser storage space.');
@@ -388,19 +389,24 @@ export function startNewGame(playerClubDetails) {
         gameState.playerClub.name
     );
     gameState.leagues = leagues;
-    // IMPORTANT: Set initial clubs including player's and league opponents
-    // This will be part of the comprehensive list built below for opponentData
-    // opponentData.setAllOpponentClubs(clubs); // This line is now handled by the comprehensive list below
-
+    
     // Initialize county cup for the first season
     gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
-    // Start with a base pool of teams from the player's league, but no extra generated teams here yet
-    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData]; // Only league teams initially in cup pool
+    // Start with league teams in the cup pool
+    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData]; 
     
-    // The bulk generation of 20 initial cup opponents is removed from here.
-    // They will be generated dynamically in leagueData.generateCupFixtures as needed.
+    // Generate a larger, initial pool of potential cup teams (external to league)
+    for (let i = 0; i < Constants.INITIAL_CUP_POOL_SIZE; i++) {
+        const newOpponent = opponentData.generateSingleOpponentClub(gameState.playerCountyData, dataGenerator.getRandomInt(8, 20)); // Wider quality range
+        // Only add if not already in the league teams (which are in countyCup.teams)
+        if (!gameState.countyCup.teams.some(team => team.id === newOpponent.id)) {
+            newOpponent.inCup = true; // Assume they start in cup
+            newOpponent.eliminatedFromCup = false;
+            gameState.countyCup.teams.push(newOpponent);
+        }
+    }
     
-    // Ensure uniqueness in countyCup.teams if duplicates were added (from leagueData.allClubsData)
+    // Ensure uniqueness in countyCup.teams (in case of overlap or re-generation)
     gameState.countyCup.teams = Array.from(new Map(gameState.countyCup.teams.map(team => [team.id, team])).values());
 
     // --- CRITICAL FIX START: Build comprehensive allClubsInGameWorld for new game ---
@@ -416,7 +422,7 @@ export function startNewGame(playerClubDetails) {
         });
     }
 
-    // Add all cup teams (ensuring uniqueness) - at this point, these are just league teams
+    // Add all cup teams (ensuring uniqueness) - now includes the larger pool
     if (gameState.countyCup && gameState.countyCup.teams) {
         gameState.countyCup.teams.forEach(cupTeam => {
             if (!allClubsForNewGame.some(c => c.id === cupTeam.id)) {
@@ -483,9 +489,6 @@ export function applyOpponentCustomization(customizedOpponents) {
                 });
             }
         });
-        // Ensure opponentData's global list is updated with customized league clubs
-        // This will be part of the comprehensive list built below for opponentData
-        // opponentData.setAllOpponentClubs(currentLeague.allClubsData);
         
         // Also update the county cup teams with customized names
         gameState.countyCup.teams.forEach(cupTeam => {

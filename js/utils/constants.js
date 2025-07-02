@@ -34,7 +34,7 @@ export const MONTH_NAMES = [
 
 // New Calendar Flow (approximate weeks, adjust as needed)
 // This map helps the calendar string generation and event scheduling
-// Week numbers here are the absolute gameState.currentWeek values
+// startWeek here is the absolute gameState.currentWeek value
 export const GAME_WEEK_TO_MONTH_MAP = [
     // June: Pre-season (Weeks 1-4)
     { monthIdxOffset: 0, weeks: 4, name: 'June', isPreSeason: true, startWeek: 1 },
@@ -65,13 +65,30 @@ export const GAME_WEEK_TO_MONTH_MAP = [
 
 
 // County Cup Schedule (Absolute gameState.currentWeek values)
-// Announcement Week: Always Month Week 2 (e.g., August W2 is game week 10)
-export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [10, 14, 18, 22, 30, 34, 38, 42];
-// Match Week: Always Month Week 4 (e.g., August W4 is game week 12)
-export const COUNTY_CUP_MATCH_WEEKS = [12, 16, 20, 24, 32, 36, 40, 44];
+// These are the absolute game weeks when announcements and matches occur.
+export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [
+    10, // August Week 2 (Game Week 10)
+    14, // September Week 2 (Game Week 14)
+    18, // October Week 2 (Game Week 18)
+    22, // November Week 2 (Game Week 22)
+    30, // January Week 2 (Game Week 30)
+    34, // February Week 2 (Game Week 34)
+    38, // March Week 2 (Game Week 38)
+    42  // April Week 2 (Game Week 42 - Final Announcement)
+];
+export const COUNTY_CUP_MATCH_WEEKS = [
+    12, // August Week 4 (Game Week 12 - Round 1 Match)
+    16, // September Week 4 (Game Week 16 - Round 2 Match)
+    20, // October Week 4 (Game Week 20 - Round 3 Match)
+    24, // November Week 4 (Game Week 24 - Round 4 Match)
+    32, // January Week 4 (Game Week 32 - Round 5 Match)
+    36, // February Week 4 (Game Week 36 - Quarter-Finals)
+    40, // March Week 4 (Game Week 40 - Semi-Finals)
+    44  // April Week 4 (Game Week 44 - Final)
+];
 
 export const COUNTY_CUP_ROUND_NAMES = {
-    12: 'Round 1',
+    12: 'Round 1', // Keyed by absolute game week of the match
     16: 'Round 2',
     20: 'Round 3',
     24: 'Round 4',
@@ -173,6 +190,9 @@ export const DEFAULT_INITIAL_PLAYERS = 15;
 export const DEFAULT_LEAGUE_SIZE = 12; // Assuming 12 teams for now, total matches 22
 export const ATTRIBUTE_MIN = 1;
 export const ATTRIBUTE_MAX = 20;
+
+// Initial pool size for County Cup teams generated at game start
+export const INITIAL_CUP_POOL_SIZE = 64; // Generate up to 64 potential cup teams in background
 
 // Kit Colors (for generation)
 export const KIT_COLORS = [

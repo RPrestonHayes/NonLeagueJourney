@@ -19,7 +19,7 @@ import * as renderers from '../ui/renderers.js';
 import * as Main from '../main.js';
 
 
-// --- Helper Functions ---
+// --- Helper Functions (internal to gameLoop.js) ---
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -32,7 +32,7 @@ function getRandomElement(arr) {
  * Processes the tasks that the player has allocated hours to for the current week.
  * @param {object} gameState - The current mutable gameState object.
  */
-export function processPlayerTasks(gameState) { // EXPORTED
+function processPlayerTasks(gameState) { // Internal helper, not exported
     console.log("DEBUG: Processing weekly tasks (just logging now, outcomes handled on click)...");
     const tasksToProcess = gameState.weeklyTasks.filter(task => task.completed);
 
@@ -55,7 +55,7 @@ export function processPlayerTasks(gameState) { // EXPORTED
  * @param {object} gameState - The current mutable gameState object.
  * @returns {void}
  */
-export function applyNaturalFacilityChanges(gameState) { // EXPORTED
+function applyNaturalFacilityChanges(gameState) { // Internal helper, not exported
     const facilities = gameState.playerClub.facilities;
     const updateUICallbacks = Main.getUpdateUICallbacks();
 
@@ -97,7 +97,7 @@ export function applyNaturalFacilityChanges(gameState) { // EXPORTED
  * Applies weekly expenses to the club's finances.
  * @param {object} gameState - The current mutable gameState object.
  */
-export function applyWeeklyExpenses(gameState) { // EXPORTED
+function applyWeeklyExpenses(gameState) { // Internal helper, not exported
     const totalMaintenanceCost = clubData.calculateTotalMaintenanceCost(gameState.playerClub.facilities);
     if (totalMaintenanceCost > 0) {
         gameState.playerClub.finances = clubData.addTransaction(
@@ -115,7 +115,7 @@ export function applyWeeklyExpenses(gameState) { // EXPORTED
  * @param {object} gameState - The current mutable gameState object.
  * @param {boolean} isHomeMatch - True if the match was played at player's home ground.
  */
-export function applyMatchDayFacilityDamage(gameState, isHomeMatch) { // EXPORTED
+function applyMatchDayFacilityDamage(gameState, isHomeMatch) { // Internal helper, not exported
     if (!isHomeMatch) return;
 
     const facilities = gameState.playerClub.facilities;
@@ -150,7 +150,7 @@ export function applyMatchDayFacilityDamage(gameState, isHomeMatch) { // EXPORTE
  * Updates player fitness and applies morale decay/changes.
  * @param {object} gameState - The current mutable gameState object.
  */
-export function updatePlayerStatus(gameState) { // EXPORTED
+function updatePlayerStatus(gameState) { // Internal helper, not exported
     console.log("DEBUG: Updating player status...");
     const squad = gameState.playerClub?.squad || [];
     if (!Array.isArray(squad) || squad.length === 0) {
@@ -192,7 +192,7 @@ export function updatePlayerStatus(gameState) { // EXPORTED
  * Handles end of season logic: promotions, relegations, awards, reset stats, new fixtures.
  * @param {object} gameState - The current mutable gameState object.
  */
-export function endSeason(gameState) { // EXPORTED
+function endSeason(gameState) { // Internal helper, not exported
     console.log(`--- End of Season ${gameState.currentSeason} ---`);
     gameState.gamePhase = Constants.GAME_PHASE.END_OF_SEASON;
     const updateUICallbacks = Main.getUpdateUICallbacks();
@@ -320,10 +320,10 @@ export function advanceWeek(gameState, resumeStep = 0) {
 
     // If this is the initial call for the week, do the basic weekly setup
     if (resumeStep === 0) {
-        processPlayerTasks(gameState); // Now correctly called as an exported function
-        applyNaturalFacilityChanges(gameState); // Now correctly called as an exported function
+        processPlayerTasks(gameState); // Now correctly called as an internal function
+        applyNaturalFacilityChanges(gameState); // Now correctly called as an internal function
         if (renderers.getModalDisplayStatus() === 'flex') { return true; } 
-        applyWeeklyExpenses(gameState); // Now correctly called as an exported function
+        applyWeeklyExpenses(gameState); // Now correctly called as an internal function
         if (renderers.getModalDisplayStatus() === 'flex') { return true; } 
     }
 
@@ -368,8 +368,8 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // If it's a regular league week and not a cup match week, simulate league matches.
     if (resumeStep <= 4 && renderers.getModalDisplayStatus() === 'none' && isLeagueMatchCalendarWeek && !isCupMatchWeek && currentLeague) {
         const leagueMatchWeekNum = gameState.currentWeek - Constants.PRE_SEASON_WEEKS;
-        const currentWeekBlock = currentLeague.currentSeasonFixtures.find(weekBlock => 
-            weekBlock.week === leagueMatchWeekNum && weekBlock.competition === Constants.COMPETITION_TYPE.LEAGUE
+        const currentWeekBlock = currentLeague.currentSeasonFixtures.find(wb => 
+            wb.week === leagueMatchWeekNum && wb.competition === Constants.COMPETITION_TYPE.LEAGUE
         );
 
         if (currentWeekBlock && currentWeekBlock.matches.length > 0) {
@@ -378,6 +378,22 @@ export function advanceWeek(gameState, resumeStep = 0) {
             );
 
             if (playerMatch) {
+                // If it's a cup match week, reschedule the league game
+                if (isCupMatchWeek) { // This condition is already !isCupMatchWeek in the outer if, so this inner check is for clarity
+                    const rescheduled = leagueData.rescheduleLeagueMatch(
+                        gameState.leagues,
+                        gameState.playerClub.id,
+                        leagueMatchWeekNum, // Original league week number
+                        Constants.TOTAL_LEAGUE_WEEKS + 1 // Reschedule to week after regular season
+                    );
+                    if (rescheduled) {
+                        gameState.leagues = rescheduled;
+                        gameState.messages.push({ week: gameState.currentWeek, text: `Your league match for this week has been rescheduled due to a cup tie.` });
+                        // Now proceed to handle the cup match (which is handled by Step 3)
+                        return true; // A modal will be shown by handleCountyCupMatch
+                    }
+                }
+
                 if (!gameState.playerClub.facilities[Constants.FACILITIES.PITCH].isUsable && playerMatch.homeTeamId === gameState.playerClub.id && renderers.getModalDisplayStatus() === 'none') {
                     renderers.showModal('Match Postponed!', `Your pitch is unplayable! The home match against ${playerMatch.awayTeamName} has been postponed.`, [{ text: 'Drat!', action: (gs, uic, context) => {
                         renderers.hideModal();
@@ -455,7 +471,7 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
             break;
         case 'pre_match_briefing': // Dismissed match briefing (player match about to start)
         case 'half_time_options': // Dismissed half-time options
-        case 'half-time_action_outcome': // Dismissed half-time action outcome
+        case 'half-time-action-outcome': // Dismissed half-time action outcome
             nextStepToResume = 5; // After player match, go to Quiet Week check (cup announcement now in finalize)
             break;
         case 'match_postponed': // Player's league match postponed
@@ -562,7 +578,7 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
                 return team;
             });
             
-            const cupMatchIndex = gameState.countyCup.fixtures.findIndex(fixtureBlock => fixtureBlock.week === currentWeekBlock.week);
+            const cupMatchIndex = gameState.countyCup.fixtures.findIndex(fixtureBlock => fb.week === currentWeekBlock.week);
             if (cupMatchIndex !== -1) {
                 const matchInFixtureBlockIndex = gameState.countyCup.fixtures[cupMatchIndex].matches.findIndex(m => m.id === match.id);
                 if (matchInFixtureBlockIndex !== -1) {
@@ -575,11 +591,17 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
         aiMatchesPlayed = true;
     }
 
-    if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-        // This line is crucial: it updates opponentData's internal list with the latest league data.
-        // This is why allClubsInGameWorld in opponentData needs to be comprehensive.
-        opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
+    // Instead, ensure opponentData's global list is updated with the latest state of all clubs
+    // (league and cup teams) after AI matches are processed.
+    const allClubsAfterAIMatches = Array.from(new Map([
+        ...(gameState.leagues[0]?.allClubsData || []).map(c => [c.id, c]),
+        ...(gameState.countyCup?.teams || []).map(c => [c.id, c]),
+        [gameState.playerClub.id, gameState.playerClub] // Ensure player club is also included
+    ]).values());
+    opponentData.setAllOpponentClubs(allClubsAfterAIMatches);
 
+
+    if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
         const playerClubInLeagueData = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
         if (playerClubInLeagueData) {
             gameState.playerClub.leagueStats = { ...playerClubInLeagueData.leagueStats };
@@ -665,7 +687,8 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
 
     if (playerMatch) {
         drawMessage += `Your match: **${playerMatch.homeTeamName} vs ${playerMatch.awayTeamName}**\n\n`;
-        if (playerMatch.opponentClubFromOutsideLeague) {
+        // --- FIX START: Ensure opponentClubFromOutsideLeague is correctly checked and used ---
+        if (playerMatch.opponentClubFromOutsideLeague && playerMatch.opponentClubFromOutsideLeague.id !== 'BYE') { // Ensure it's a real club
             gameState.countyCup.opponentToCustomize = playerMatch.opponentClubFromOutsideLeague;
             drawMessage += `You've drawn a team from outside your league: ${playerMatch.opponentClubFromOutsideLeague.name}! You can customize them before the match.`;
             renderers.showModal('County Cup Draw!', drawMessage, [
@@ -703,28 +726,22 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
                         }
                         
                         renderers.hideOpponentCustomizationModal();
-                        uicInner.finalizeWeekProcessing(gsInner, contextInner);
+                        uicInner.finalizeWeekProcessing(gsInner, contextInner); // Proceed to finalize the week
                     }, isPrimary: true }]
                     , gs, uic, context);
                 }, isPrimary: true },
                 { text: 'Continue Without Customizing', action: (gs, uic, context) => {
                     renderers.hideModal();
-                    // --- FIX START: Add opponentToCustomize to global list if customization is skipped ---
-                    if (gs.countyCup.opponentToCustomize) {
-                        const currentGlobalClubs = opponentData.getAllOpponentClubs(null);
-                        // Only add if it's not already present in the global list
-                        if (!currentGlobalClubs.some(c => c.id === gs.countyCup.opponentToCustomize.id)) {
-                            opponentData.setAllOpponentClubs([...currentGlobalClubs, gs.countyCup.opponentToCustomize]);
-                        }
-                    }
-                    // --- FIX END ---
-                    uic.finalizeWeekProcessing(gs, context);
+                    // When skipping customization, the opponent should already be in opponentData.allClubsInGameWorld
+                    // from when generateCupFixtures created it. This action just continues the flow.
+                    uic.finalizeWeekProcessing(gs, context); // Proceed to finalize the week
                 } }
             ], gameState, updateUICallbacks, 'cup_draw_with_customization');
-        } else {
+        } else { // No external opponent, or BYE
             drawMessage += `\n\nSee the Fixtures screen for the full draw.`;
             renderers.showModal('County Cup Draw!', drawMessage, [], gameState, updateUICallbacks, 'cup_draw_normal');
         }
+        // --- FIX END ---
     } else {
         drawMessage += `You have a BYE this round!\n\n`;
         drawMessage += `See the Fixtures screen for other matches.`;
@@ -772,7 +789,7 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
         } else {
             // If playerMatch exists but playerTeamStatus is not 'Active' (e.g., 'Eliminated' from a previous round)
             renderers.showModal('County Cup', `You were expected to play, but your cup status is ${gameState.countyCup.playerTeamStatus}. This is a week off.`, [], gameState, updateUICallbacks, 'cup_match_unexpected_status');
-            processAIMatchesAndFinalizeWeek(gameState, currentWeekCupBlock, null);
+            processAIMatchesAndAllAILeagueMatches(gameState, currentWeekCupBlock, null); // Process AI matches for this cup week
             return;
         }
     } else {
@@ -782,7 +799,7 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
         } else {
             renderers.showModal('County Cup', `You have no County Cup match this week. Other matches are being played.`, [], gameState, updateUICallbacks, 'cup_match_no_player_match_ai_only');
         }
-        processAIMatchesAndFinalizeWeek(gameState, currentWeekCupBlock, null);
+        processAIMatchesAndAllAILeagueMatches(gameState, currentWeekCupBlock, null); // Process AI matches for this cup week
         return;
     }
 }
@@ -796,7 +813,7 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
 export function finalizeWeekProcessing(gameState, dismissalContext) { // EXPORTED to be called by modal actions
     console.log(`DEBUG: finalizeWeekProcessing called. Context: ${dismissalContext}. Finishing week processing.`);
 
-    // --- NEW: Handle County Cup Announcement *before* week increments ---
+    // --- Handle County Cup Announcement *before* week increments ---
     // This ensures the announcement happens for the current week, after matches.
     // It will show a modal, and that modal's dismissal will call finalizeWeekProcessing again,
     // but with a cup_draw_... context, allowing the week to finally increment.

@@ -18,7 +18,7 @@ import * as Main from '../main.js'; // Import Main for gameState access
  * @param {string} playerClubName - The name of the player's club.
  * @returns {object} An object containing { leagues: Array<object>, clubs: Array<object> }
  * where 'leagues' contains the league structural data and 'clubs' contains
- * all clubs within those leagues (including player's and opponents).
+ * all clubs within those leagues (including player's and opponents).\
  */
 export function generateInitialLeagues(playerCountyData, playerClubId, playerClubName) {
     // Pass the county data object to generateInitialLeagueName
@@ -74,7 +74,7 @@ export function generateInitialLeagues(playerCountyData, playerClubId, playerClu
  * @param {string} competitionId - The ID of the cup competition.
  * @param {Array<object>} teamsInCupPool - The pool of all possible teams that could be in the cup (including player's team, league teams, and other regional teams).
  * @param {number} season - Current season number.
- * @param {number} week - The week number for these matches.
+ * @param {number} week - The week number for these matches (absolute game week).
  * @returns {Array<object>} An array of match objects for the cup round.
  */
 export function generateCupFixtures(competitionId, teamsInCupPool, season, week) {
@@ -88,109 +88,139 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
         availableTeamsForDraw.push(Main.gameState.playerClub);
     }
 
-    // Determine the target number of teams for a full draw (power of 2)
-    let targetTeamsForDraw = 2; // Minimum for a match
-    while (targetTeamsForDraw < availableTeamsForDraw.length) {
-        targetTeamsForDraw *= 2;
-    }
-    // If there are very few teams left, ensure at least 2 teams for a draw, or a bye if only 1.
-    if (availableTeamsForDraw.length === 0) targetTeamsForDraw = 0;
-    else if (availableTeamsForDraw.length === 1) targetTeamsForDraw = 1; // Force a bye for the single team
+    // Filter out league teams for potential external opponents
+    const leagueTeamIds = new Set(Main.gameState.leagues[0].allClubsData.map(c => c.id));
+    let externalTeamsInPool = availableTeamsForDraw.filter(team => !leagueTeamIds.has(team.id));
+    let leagueTeamsInPool = availableTeamsForDraw.filter(team => leagueTeamIds.has(team.id));
 
-    const numNewTeamsToGenerate = targetTeamsForDraw - availableTeamsForDraw.length;
-    
-    for (let i = 0; i < numNewTeamsToGenerate; i++) {
-        const newTeamQuality = dataGenerator.getRandomInt(8, 18); // Can be higher quality
+    // Determine the target number of teams for a full draw (next power of 2)
+    let currentPoolSize = availableTeamsForDraw.length;
+    let targetDrawSize = 2;
+    while (targetDrawSize < currentPoolSize) {
+        targetDrawSize *= 2;
+    }
+    if (currentPoolSize === 0) targetDrawSize = 0; // No teams, no draw
+    else if (currentPoolSize === 1) targetDrawSize = 2; // If only one team, need one more for a match
+
+    const numTeamsToGenerate = targetDrawSize - currentPoolSize;
+
+    // --- FIX: Generate new external opponents to fill the draw, prioritizing player's opponent ---
+    let playerOpponent = null;
+    let newlyGeneratedTeams = [];
+
+    // Prioritize generating a new external opponent for the player's match if it's Round 1
+    // and if there aren't enough external teams already in the pool.
+    const isRoundOne = Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(week) === 0; // Check if it's the first cup match week
+
+    if (isRoundOne && externalTeamsInPool.length === 0 && numTeamsToGenerate > 0) {
+        playerOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(10, 20)); // High quality for initial cup opponent
+        playerOpponent.inCup = true;
+        playerOpponent.eliminatedFromCup = false;
+        newlyGeneratedTeams.push(playerOpponent);
+        // Add to global list immediately
+        opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), playerOpponent]);
+        Main.gameState.countyCup.teams.push(playerOpponent); // Add to persistent cup teams
+        externalTeamsInPool.push(playerOpponent); // Add to current external pool for draw
+    }
+
+    // Generate remaining new teams if needed to reach targetDrawSize
+    for (let i = 0; i < numTeamsToGenerate - newlyGeneratedTeams.length; i++) {
+        const newTeamQuality = dataGenerator.getRandomInt(8, 18);
         const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, newTeamQuality);
         
-        // Ensure new opponent is not already in the current draw pool or the global list
-        const isAlreadyInDraw = availableTeamsForDraw.some(team => team.id === newOpponent.id);
-        const isAlreadyInGlobalList = opponentData.getAllOpponentClubs(null).some(club => club.id === newOpponent.id);
+        const isAlreadyInAnyPool = availableTeamsForDraw.some(team => team.id === newOpponent.id) || newlyGeneratedTeams.some(team => team.id === newOpponent.id);
 
-        if (newOpponent && !isAlreadyInDraw && !isAlreadyInGlobalList) {
+        if (newOpponent && !isAlreadyInAnyPool) {
             newOpponent.inCup = true;
             newOpponent.eliminatedFromCup = false;
-            availableTeamsForDraw.push(newOpponent);
-            // Crucial: Add this newly generated opponent to the global opponentData list
+            newlyGeneratedTeams.push(newOpponent);
             opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
-            // Also add to gameState.countyCup.teams so it's persisted for future rounds/seasons
             Main.gameState.countyCup.teams.push(newOpponent);
+            externalTeamsInPool.push(newOpponent); // Add to current external pool for draw
         }
     }
-    
+
+    // Reconstruct availableTeamsForDraw with newly generated teams
+    availableTeamsForDraw = [...leagueTeamsInPool, ...externalTeamsInPool];
+
+    // --- END FIX: Dynamic Generation ---
+
     // Shuffle teams to ensure random draw
     for (let i = availableTeamsForDraw.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [availableTeamsForDraw[i], availableTeamsForDraw[j]] = [availableTeamsForDraw[j], availableTeamsForDraw[i]];
     }
 
-    // Handle BYEs if odd number of teams (or if only one team left)
+    // --- FIX: Logic to ensure player always has a match (no BYE) ---
+    // If after generating teams, the count is still odd, we need to add one more to avoid BYE for player
     if (availableTeamsForDraw.length % 2 !== 0 && availableTeamsForDraw.length > 0) {
-        const playerTeamIndex = availableTeamsForDraw.findIndex(t => t.id === playerClubId);
-        if (playerTeamIndex !== -1) {
-            // Player gets a bye
-            cupMatches.push({
-                id: dataGenerator.generateUniqueId('M'),
-                week: week,
-                season: season,
-                homeTeamId: playerClubId,
-                homeTeamName: Main.gameState.playerClub.name,
-                awayTeamId: 'BYE',
-                awayTeamName: 'BYE',
-                competition: Constants.COMPETITION_TYPE.COUNTY_CUP,
-                result: 'BYE',
-                played: true
-            });
-            availableTeamsForDraw.splice(playerTeamIndex, 1);
-            // Update player's status for the bye (already 'Active', just confirm)
-            Main.gameState.countyCup.playerTeamStatus = 'Active';
-        } else {
-            // A random AI team gets a bye
-            const byeTeam = getRandomElement(availableTeamsForDraw);
-            cupMatches.push({
-                id: dataGenerator.generateUniqueId('M'),
-                week: week,
-                season: season,
-                homeTeamId: byeTeam.id,
-                homeTeamName: byeTeam.name,
-                awayTeamId: 'BYE',
-                awayTeamName: 'BYE',
-                competition: Constants.COMPETITION_TYPE.COUNTY_CUP,
-                result: 'BYE',
-                played: true
-            });
-            availableTeamsForDraw = availableTeamsForDraw.filter(team => team.id !== byeTeam.id);
-            // Mark the AI team as still in cup (as they got a bye)
-            Main.gameState.countyCup.teams = Main.gameState.countyCup.teams.map(team => 
-                team.id === byeTeam.id ? { ...team, inCup: true, eliminatedFromCup: false } : team
-            );
-        }
+        const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(8, 18));
+        newOpponent.inCup = true;
+        newOpponent.eliminatedFromCup = false;
+        availableTeamsForDraw.push(newOpponent);
+        opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
+        Main.gameState.countyCup.teams.push(newOpponent);
+        console.log("DEBUG: Added extra team to make cup draw even and avoid BYE.");
     }
+    // --- END FIX: No BYE ---
+
 
     // Pair remaining teams for matches
     for (let i = 0; i < availableTeamsForDraw.length; i += 2) {
-        const homeTeam = availableTeamsForDraw[i];
-        const awayTeam = availableTeamsForDraw[i + 1];
+        let homeTeam = availableTeamsForDraw[i];
+        let awayTeam = availableTeamsForDraw[i + 1];
 
-        let opponentClubFromOutsideLeague = null;
-        // Check if either team is the player's team and the opponent is NOT in the player's primary league
+        let opponentClubFromOutsideLeague = undefined; // Default to undefined
+
         const isHomePlayer = homeTeam.id === playerClubId;
         const isAwayPlayer = awayTeam.id === playerClubId;
-        const currentLeagueClubIdsMap = new Set(Main.gameState.leagues[0].allClubsData.map(c => c.id)); // Use a Set for faster lookup
-        
-        const isOpponentFromOutsideLeague = (isHomePlayer && !currentLeagueClubIdsMap.has(awayTeam.id)) ||
-                                           (isAwayPlayer && !currentLeagueClubIdsMap.has(homeTeam.id));
-        
-        if (isOpponentFromOutsideLeague) {
-            const externalOpponent = isHomePlayer ? awayTeam : homeTeam;
-            // Ensure we get the full club object from opponentData.allClubsInGameWorld
-            // If it's a newly generated team, it should already be in allClubsInGameWorld due to the generation loop above.
-            opponentClubFromOutsideLeague = opponentData.getOpponentClub(externalOpponent.id);
+        const currentLeagueClubIdsMap = new Set(Main.gameState.leagues[0].allClubsData.map(c => c.id));
+
+        // --- FIX: Ensure player always draws an external team in Round 1 if possible ---
+        if (isRoundOne && (isHomePlayer || isAwayPlayer)) {
+            const playerTeam = isHomePlayer ? homeTeam : awayTeam;
+            const currentOpponent = isHomePlayer ? awayTeam : homeTeam;
+
+            // If the current opponent is a league team, try to swap it with an external one
+            if (currentLeagueClubIdsMap.has(currentOpponent.id)) {
+                const availableExternalTeams = externalTeamsInPool.filter(t => t.id !== playerOpponent?.id && t.id !== currentOpponent.id);
+                if (availableExternalTeams.length > 0) {
+                    const newExternalOpponent = getRandomElement(availableExternalTeams);
+                    
+                    // Swap: newExternalOpponent takes currentOpponent's place
+                    if (isHomePlayer) {
+                        awayTeam = newExternalOpponent;
+                    } else {
+                        homeTeam = newExternalOpponent;
+                    }
+                    // Remove newExternalOpponent from externalTeamsInPool to prevent duplicate assignment
+                    externalTeamsInPool = externalTeamsInPool.filter(t => t.id !== newExternalOpponent.id);
+                    opponentClubFromOutsideLeague = newExternalOpponent; // This is the external opponent
+                    console.log(`DEBUG: Player's Round 1 opponent swapped to external team: ${newExternalOpponent.name}`);
+                } else {
+                    // Fallback: If no external teams are left, player might still face a league team, but this is less likely now.
+                    console.warn("WARNING: Could not find an external opponent for player's Round 1 match. Player might face a league team.");
+                    opponentClubFromOutsideLeague = undefined; // Not an external opponent in this case
+                }
+            } else {
+                // Opponent is already external (e.g., newly generated or from a prior round)
+                opponentClubFromOutsideLeague = currentOpponent;
+            }
+        } else if ((isHomePlayer && !currentLeagueClubIdsMap.has(awayTeam.id)) || (isAwayPlayer && !currentLeagueClubIdsMap.has(homeTeam.id))) {
+            // For later rounds, if player draws an external team, mark it
+            const externalOpponentCandidate = isHomePlayer ? awayTeam : homeTeam;
+            opponentClubFromOutsideLeague = opponentData.getOpponentClub(externalOpponentCandidate.id);
+            if (!opponentClubFromOutsideLeague) {
+                console.warn(`WARNING: External opponent ${externalOpponentCandidate.id} not found in global list. Using direct object.`);
+                opponentClubFromOutsideLeague = externalOpponentCandidate;
+            }
         }
-        
+        // --- END FIX: Player always draws external team ---
+
+
         cupMatches.push({
             id: dataGenerator.generateUniqueId('M'),
-            week: week,
+            week: week, // This is the absolute game week (e.g., 12 for August Week 4)
             season: season,
             homeTeamId: homeTeam.id,
             homeTeamName: homeTeam.name,
@@ -200,11 +230,134 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
             result: null,
             played: false,
             // Only attach opponentClubFromOutsideLeague if it's actually an external opponent
-            opponentClubFromOutsideLeague: isOpponentFromOutsideLeague ? opponentClubFromOutsideLeague : undefined 
+            // This ensures the customization modal condition in gameLoop.js works.
+            opponentClubFromOutsideLeague: opponentClubFromOutsideLeague // Will be undefined if not external
         });
     }
     console.log(`Generated ${cupMatches.length} cup matches for week ${week}.`);
     return cupMatches;
+}
+
+
+/**
+ * Reschedules a player's league match from its original week to a new week.
+ * This is used when a cup match takes precedence.
+ * @param {Array<object>} currentLeagues - The current array of league objects (from gameState.leagues).
+ * @param {string} playerClubId - The ID of the player's club.
+ * @param {number} originalAbsoluteGameWeek - The original absolute game week number of the match to reschedule.
+ * @param {number} newAbsoluteGameWeek - The new absolute game week number to move the match to.
+ * @returns {Array<object>|null} A new array of league objects with the match rescheduled, or null if not found.
+ */
+export function rescheduleLeagueMatch(currentLeagues, playerClubId, originalAbsoluteGameWeek, newAbsoluteGameWeek) {
+    const updatedLeagues = JSON.parse(JSON.stringify(currentLeagues));
+    const league = updatedLeagues[0]; // Assuming only one league for now
+
+    if (!league || !league.currentSeasonFixtures) {
+        console.warn("Cannot reschedule: League or fixtures not found.");
+        return null;
+    }
+
+    let matchToReschedule = null;
+    let originalWeekBlock = null;
+    let originalMatchIndex = -1;
+
+    // Find the match in the original week block
+    originalWeekBlock = league.currentSeasonFixtures.find(wb => wb.week === originalAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+
+    if (originalWeekBlock) {
+        originalMatchIndex = originalWeekBlock.matches.findIndex(m => 
+            (m.homeTeamId === playerClubId || m.awayTeamId === playerClubId) && !m.played
+        );
+        if (originalMatchIndex !== -1) {
+            matchToReschedule = { ...originalWeekBlock.matches[originalMatchIndex] };
+        }
+    }
+
+    if (!matchToReschedule) {
+        console.warn(`No unplayed player league match found in absolute game week ${originalAbsoluteGameWeek} to reschedule.`);
+        return null;
+    }
+
+    // Remove the match from its original position
+    originalWeekBlock.matches.splice(originalMatchIndex, 1);
+
+    // Update the week for the rescheduled match
+    matchToReschedule.week = newAbsoluteGameWeek;
+
+    // Find or create the new week block
+    let newWeekBlock = league.currentSeasonFixtures.find(wb => wb.week === newAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+    if (!newWeekBlock) {
+        newWeekBlock = {
+            week: newAbsoluteGameWeek,
+            competition: Constants.COMPETITION_TYPE.LEAGUE,
+            matches: []
+        };
+        league.currentSeasonFixtures.push(newWeekBlock);
+        // Ensure the new week block is inserted in correct order for rendering
+        league.currentSeasonFixtures.sort((a, b) => a.week - b.week);
+    }
+
+    // Add the match to the new week block
+    newWeekBlock.matches.push(matchToReschedule);
+    console.log(`DEBUG: Rescheduled league match ${matchToReschedule.homeTeamName} vs ${matchToReschedule.awayTeamName} from week ${originalAbsoluteGameWeek} to week ${newAbsoluteGameWeek}.`);
+
+    return updatedLeagues;
+}
+
+/**
+ * Finds the next available week for a rescheduled league match.
+ * Starts searching from `startAbsoluteGameWeek` and looks for a week where the player has no match.
+ * @param {Array<object>} currentLeagues - The current array of league objects.
+ * @param {string} playerClubId - The ID of the player's club.
+ * @param {number} startAbsoluteGameWeek - The absolute game week to start searching from.
+ * @returns {number} The absolute game week number of the next available slot.
+ */
+export function findNextAvailableLeagueWeek(currentLeagues, playerClubId, startAbsoluteGameWeek) {
+    const league = currentLeagues[0];
+    if (!league || !league.currentSeasonFixtures) {
+        return Constants.TOTAL_LEAGUE_WEEKS + 1; // Fallback to immediately after season if no fixtures
+    }
+
+    let nextAvailableWeek = startAbsoluteGameWeek;
+    let foundSlot = false;
+
+    // Search for an empty slot within the existing fixture weeks and beyond season end
+    for (let i = startAbsoluteGameWeek; i <= Constants.TOTAL_LEAGUE_WEEKS + 10; i++) { // Search a few weeks beyond season end
+        const leagueWeekBlock = league.currentSeasonFixtures.find(wb => wb.week === i && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+        const cupWeekBlock = Main.gameState.countyCup.fixtures.find(wb => wb.week === i && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
+        
+        let playerHasLeagueMatchThisWeek = false;
+        if (leagueWeekBlock) {
+            playerHasLeagueMatchThisWeek = leagueWeekBlock.matches.some(match => 
+                (match.homeTeamId === playerClubId || match.awayTeamId === playerClubId) && !match.played
+            );
+        }
+
+        let playerHasCupMatchThisWeek = false;
+        if (cupWeekBlock) {
+            playerHasCupMatchThisWeek = cupWeekBlock.matches.some(match => 
+                (match.homeTeamId === playerClubId || match.awayTeamId === playerClubId) && !match.played && match.awayTeamId !== 'BYE'
+            );
+        }
+
+        if (!playerHasLeagueMatchThisWeek && !playerHasCupMatchThisWeek) {
+            nextAvailableWeek = i;
+            foundSlot = true;
+            break;
+        }
+        nextAvailableWeek = i + 1; // Increment if current week is busy
+    }
+
+    if (!foundSlot) {
+        // Fallback: If no slot found within existing range, append to the very end
+        nextAvailableWeek = Constants.TOTAL_LEAGUE_WEEKS + 1;
+        // Find the highest week number currently in fixtures and add 1
+        const maxExistingWeek = league.currentSeasonFixtures.reduce((max, wb) => Math.max(max, wb.week), 0);
+        nextAvailableWeek = Math.max(nextAvailableWeek, maxExistingWeek + 1);
+    }
+    
+    console.log(`DEBUG: Found next available league week for rescheduling: ${nextAvailableWeek}`);
+    return nextAvailableWeek;
 }
 
 
