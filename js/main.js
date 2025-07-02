@@ -287,16 +287,40 @@ function initGame() {
                 gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF'); // Try postcode or default
             }
 
+            // --- CRITICAL FIX START: Ensure allClubsInGameWorld is comprehensively populated on load ---
+            let allClubsFromLoad = [];
+            // Add league clubs first
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                 opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
-                 const playerClubFromLeague = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
-                 if (playerClubFromLeague) {
-                     gameState.playerClub.leagueStats = { ...playerClubFromLeague.leagueStats };
-                     gameState.playerClub.finalLeaguePosition = playerClubFromLeague.finalLeaguePosition;
-                 }
-            } else {
-                 opponentData.setAllOpponentClubs([]);
+                allClubsFromLoad = [...gameState.leagues[0].allClubsData];
             }
+
+            // Add any cup-specific teams from the loaded state that are not already in the league data
+            if (gameState.countyCup && gameState.countyCup.teams) {
+                const leagueClubIds = new Set(allClubsFromLoad.map(c => c.id));
+                gameState.countyCup.teams.forEach(cupTeam => {
+                    // Only add if it's not already in the league clubs list
+                    if (!leagueClubIds.has(cupTeam.id)) {
+                        allClubsFromLoad.push(cupTeam);
+                    }
+                });
+            }
+            
+            // Ensure playerClub is also in this list if it's somehow missing (shouldn't be, but for robustness)
+            if (gameState.playerClub && !allClubsFromLoad.some(c => c.id === gameState.playerClub.id)) {
+                allClubsFromLoad.push(gameState.playerClub);
+            }
+
+            // Set the comprehensive list of all clubs in the game world for opponentData module
+            opponentData.setAllOpponentClubs(allClubsFromLoad);
+
+            // Now, safely update playerClub's league stats from the comprehensive list
+            const playerClubFromAllClubs = allClubsFromLoad.find(c => c.id === gameState.playerClub.id);
+            if (playerClubFromAllClubs) {
+                gameState.playerClub.leagueStats = { ...playerClubFromAllClubs.leagueStats };
+                gameState.playerClub.finalLeaguePosition = playerClubFromAllClubs.finalLeaguePosition;
+            }
+            // --- CRITICAL FIX END ---
+
             applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
 
@@ -362,7 +386,8 @@ export function startNewGame(playerClubDetails) {
         gameState.playerClub.name
     );
     gameState.leagues = leagues;
-    opponentData.setAllOpponentClubs(clubs);
+    // IMPORTANT: Set initial clubs including player's and league opponents
+    opponentData.setAllOpponentClubs(clubs); 
 
     // Initialize county cup for the first season
     gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
@@ -376,10 +401,12 @@ export function startNewGame(playerClubDetails) {
             newOpponent.inCup = true;
             newOpponent.eliminatedFromCup = false;
             gameState.countyCup.teams.push(newOpponent);
+            // Ensure newly generated cup opponents are also added to the global list
             opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
         }
     }
     
+    // Ensure uniqueness in countyCup.teams if duplicates were added
     gameState.countyCup.teams = Array.from(new Map(gameState.countyCup.teams.map(team => [team.id, team])).values());
 
 
@@ -438,7 +465,9 @@ export function applyOpponentCustomization(customizedOpponents) {
                 });
             }
         });
+        // Ensure opponentData's global list is updated with customized league clubs
         opponentData.setAllOpponentClubs(currentLeague.allClubsData);
+        
         // Also update the county cup teams with customized names
         gameState.countyCup.teams.forEach(cupTeam => {
             const custom = customizedOpponents.find(c => c.id === cupTeam.id);
@@ -450,6 +479,15 @@ export function applyOpponentCustomization(customizedOpponents) {
                 });
             }
         });
+        // After updating countyCup.teams, ensure opponentData's global list is also updated
+        // with any customizations that might have been applied to cup-only teams during the customization modal.
+        // This is important because the customization modal can show teams not in the league.
+        const allClubsAfterCustomization = Array.from(new Map([
+            ...currentLeague.allClubsData.map(c => [c.id, c]),
+            ...gameState.countyCup.teams.map(c => [c.id, c])
+        ]).values());
+        opponentData.setAllOpponentClubs(allClubsAfterCustomization);
+
     }
 
     gameState.opponentClubsCustomized = true;
@@ -502,16 +540,40 @@ export function loadGame() {
                 gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF'); // Try postcode or default
             }
 
+            // --- CRITICAL FIX START: Ensure allClubsInGameWorld is comprehensively populated on load ---
+            let allClubsFromLoad = [];
+            // Add league clubs first
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                 opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
-                 const playerClubFromLeague = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
-                 if (playerClubFromLeague) {
-                     gameState.playerClub.leagueStats = { ...playerClubFromLeague.leagueStats };
-                     gameState.playerClub.finalLeaguePosition = playerClubFromLeague.finalLeaguePosition;
-                 }
-            } else {
-                 opponentData.setAllOpponentClubs([]);
+                allClubsFromLoad = [...gameState.leagues[0].allClubsData];
             }
+
+            // Add any cup-specific teams from the loaded state that are not already in the league data
+            if (gameState.countyCup && gameState.countyCup.teams) {
+                const leagueClubIds = new Set(allClubsFromLoad.map(c => c.id));
+                gameState.countyCup.teams.forEach(cupTeam => {
+                    // Only add if it's not already in the league clubs list
+                    if (!leagueClubIds.has(cupTeam.id)) {
+                        allClubsFromLoad.push(cupTeam);
+                    }
+                });
+            }
+            
+            // Ensure playerClub is also in this list if it's somehow missing (shouldn't be, but for robustness)
+            if (gameState.playerClub && !allClubsFromLoad.some(c => c.id === gameState.playerClub.id)) {
+                allClubsFromLoad.push(gameState.playerClub);
+            }
+
+            // Set the comprehensive list of all clubs in the game world for opponentData module
+            opponentData.setAllOpponentClubs(allClubsFromLoad);
+
+            // Now, safely update playerClub's league stats from the comprehensive list
+            const playerClubFromAllClubs = allClubsFromLoad.find(c => c.id === gameState.playerClub.id);
+            if (playerClubFromAllClubs) {
+                gameState.playerClub.leagueStats = { ...playerClubFromAllClubs.leagueStats };
+                gameState.playerClub.finalLeaguePosition = playerClubFromAllClubs.finalLeaguePosition;
+            }
+            // --- CRITICAL FIX END ---
+
             applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
 

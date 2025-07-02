@@ -161,8 +161,24 @@ let currentMatchState = null; // Stores data for the match currently being simul
  */
 export function preMatchBriefing(gameState, playerMatch) {
     const isHomeMatch = playerMatch.homeTeamId === gameState.playerClub.id;
-    const opponentClub = isHomeMatch ? opponentData.getOpponentClub(playerMatch.awayTeamId) : opponentData.getOpponentClub(playerMatch.homeTeamId);
+    // Ensure opponentClub is found from the comprehensive allClubsInGameWorld
+    const opponentClub = opponentData.getOpponentClub(isHomeMatch ? playerMatch.awayTeamId : playerMatch.homeTeamId);
     
+    // Safety check: If opponentClub is still undefined, there's a data inconsistency.
+    // This should ideally not happen with the main.js load fix.
+    if (!opponentClub) {
+        console.error("ERROR: Opponent club not found for pre-match briefing. Match ID:", playerMatch.id, "Opponent ID:", isHomeMatch ? playerMatch.awayTeamId : playerMatch.homeTeamId);
+        renderers.showModal('Match Error', 'Could not find opponent details for this match. Skipping match.', [{ text: 'Continue', action: (gs, uic, context) => {
+            renderers.hideModal();
+            // This will attempt to process the rest of the week's events, including AI matches.
+            const currentWeekBlock = gs.leagues[0]?.currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE) ||
+                                     gs.countyCup.fixtures.find(wb => wb.week === gs.currentWeek && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
+            gameLoop.processAIMatchesAndFinalizeWeek(gs, currentWeekBlock, playerMatch.id);
+        }}], gameState, Main.getUpdateUICallbacks(), 'opponent_not_found_pre_match');
+        return;
+    }
+
+
     const weatherConditions = dataGenerator.getRandomElement(['Sunny', 'Cloudy', 'Light Rain', 'Heavy Rain', 'Overcast']);
     const pitchConditionString = clubData.getFacilityStatusByLevel(Constants.FACILITIES.PITCH, gameState.playerClub.facilities[Constants.FACILITIES.PITCH].level);
     const refereeName = `${dataGenerator.getRandomName('first')} ${dataGenerator.getRandomName('last')}`;
@@ -184,7 +200,7 @@ export function preMatchBriefing(gameState, playerMatch) {
         homeTeamId: playerMatch.homeTeamId,
         awayTeamId: playerMatch.awayTeamId,
         playerClub: gameState.playerClub,
-        allOpponentClubs: opponentData.getAllOpponentClubs(gameState.playerClub.id), // Pass only opponents
+        allOpponentClubs: opponentData.getAllOpponentClubs(null), // Pass all clubs, not just opponents, for simulation to find them
         playerSquad: playerData.getSquad(),
         isHomeMatch: isHomeMatch,
         opponentClub: opponentClub,
@@ -482,16 +498,17 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
             Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `You lost your County Cup match and are eliminated!` });
         }
 
-        // Update status for the opponent in the cup teams list
-        const opponentOfPlayer = (homeTeamId === playerTeamId) ? allOpponentClubs.find(c => c.id === awayTeamId) : allOpponentClubs.find(c => c.id === homeTeamId);
-        if (opponentOfPlayer) {
-            Main.gameState.countyCup.teams = Main.gameState.countyCup.teams.map(team => {
-                if (team.id === opponentOfPlayer.id) {
-                    return { ...team, inCup: playerWonCupMatch }; // Opponent is in cup if player lost, out if player won
-                }
-                return team;
-            });
-        }
+        // --- FIX: Update status for ALL teams in the countyCup.teams list based on match outcome ---
+        Main.gameState.countyCup.teams = Main.gameState.countyCup.teams.map(team => {
+            if (team.id === homeTeamId) { // Check home team
+                return { ...team, inCup: (finalHomeScore > finalAwayScore), eliminatedFromCup: (finalHomeScore <= finalAwayScore) };
+            }
+            if (team.id === awayTeamId) { // Check away team
+                return { ...team, inCup: (finalAwayScore > finalHomeScore), eliminatedFromCup: (finalAwayScore <= finalHomeScore) };
+            }
+            return team;
+        });
+        // --- END FIX ---
     }
     // --- END CRUCIAL ADDITION ---
 
@@ -518,4 +535,3 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
         homeTeamName: homeClubDetails.name, awayTeamName: awayClubDetails.name, report: reportMessage
     };
 }
-

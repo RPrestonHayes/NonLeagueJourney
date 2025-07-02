@@ -210,6 +210,7 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
         case 'cup_match_bye_ai_only': // Player had bye, AI matches processed
         case 'cup_match_none_or_eliminated': // No cup match, or eliminated
         case 'cup_match_no_player_match_ai_only': // No player cup match, AI matches processed
+        case 'opponent_not_found_pre_match': // Added for safety if opponent not found
             nextStepToResume = 5; // After match processing (player or AI), go to County Cup Announcement check
             break;
         case 'cup_draw_no_match': // Dismissed cup draw (no match for player)
@@ -271,7 +272,7 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
             match.homeTeamId,
             match.awayTeamId,
             gameState.playerClub,
-            opponentData.getAllOpponentClubs(gameState.playerClub.id),
+            opponentData.getAllOpponentClubs(null), // Pass all clubs for simulation
             playerData.getSquad()
         );
 
@@ -294,30 +295,16 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
             const winnerId = matchResult.homeScore > matchResult.awayScore ? matchResult.homeTeamId :
                              (matchResult.awayScore > matchResult.homeScore ? matchResult.awayTeamId : null);
             
-            if (winnerId === null) {
-                const randomWinner = getRandomElement([matchResult.homeTeamId, matchResult.awayTeamId]);
-                gameState.countyCup.teams = gameState.countyCup.teams.map(team => {
-                    if (team.id === matchResult.homeTeamId || team.id === matchResult.awayTeamId) {
-                        if (team.id === randomWinner) {
-                            return { ...team, inCup: true, eliminatedFromCup: false };
-                        } else {
-                            return { ...team, inCup: false, eliminatedFromCup: true };
-                        }
-                    }
-                    return team;
-                });
-            } else {
-                gameState.countyCup.teams = gameState.countyCup.teams.map(team => {
-                    if (team.id === matchResult.homeTeamId || team.id === matchResult.awayTeamId) {
-                        if (team.id === winnerId) {
-                            return { ...team, inCup: true, eliminatedFromCup: false };
-                        } else {
-                            return { ...team, inCup: false, eliminatedFromCup: true };
-                        }
-                    }
-                    return team;
-                });
-            }
+            // Update inCup and eliminatedFromCup status for AI teams in the cup
+            gameState.countyCup.teams = gameState.countyCup.teams.map(team => {
+                if (team.id === matchResult.homeTeamId) {
+                    return { ...team, inCup: (matchResult.homeScore > matchResult.awayScore), eliminatedFromCup: (matchResult.homeScore <= matchResult.awayScore) };
+                }
+                if (team.id === matchResult.awayTeamId) {
+                    return { ...team, inCup: (matchResult.awayScore > matchResult.homeScore), eliminatedFromCup: (matchResult.awayScore <= matchResult.homeScore) };
+                }
+                return team;
+            });
             
             const cupMatchIndex = gameState.countyCup.fixtures.findIndex(fixtureBlock => fixtureBlock.week === currentWeekBlock.week);
             if (cupMatchIndex !== -1) {
@@ -333,6 +320,8 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
     }
 
     if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
+        // This line is crucial: it updates opponentData's internal list with the latest league data.
+        // This is why allClubsInGameWorld in opponentData needs to be comprehensive.
         opponentData.setAllOpponentClubs(gameState.leagues[0].allClubsData);
 
         const playerClubInLeagueData = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
@@ -361,8 +350,17 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
     const currentRoundNum = Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.indexOf(currentRoundWeek) + 1;
     gameState.countyCup.currentRound = currentRoundNum;
     
-    let teamsInCup = gameState.countyCup.teams.filter(team => team.inCup !== false && team.id !== 'BYE');
+    // --- FIX: Filter out eliminated teams strictly from the pool for the draw ---
+    // Only include teams that are explicitly inCup === true AND not eliminatedFromCup === true
+    let teamsInCup = gameState.countyCup.teams.filter(team => team.inCup === true && team.eliminatedFromCup === false && team.id !== 'BYE');
     
+    // Ensure player's team is explicitly added if they are active and not already in the filtered list
+    // This handles cases where playerClub might not be in countyCup.teams initially or its status is outdated.
+    if (gameState.countyCup.playerTeamStatus === 'Active' && !teamsInCup.some(t => t.id === gameState.playerClub.id)) {
+        teamsInCup.push(gameState.playerClub);
+    }
+    // --- END FIX ---
+
     if (gameState.countyCup.playerTeamStatus === 'Eliminated' || teamsInCup.length < 2) {
         const message = gameState.countyCup.playerTeamStatus === 'Eliminated' ?
             'You have already been eliminated from the County Cup. No draw for you this round.' :
@@ -373,6 +371,7 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
 
     let playerInCup = teamsInCup.find(t => t.id === gameState.playerClub.id);
     if (!playerInCup && gameState.countyCup.playerTeamStatus === 'Active') {
+        // This block might be redundant if the above filtering is robust, but keeping for safety.
         teamsInCup.push(gameState.playerClub);
     } else if (playerInCup && gameState.countyCup.playerTeamStatus === 'Not Entered') {
         gameState.countyCup.playerTeamStatus = 'Active';
@@ -381,7 +380,7 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
     const matchWeekForThisRound = Constants.COUNTY_CUP_MATCH_WEEKS[currentRoundNum - 1];
     const cupFixturesThisRound = leagueData.generateCupFixtures(
         gameState.countyCup.competitionId,
-        teamsInCup,
+        teamsInCup, // Pass the filtered list of teams
         gameState.currentSeason,
         matchWeekForThisRound
     );
@@ -429,15 +428,20 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
                             Object.assign(customizedOpponent, {id: clubId, name, nickname, kitColors: {primary: primaryColor, secondary: secondaryColor}});
                         }
                         
-                        const opponentIndex = gsInner.countyCup.teams.findIndex(t => t.id === customizedOpponent.id);
-                        if(opponentIndex !== -1) {
-                            Object.assign(gsInner.countyCup.teams[opponentIndex], customizedOpponent);
-                        }
-                        const leagueClubIndex = gsInner.leagues[0].allClubsData.findIndex(c => c.id === customizedOpponent.id);
-                        if (leagueClubIndex !== -1) {
-                            Object.assign(gsInner.leagues[0].allClubsData[leagueClubIndex], customizedOpponent);
+                        // Update the opponent in the main allClubsInGameWorld list
+                        const globalOpponentList = opponentData.getAllOpponentClubs(null); // Get current global list
+                        const globalOpponentIndex = globalOpponentList.findIndex(t => t.id === customizedOpponent.id);
+                        if (globalOpponentIndex !== -1) {
+                            Object.assign(globalOpponentList[globalOpponentIndex], customizedOpponent);
+                            opponentData.setAllOpponentClubs(globalOpponentList); // Update the global list
                         }
 
+                        // Update in countyCup.teams as well
+                        const cupTeamIndex = gsInner.countyCup.teams.findIndex(t => t.id === customizedOpponent.id);
+                        if(cupTeamIndex !== -1) {
+                            Object.assign(gsInner.countyCup.teams[cupTeamIndex], customizedOpponent);
+                        }
+                        
                         renderers.hideOpponentCustomizationModal();
                         uicInner.finalizeWeekProcessing(gsInner, contextInner);
                     }, isPrimary: true }]
@@ -497,11 +501,13 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
             matchLogic.preMatchBriefing(gameState, playerMatch);
             return;
         } else {
+            // If playerMatch exists but playerTeamStatus is not 'Active' (e.g., 'Eliminated' from a previous round)
             renderers.showModal('County Cup', `You were expected to play, but your cup status is ${gameState.countyCup.playerTeamStatus}. This is a week off.`, [], gameState, updateUICallbacks, 'cup_match_unexpected_status');
             processAIMatchesAndFinalizeWeek(gameState, currentWeekCupBlock, null);
             return;
         }
     } else {
+        // No player match in this block, process AI matches.
         if (gameState.countyCup.playerTeamStatus === 'Eliminated') {
             renderers.showModal('County Cup', `You were eliminated from the County Cup. This is a week off.`, [], gameState, updateUICallbacks, 'cup_match_eliminated_ai_only');
         } else {
@@ -816,8 +822,8 @@ function endSeason(gameState) {
         if (!gameState.countyCup.teams.some(team => team.id === newOpponent.id)) {
             newOpponent.inCup = true;
             newOpponent.eliminatedFromCup = false;
-            opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
             gameState.countyCup.teams.push(newOpponent);
+            opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
         }
     }
 
@@ -841,4 +847,3 @@ function endSeason(gameState) {
         finalizeWeekProcessing(gs, context);
     } }], gameState, updateUICallbacks, 'season_start_continue');
 }
-
