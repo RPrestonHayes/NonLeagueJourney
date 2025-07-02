@@ -94,8 +94,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     const currentLeague = gameState.leagues[0];
     const isLeagueMatchCalendarWeek = currentMonthBlock && currentMonthBlock.isLeague;
     const isCupMatchWeek = Constants.COUNTY_CUP_MATCH_WEEKS.includes(gameState.currentWeek);
-    const isCupAnnouncementWeek = Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(gameState.currentWeek);
-
+    // const isCupAnnouncementWeek = Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(gameState.currentWeek); // Removed from here
 
     // Step 3: County Cup Match (Takes precedence for player's match)
     // If it's a cup match week, handle the player's cup match or week off.
@@ -133,22 +132,17 @@ export function advanceWeek(gameState, resumeStep = 0) {
                     return true;
                 }
             } else {
+                // If no player match, but there are AI league matches, process them
                 processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, null);
-                return true;
+                return true; // This will show a modal if AI matches were played, or finalize if not.
             }
         }
     }
 
-    // Step 5: County Cup Announcement (This is a *post-match/post-event* summary for the week)
-    // This modal should appear after all other events/matches for the week have been processed.
-    if (resumeStep <= 5 && renderers.getModalDisplayStatus() === 'none' && isCupAnnouncementWeek) {
-        handleCountyCupAnnouncement(gameState); // This function will always show a modal
-        return true; // Stop here, modal dismissal will finalize the week
-    }
-
-    // Step 6: Quiet Week (Fallback if no other major event/match happened)
+    // Step 5: Quiet Week (Fallback if no other major event/match happened)
     // Only show if no other modal is currently active.
-    if (resumeStep <= 6 && renderers.getModalDisplayStatus() === 'none') {
+    // Note: Cup announcements are now handled in finalizeWeekProcessing
+    if (resumeStep <= 5 && renderers.getModalDisplayStatus() === 'none') {
         renderers.showModal('Quiet Week', 'Nothing major happened this week. Focus on building your club!', [], gameState, updateUICallbacks, 'quiet_week');
         console.log(gameState.currentWeek)
         gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
@@ -159,7 +153,9 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // and no modal was displayed by this direct execution path.
     // This typically means a modal was already active from a prior step (e.g., a task completion).
     console.log("DEBUG: advanceWeek finished, no new modal triggered. Assuming prior modal handled continuation.");
-    return false;
+    // If no modal was triggered by advanceWeek, then finalize the week directly.
+    finalizeWeekProcessing(gameState, 'no_modal_triggered_by_advance_week'); // Call finalize directly
+    return false; // Indicate no modal was shown by this direct call
 }
 
 /**
@@ -200,7 +196,7 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
         case 'pre_match_briefing': // Dismissed match briefing (player match about to start)
         case 'half_time_options': // Dismissed half-time options
         case 'half_time_action_outcome': // Dismissed half-time action outcome
-            nextStepToResume = 5; // After player match, go to County Cup Announcement check
+            nextStepToResume = 5; // After player match, go to Quiet Week check (cup announcement now in finalize)
             break;
         case 'match_postponed': // Player's league match postponed
         case 'cup_match_bye_player': // Player had a bye in cup
@@ -211,16 +207,10 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
         case 'cup_match_none_or_eliminated': // No cup match, or eliminated
         case 'cup_match_no_player_match_ai_only': // No player cup match, AI matches processed
         case 'opponent_not_found_pre_match': // Added for safety if opponent not found
-            nextStepToResume = 5; // After match processing (player or AI), go to County Cup Announcement check
-            break;
-        case 'cup_draw_no_match': // Dismissed cup draw (no match for player)
-        case 'cup_draw_normal': // Dismissed cup draw (normal)
-        case 'cup_draw_bye': // Dismissed cup draw (bye)
-        case 'cup_draw_with_customization': // Dismissed cup draw (with customization)
-            nextStepToResume = 6; // After cup announcement, go to Quiet Week check
+            nextStepToResume = 5; // After match processing (player or AI), go to Quiet Week check (cup announcement now in finalize)
             break;
         case 'quiet_week': // Dismissed quiet week
-            nextStepToResume = 7; // Quiet week is the very last step, so finalize
+            nextStepToResume = 6; // Quiet week is the very last step in advanceWeek, so finalize
             break;
         // Contexts that indicate full week processing is done or game state changes
         case 'game_loaded':
@@ -232,6 +222,12 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
         case 'new_game_confirm':
         case 'season_start_continue':
         case 'end_of_season_review':
+        case 'no_modal_triggered_by_advance_week': // Added for direct finalize call
+        // ADDED: Contexts from cup announcement modals that should lead to finalization
+        case 'cup_draw_no_match':
+        case 'cup_draw_normal':
+        case 'cup_draw_bye':
+        case 'cup_draw_with_customization':
             nextStepToResume = 7; // These contexts mean the week is fully processed or game is starting/ending
             break;
         default:
@@ -527,30 +523,31 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
 export function finalizeWeekProcessing(gameState, dismissalContext) { // EXPORTED to be called by modal actions
     console.log(`DEBUG: finalizeWeekProcessing called. Context: ${dismissalContext}. Finishing week processing.`);
 
-    // If this is not a 'finalization' context, it means a modal was dismissed mid-week.
-    // In that case, we call processRemainingWeekEvents to continue the week's flow.
-    const finalizationContexts = [
-        'quiet_week', 'no_ai_matches_or_modal_active', 'game_loaded', 'welcome_new_game',
-        'club_born', 'rivals_customized', 'game_loaded_confirm', 'no_save_found',
-        'new_game_confirm', 'season_start_continue', 'end_of_season_review'
-    ];
-    if (!finalizationContexts.includes(dismissalContext)) {
-        processRemainingWeekEvents(gameState, dismissalContext);
-        return; // Prevent week from advancing prematurely
+    // --- NEW: Handle County Cup Announcement *before* week increments ---
+    // This ensures the announcement happens for the current week, after matches.
+    // It will show a modal, and that modal's dismissal will call finalizeWeekProcessing again,
+    // but with a cup_draw_... context, allowing the week to finally increment.
+    if (Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(gameState.currentWeek) && 
+        !['cup_draw_no_match', 'cup_draw_normal', 'cup_draw_bye', 'cup_draw_with_customization'].includes(dismissalContext)) {
+        
+        console.log(`DEBUG: Triggering County Cup Announcement for Week ${gameState.currentWeek}`);
+        handleCountyCupAnnouncement(gameState);
+        return; // IMPORTANT: Return here. The dismissal of the cup announcement modal will call finalizeWeekProcessing again.
     }
+    // --- END NEW ---
 
 
     // These steps now only occur once all match/event modals are dismissed and flow is returned.
     // 7. Update Player Fitness/Morale (Post-match/Weekly Decay)
     const playerLeagueMatchForWeek = gameState.leagues[0]?.currentSeasonFixtures
         .find(wb => wb.week === (gameState.currentWeek - Constants.PRE_SEASON_WEEKS) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE)?.matches
-        .find(match => match.homeTeamId === gameState.playerClub.id);
+        .find(match => match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id); // Check both home/away
     
     const playerCupMatchForWeek = gameState.countyCup.fixtures
         .find(wb => wb.week === gameState.currentWeek && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP)?.matches
-        .find(match => match.homeTeamId === gameState.playerClub.id);
+        .find(match => match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id); // Check both home/away
 
-    const wasPlayerHomeMatch = !!playerLeagueMatchForWeek || !!playerCupMatchForWeek;
+    const wasPlayerHomeMatch = !!playerLeagueMatchForWeek || !!playerCupMatchForWeek; // True if player had any match this week.
 
     applyMatchDayFacilityDamage(gameState, wasPlayerHomeMatch);
     updatePlayerStatus(gameState);
@@ -847,3 +844,4 @@ function endSeason(gameState) {
         finalizeWeekProcessing(gs, context);
     } }], gameState, updateUICallbacks, 'season_start_continue');
 }
+
