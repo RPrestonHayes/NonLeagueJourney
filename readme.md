@@ -1,5 +1,5 @@
-Non-League Journey: Grassroots Glory
-⚽ Build Your Legacy From the Bottom Up!
+Non-League Journey: Grassroots Glory⚽ 
+Build Your Legacy From the Bottom Up!
 Non-League Journey is an immersive, client-side football management simulation that puts you in the shoes of an owner/chairperson of a hyper-local grassroots football club. Starting at the very bottom of the English football pyramid, your primary focus is on comprehensive off-pitch club management, community engagement, and building a sustainable club from humble beginnings. On-pitch results provide the narrative progression as you strive for promotion.
 
 Table of Contents
