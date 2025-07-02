@@ -192,7 +192,7 @@ export const ATTRIBUTE_MIN = 1;
 export const ATTRIBUTE_MAX = 20;
 
 // Initial pool size for County Cup teams generated at game start
-export const INITIAL_CUP_POOL_SIZE = 0; // Generate up to 64 potential cup teams in background
+export const INITIAL_CUP_POOL_SIZE = 0; // Generate up to no cup teams at begin instead generate them as we need them
 
 // Kit Colors (for generation)
 export const KIT_COLORS = [

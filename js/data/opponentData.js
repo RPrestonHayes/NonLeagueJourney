@@ -49,7 +49,7 @@ export function initializeOpponentClubs(playerCountyData) {
             leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
             inCup: true, // Assume all initial league teams are in the cup
             eliminatedFromCup: false,
-            potentialLeagueLevel: 0 // Default for league teams (lowest tier)
+            potentialLeagueLevel: 0 // Default for league teams
         });
     }
     console.log("Initial opponent clubs generated:", generatedOpponents.map(c => c.name));
