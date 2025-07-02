@@ -6,7 +6,6 @@ Table of Contents
 
  * About the Game & Project Goals
  * Key Features
- * File Structure
  * Technologies Used
  * Contributing
  * License
@@ -23,38 +22,7 @@ Key Features
  * Club & Opponent Customization: Personalize your club and initial rivals.
  * Persistent Data: Save your progress locally, with options to export key data.
 
-File Structure
-The project is organized into logical directories for maintainability:
-.
-├── GDD.md                # Game Design Document
-├── index.html            # Main HTML file (game interface)
-├── style.css             # Global CSS styles
-└── js/                   # All JavaScript files
-    ├── data/             # Modules for managing game data (clubs, players, leagues, etc.)
-    │   ├── CountiesData.js
-    │   ├── clubData.js
-    │   ├── leagueData.js
-    │   ├── opponentData.js
-    │   └── playerData.js
-    ├── libs/             # Third-party libraries
-    │   └── lzstring/
-    │       └── lz-string.min.js # For save game compression
-    ├── logic/            # Core game logic and simulation modules
-    │   ├── committeeLogic.js
-    │   ├── eventLogic.js
-    │   ├── gameLoop.js
-    │   ├── matchLogic.js
-    │   ├── playerInteractionLogic.js
-    │   └── taskLogic.js
-    ├── ui/               # User interface rendering and event handling
-    │   ├── eventHandlers.js
-    │   └── renderers.js
-    └── utils/            # General utility functions
-        ├── coloursUtils.js
-        ├── constants.js
-        ├── dataGenerator.js
-        └── localStorageManager.js
-    ├── main.js           # Main application entry point and orchestrator
+
 
 Technologies Used
  * HTML5: For structuring the game interface.
