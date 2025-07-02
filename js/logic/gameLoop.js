@@ -857,4 +857,3 @@ function endSeason(gameState) {
         finalizeWeekProcessing(gs, context);
     } }], gameState, updateUICallbacks, 'season_start_continue');
 }
-

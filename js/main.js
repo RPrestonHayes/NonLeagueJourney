@@ -700,4 +700,3 @@ export function advanceWeek() {
 console.log("DEBUG: Adding DOMContentLoaded listener.");
 document.addEventListener('DOMContentLoaded', initGame);
 console.log("DEBUG: main.js finished loading.");
-

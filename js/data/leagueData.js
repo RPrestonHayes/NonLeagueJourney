@@ -391,4 +391,3 @@ export function processEndOfSeason(currentLeagues, allClubsInGame) {
 
     return updatedLeagues;
 }
-
