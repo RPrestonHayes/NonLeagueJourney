@@ -430,6 +430,10 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
                         if (globalOpponentIndex !== -1) {
                             Object.assign(globalOpponentList[globalOpponentIndex], customizedOpponent);
                             opponentData.setAllOpponentClubs(globalOpponentList); // Update the global list
+                        } else {
+                            // This case should ideally not happen if opponentData.getAllOpponentClubs(null)
+                            // already includes opponentToCustomize, but as a fallback:
+                            opponentData.setAllOpponentClubs([...globalOpponentList, customizedOpponent]);
                         }
 
                         // Update in countyCup.teams as well
@@ -445,6 +449,15 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
                 }, isPrimary: true },
                 { text: 'Continue Without Customizing', action: (gs, uic, context) => {
                     renderers.hideModal();
+                    // --- FIX START: Add opponentToCustomize to global list if customization is skipped ---
+                    if (gs.countyCup.opponentToCustomize) {
+                        const currentGlobalClubs = opponentData.getAllOpponentClubs(null);
+                        // Only add if it's not already present in the global list
+                        if (!currentGlobalClubs.some(c => c.id === gs.countyCup.opponentToCustomize.id)) {
+                            opponentData.setAllOpponentClubs([...currentGlobalClubs, gs.countyCup.opponentToCustomize]);
+                        }
+                    }
+                    // --- FIX END ---
                     uic.finalizeWeekProcessing(gs, context);
                 } }
             ], gameState, updateUICallbacks, 'cup_draw_with_customization');

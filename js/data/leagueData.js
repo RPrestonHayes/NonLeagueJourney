@@ -105,6 +105,7 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
             newOpponent.eliminatedFromCup = false;
             availableTeamsForDraw.push(newOpponent);
             // Crucial: Add this newly generated opponent to the global opponentData list
+            // This ensures it's available via getOpponentClub later.
             opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
         }
     }
@@ -170,7 +171,16 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
         if (isOpponentFromOutsideLeague) {
             const externalOpponent = isHomePlayer ? awayTeam : homeTeam;
             // Ensure we get the full club object from opponentData.allClubsInGameWorld
+            // If it's a newly generated team, it might not be in allClubsInGameWorld yet,
+            // so we use the externalOpponent object directly.
             opponentClubFromOutsideLeague = opponentData.getOpponentClub(externalOpponent.id) || externalOpponent;
+
+            // --- FIX START: Add this external opponent to allClubsInGameWorld if not already present ---
+            const currentGlobalClubs = opponentData.getAllOpponentClubs(null);
+            if (!currentGlobalClubs.some(c => c.id === opponentClubFromOutsideLeague.id)) {
+                opponentData.setAllOpponentClubs([...currentGlobalClubs, opponentClubFromOutsideLeague]);
+            }
+            // --- FIX END ---
         }
         
         cupMatches.push({
@@ -381,3 +391,4 @@ export function processEndOfSeason(currentLeagues, allClubsInGame) {
 
     return updatedLeagues;
 }
+

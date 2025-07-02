@@ -289,27 +289,28 @@ function initGame() {
 
             // --- CRITICAL FIX START: Ensure allClubsInGameWorld is comprehensively populated on load ---
             let allClubsFromLoad = [];
-            // Add league clubs first
+            // Add player club first
+            if (gameState.playerClub) {
+                allClubsFromLoad.push(gameState.playerClub);
+            }
+            // Add league clubs
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                allClubsFromLoad = [...gameState.leagues[0].allClubsData];
+                gameState.leagues[0].allClubsData.forEach(club => {
+                    if (!allClubsFromLoad.some(c => c.id === club.id)) {
+                        allClubsFromLoad.push(club);
+                    }
+                });
             }
 
-            // Add any cup-specific teams from the loaded state that are not already in the league data
+            // Add any cup-specific teams from the loaded state that are not already in the league/player data
             if (gameState.countyCup && gameState.countyCup.teams) {
-                const leagueClubIds = new Set(allClubsFromLoad.map(c => c.id));
                 gameState.countyCup.teams.forEach(cupTeam => {
-                    // Only add if it's not already in the league clubs list
-                    if (!leagueClubIds.has(cupTeam.id)) {
+                    if (!allClubsFromLoad.some(c => c.id === cupTeam.id)) {
                         allClubsFromLoad.push(cupTeam);
                     }
                 });
             }
             
-            // Ensure playerClub is also in this list if it's somehow missing (shouldn't be, but for robustness)
-            if (gameState.playerClub && !allClubsFromLoad.some(c => c.id === gameState.playerClub.id)) {
-                allClubsFromLoad.push(gameState.playerClub);
-            }
-
             // Set the comprehensive list of all clubs in the game world for opponentData module
             opponentData.setAllOpponentClubs(allClubsFromLoad);
 
@@ -387,7 +388,8 @@ export function startNewGame(playerClubDetails) {
     );
     gameState.leagues = leagues;
     // IMPORTANT: Set initial clubs including player's and league opponents
-    opponentData.setAllOpponentClubs(clubs); 
+    // This will be part of the comprehensive list built below for opponentData
+    // opponentData.setAllOpponentClubs(clubs); // This line is now handled by the comprehensive list below
 
     // Initialize county cup for the first season
     gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
@@ -402,12 +404,37 @@ export function startNewGame(playerClubDetails) {
             newOpponent.eliminatedFromCup = false;
             gameState.countyCup.teams.push(newOpponent);
             // Ensure newly generated cup opponents are also added to the global list
-            opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
+            // This will be part of the comprehensive list built below for opponentData
+            // opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
         }
     }
     
     // Ensure uniqueness in countyCup.teams if duplicates were added
     gameState.countyCup.teams = Array.from(new Map(gameState.countyCup.teams.map(team => [team.id, team])).values());
+
+    // --- CRITICAL FIX START: Build comprehensive allClubsInGameWorld for new game ---
+    let allClubsForNewGame = [];
+    allClubsForNewGame.push(gameState.playerClub); // Add player club
+    
+    // Add all league clubs
+    if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
+        gameState.leagues[0].allClubsData.forEach(club => {
+            if (!allClubsForNewGame.some(c => c.id === club.id)) {
+                allClubsForNewGame.push(club);
+            }
+        });
+    }
+
+    // Add all cup teams (ensuring uniqueness)
+    if (gameState.countyCup && gameState.countyCup.teams) {
+        gameState.countyCup.teams.forEach(cupTeam => {
+            if (!allClubsForNewGame.some(c => c.id === cupTeam.id)) {
+                allClubsForNewGame.push(cupTeam);
+            }
+        });
+    }
+    opponentData.setAllOpponentClubs(allClubsForNewGame);
+    // --- CRITICAL FIX END ---
 
 
     gameState.countyCup.playerTeamStatus = 'Active';
@@ -466,7 +493,8 @@ export function applyOpponentCustomization(customizedOpponents) {
             }
         });
         // Ensure opponentData's global list is updated with customized league clubs
-        opponentData.setAllOpponentClubs(currentLeague.allClubsData);
+        // This will be part of the comprehensive list built below for opponentData
+        // opponentData.setAllOpponentClubs(currentLeague.allClubsData);
         
         // Also update the county cup teams with customized names
         gameState.countyCup.teams.forEach(cupTeam => {
@@ -542,27 +570,28 @@ export function loadGame() {
 
             // --- CRITICAL FIX START: Ensure allClubsInGameWorld is comprehensively populated on load ---
             let allClubsFromLoad = [];
-            // Add league clubs first
+            // Add player club first
+            if (gameState.playerClub) {
+                allClubsFromLoad.push(gameState.playerClub);
+            }
+            // Add league clubs
             if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                allClubsFromLoad = [...gameState.leagues[0].allClubsData];
+                gameState.leagues[0].allClubsData.forEach(club => {
+                    if (!allClubsFromLoad.some(c => c.id === club.id)) {
+                        allClubsFromLoad.push(club);
+                    }
+                });
             }
 
-            // Add any cup-specific teams from the loaded state that are not already in the league data
+            // Add any cup-specific teams from the loaded state that are not already in the league/player data
             if (gameState.countyCup && gameState.countyCup.teams) {
-                const leagueClubIds = new Set(allClubsFromLoad.map(c => c.id));
                 gameState.countyCup.teams.forEach(cupTeam => {
-                    // Only add if it's not already in the league clubs list
-                    if (!leagueClubIds.has(cupTeam.id)) {
+                    if (!allClubsFromLoad.some(c => c.id === cupTeam.id)) {
                         allClubsFromLoad.push(cupTeam);
                     }
                 });
             }
             
-            // Ensure playerClub is also in this list if it's somehow missing (shouldn't be, but for robustness)
-            if (gameState.playerClub && !allClubsFromLoad.some(c => c.id === gameState.playerClub.id)) {
-                allClubsFromLoad.push(gameState.playerClub);
-            }
-
             // Set the comprehensive list of all clubs in the game world for opponentData module
             opponentData.setAllOpponentClubs(allClubsFromLoad);
 
@@ -671,3 +700,4 @@ export function advanceWeek() {
 console.log("DEBUG: Adding DOMContentLoaded listener.");
 document.addEventListener('DOMContentLoaded', initGame);
 console.log("DEBUG: main.js finished loading.");
+
