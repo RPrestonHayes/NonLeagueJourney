@@ -216,20 +216,35 @@ export function generateRegionalClubPool(playerCountyData, playerClubDetails) {
     const allClubs = [];
     const townsPool = [...playerCountyData.towns];
 
-    // Create AI clubs first, assign seeds 1 to 59
-    for (let i = 0; i < Constants.NUM_REGIONAL_CLUBS - 1; i++) {
+    // Create AI clubs first, assign seeds 1 to 59 (or 60 for 64 total clubs)
+    for (let i = 0; i < Constants.NUM_REGIONAL_CLUBS - 1; i++) { // Loop for all AI clubs
         const id = generateUniqueId('C');
         let identity = generateClubIdentity(playerCountyData);
         let name = identity.name;
         let nickname = identity.nickname;
         const kitColors = generateKitColors();
 
-        // Assign initialSeedQuality (1 is best, 59 is worst AI)
-        const initialSeedQuality = i + 1; // 1 to 59
+        // Assign initialSeedQuality (1 is best, NUM_REGIONAL_CLUBS-1 is worst AI)
+        const initialSeedQuality = i + 1; // 1 to 63 for 64 clubs total
 
-        // Overall Team Quality (higher for better seeds)
-        // Scale quality from 20 (best seed 1) down to 5 (worst AI seed 59)
-        const overallTeamQuality = Math.max(5, Math.round(20 - (initialSeedQuality - 1) * (15 / (Constants.NUM_REGIONAL_CLUBS - 2))));
+        let overallTeamQuality;
+        let potentialLeagueLevel;
+
+        // Determine quality and potentialLeagueLevel based on seed for all 63 AI clubs
+        if (initialSeedQuality <= Constants.LEAGUE_TIERS.PREMIER.seedRange.max) { // Seeds 1-20 (Premier)
+            overallTeamQuality = getRandomInt(15, 20); // High quality
+            potentialLeagueLevel = Constants.LEAGUE_TIERS.PREMIER.level;
+        } else if (initialSeedQuality <= Constants.LEAGUE_TIERS.DIV1.seedRange.max) { // Seeds 21-40 (Div 1)
+            overallTeamQuality = getRandomInt(10, 14); // Medium quality
+            potentialLeagueLevel = Constants.LEAGUE_TIERS.DIV1.level;
+        } else if (initialSeedQuality <= Constants.LEAGUE_TIERS.DIV2.seedRange.max) { // Seeds 41-60 (Div 2)
+            overallTeamQuality = getRandomInt(5, 9); // Low quality
+            potentialLeagueLevel = Constants.LEAGUE_TIERS.DIV2.level;
+        } else { // Seeds 61-64 (Higher tier external teams)
+            overallTeamQuality = getRandomInt(18, 20); // Very high quality
+            potentialLeagueLevel = Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_DIV.level; // Level 4
+        }
+
 
         // Add a chance for "reserve" teams from major towns in the region
         if (getRandomInt(1, 100) < 30 && townsPool.length > 0) {
@@ -249,12 +264,12 @@ export function generateRegionalClubPool(playerCountyData, playerClubDetails) {
             inCup: true, // Assume all initial clubs are eligible for the cup
             eliminatedFromCup: false,
             initialSeedQuality: initialSeedQuality, // Store the seed for sorting into leagues
-            potentialLeagueLevel: 0, // Will be set by leagueData based on tier
+            potentialLeagueLevel: potentialLeagueLevel, // Set potential league level
             customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED // NEW: Default to not customized
         });
     }
 
-    // Add Player's Club as the lowest seed (60)
+    // Add Player's Club as the lowest seed (NUM_REGIONAL_CLUBS)
     allClubs.push({
         id: playerClubDetails.id,
         name: playerClubDetails.clubName,
@@ -267,8 +282,8 @@ export function generateRegionalClubPool(playerCountyData, playerClubDetails) {
         leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
         inCup: true,
         eliminatedFromCup: false,
-        initialSeedQuality: Constants.NUM_REGIONAL_CLUBS, // Player is the last seed
-        potentialLeagueLevel: 0, // Will be set by leagueData based on tier
+        initialSeedQuality: Constants.NUM_REGIONAL_CLUBS, // Player is the last seed (64)
+        potentialLeagueLevel: Constants.LEAGUE_TIERS.DIV2.level, // Player starts in lowest league (Div 2)
         customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.CUSTOMIZED_ONCE // NEW: Player's club is customized by default
     });
 

@@ -13,7 +13,7 @@ import * as leagueData from '../data/leagueData.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
 import * as matchLogic from './matchLogic.js';
 import * as eventLogic from './eventLogic.js';
-import * as playerInteractionLogic from './playerInteractionLogic.js'; // Correct path
+import * as playerInteractionLogic from './playerInteractionLogic.js'; // Keep import here, pass it down
 import * as committeeLogic from './committeeLogic.js'; // Correct path
 import * as renderers from '../ui/renderers.js';
 // REMOVED: import * as Main from '../main.js'; // This caused circular dependency
@@ -101,7 +101,6 @@ function applyNaturalFacilityChanges(gameState, updateUICallbacks) { // Now rece
                 gameState.playerClub.facilities = updatedFacilitiesAfterDegradeCheck;
                 const newGrade = gameState.playerClub.facilities[key].grade;
                 renderers.showModal('Facility Degraded!', `${facility.name} condition has been poor, degrading from Grade ${oldGrade} to Grade ${newGrade}!`, [{ text: 'Drat!', action: (gs, uic, context) => {
-                    renderers.hideModal();
                     gameLoop.processRemainingWeekEvents(gs, 'facility_degraded', uic); // Pass uic
                 } }], gameState, updateUICallbacks, 'facility_degraded');
                 gameState.messages.push({ week: gameState.currentWeek, text: `Facility Degraded: ${facility.name} from Grade ${oldGrade} to Grade ${newGrade}.` });
@@ -217,22 +216,33 @@ function endSeason(gameState, updateUICallbacks) { // Now receives updateUICallb
 
     // Find the player's current league to get its name for the summary
     const playerCurrentLeague = gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId);
-    const allClubsForLeague = opponentData.getAllOpponentClubs(null); // Get all clubs for processing
+    const allClubsInGameWorld = opponentData.getAllOpponentClubs(null); // Get all clubs for processing
 
     // Process end of season for ALL leagues
     const updatedLeaguesAfterSeason = gameState.leagues.map(league => {
-        const clubsInThisLeague = allClubsForLeague.filter(club => club.currentLeagueId === league.id);
-        return leagueData.processEndOfSeason([league], clubsInThisLeague)[0]; // processEndOfSeason expects array of leagues
+        const clubsInThisLeague = allClubsInGameWorld.filter(club => club.currentLeagueId === league.id);
+        // Pass the league as an array to processEndOfSeason
+        const processedLeague = leagueData.processEndOfSeason([league], clubsInThisLeague)[0]; 
+
+        // Update currentLeagueId for promoted/relegated clubs in allClubsInGameWorld
+        processedLeague.allClubsData.forEach(clubInLeague => {
+            const originalClubInGameWorld = allClubsInGameWorld.find(c => c.id === clubInLeague.id);
+            if (originalClubInGameWorld) {
+                originalClubInGameWorld.finalLeaguePosition = clubInLeague.finalLeaguePosition; // Update final position
+                // Logic for promotion/relegation and updating currentLeagueId will be handled here or in leagueData.processEndOfSeason
+                // For now, assume processEndOfSeason handles updating currentLeagueId for clubs in allClubsInGameWorld
+            }
+        });
+        return processedLeague;
     });
     gameState.leagues = updatedLeaguesAfterSeason;
 
-    // Update player club's final position and league stats from the updated allClubsForLeague
-    const playerClubInLeagueData = allClubsForLeague.find(c => c.id === gameState.playerClub.id);
-    if (playerClubInLeagueData) {
-        gameState.playerClub.finalLeaguePosition = playerClubInLeagueData.finalLeaguePosition;
-        gameState.playerClub.leagueStats = { ...playerClubInLeagueData.leagueStats };
-        // Update player's current league ID if they were promoted/relegated
-        gameState.playerClub.currentLeagueId = playerClubInLeagueData.currentLeagueId;
+    // Update player club's final position and league stats from the updated allClubsInGameWorld
+    const playerClubInGameWorld = allClubsInGameWorld.find(c => c.id === gameState.playerClub.id);
+    if (playerClubInGameWorld) {
+        gameState.playerClub.finalLeaguePosition = playerClubInGameWorld.finalLeaguePosition;
+        gameState.playerClub.leagueStats = { ...playerClubInGameWorld.leagueStats };
+        gameState.playerClub.currentLeagueId = playerClubInGameWorld.currentLeagueId; // Ensure currentLeagueId is updated
     }
 
 
@@ -367,7 +377,8 @@ export function advanceWeek(gameState, resumeStep = 0, updateUICallbacks) { // N
     // Step 2: Random Event
     if (resumeStep <= 2 && (gameState.currentWeek > Constants.PRE_SEASON_WEEKS || gameState.gamePhase === Constants.GAME_PHASE.PRE_SEASON_PLANNING) && renderers.getModalDisplayStatus() === 'none') {
         const eventMultiplier = (currentMonthName === 'December') ? Constants.DECEMBER_BAD_EVENT_CHANCE_MULTIPLIER : 1;
-        const triggeredEvent = eventLogic.triggerRandomEvent(gameState, eventMultiplier, updateUICallbacks); // Pass updateUICallbacks
+        // Pass playerInteractionLogic to eventLogic.triggerRandomEvent
+        const triggeredEvent = eventLogic.triggerRandomEvent(gameState, eventMultiplier, updateUICallbacks, playerInteractionLogic); // Pass updateUICallbacks, playerInteractionLogic
         if (triggeredEvent) {
             gameState.messages.push({ week: gameState.currentWeek, text: `${triggeredEvent.title}: ${triggeredEvent.description}` });
             return true; // Modal shown, execution stops here
@@ -375,7 +386,6 @@ export function advanceWeek(gameState, resumeStep = 0, updateUICallbacks) { // N
     }
 
     // --- Match Logic & Cup Announcements: Order is CRITICAL ---
-    const currentLeague = gameState.leagues[0]; // Assuming player is always in the first league object for now
     const isLeagueMatchCalendarWeek = currentMonthBlock && currentMonthBlock.isLeague;
     const isCupMatchWeek = Constants.COUNTY_CUP_MATCH_WEEKS.includes(gameState.currentWeek);
 
@@ -389,7 +399,7 @@ export function advanceWeek(gameState, resumeStep = 0, updateUICallbacks) { // N
 
     // Step 4: League Match (Only if NOT a dedicated Cup Match Week)
     // If it's a regular league week and not a cup match week, simulate league matches.
-    if (resumeStep <= 4 && renderers.getModalDisplayStatus() === 'none' && isLeagueMatchCalendarWeek && !isCupMatchWeek && currentLeague) {
+    if (resumeStep <= 4 && renderers.getModalDisplayStatus() === 'none' && isLeagueMatchCalendarWeek && !isCupMatchWeek && gameState.playerClub?.currentLeagueId) { // Check for playerClub.currentLeagueId
         const currentAbsoluteGameWeek = gameState.currentWeek;
         // Find the player's current league
         const playerCurrentLeague = gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId);
@@ -468,8 +478,9 @@ export function advanceWeek(gameState, resumeStep = 0, updateUICallbacks) { // N
     if (resumeStep <= 5 && renderers.getModalDisplayStatus() === 'none') {
         // Collect all AI matches for this week (both league and cup)
         const currentAbsoluteGameWeek = gameState.currentWeek;
-        const currentLeague = gameState.leagues[0]; // Assuming player is in the first league for this check
-        const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+        // Find player's current league to get its fixtures
+        const playerCurrentLeague = gameState.leagues.find(l => l.id === gameState.playerClub?.currentLeagueId); // Optional chaining
+        const leagueWeekBlock = playerCurrentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
         const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentAbsoluteGameWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
 
         let allAIMatchesForWeek = [];
@@ -482,7 +493,7 @@ export function advanceWeek(gameState, resumeStep = 0, updateUICallbacks) { // N
         }
         if (currentWeekCupBlock && currentWeekCupBlock.matches.length > 0) {
             allAIMatchesForWeek.push(...currentWeekCupBlock.matches.filter(match =>
-                match.homeTeamId !== gameState.playerClub.id && match.awayTeamId !== gameState.playerClub.id &&
+                match.homeTeamId !== gameState.playerClub?.id && match.awayTeamId !== gameState.playerClub?.id && // Ensure it's an AI match, optional chaining
                 !match.played && match.awayTeamId !== 'BYE'
             ));
         }
@@ -611,14 +622,23 @@ export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId, update
     let aiMatchesPlayed = false;
 
     const currentAbsoluteGameWeek = gameState.currentWeek;
-    const currentLeague = gameState.leagues[0]; // Assuming player is in the first league for now
-    const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+    // Iterate through all leagues to find their respective current week blocks
+    let allLeagueWeekBlocks = [];
+    if (gameState.leagues && gameState.leagues.length > 0) {
+        gameState.leagues.forEach(league => {
+            const leagueBlock = league.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+            if (leagueBlock) {
+                allLeagueWeekBlocks.push(leagueBlock);
+            }
+        });
+    }
+
     const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentAbsoluteGameWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
 
     let allAIMatchesForWeek = [];
 
-    // Collect AI league matches that should be played this week
-    if (leagueWeekBlock && leagueWeekBlock.matches.length > 0) {
+    // Collect AI league matches from all leagues that should be played this week
+    allLeagueWeekBlocks.forEach(leagueWeekBlock => {
         const nonRescheduledLeagueMatches = leagueWeekBlock.matches.filter(match =>
             match.id !== playerMatchId && // Exclude player's match if it was passed
             !match.played && match.result === null && // Only unplayed matches
@@ -626,13 +646,14 @@ export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId, update
             !hasCupMatchThisWeek(match.awayTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) // Away team not in cup
         );
         allAIMatchesForWeek.push(...nonRescheduledLeagueMatches);
-    }
+    });
+
 
     // Collect AI cup matches that should be played this week
     if (currentWeekCupBlock && currentWeekCupBlock.matches.length > 0) {
         const aiCupMatches = currentWeekCupBlock.matches.filter(match =>
             match.id !== playerMatchId && // Exclude player's match if it was passed
-            match.homeTeamId !== gameState.playerClub.id && match.awayTeamId !== gameState.playerClub.id && // Ensure it's an AI match
+            match.homeTeamId !== gameState.playerClub?.id && match.awayTeamId !== gameState.playerClub?.id && // Ensure it's an AI match, optional chaining for playerClub
             !match.played && match.awayTeamId !== 'BYE' // Only unplayed and not BYE matches
         );
         allAIMatchesForWeek.push(...aiCupMatches);
@@ -647,27 +668,34 @@ export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId, update
             match.awayTeamId,
             gameState.playerClub,
             opponentData.getAllOpponentClubs(null), // Pass all clubs for simulation
-            playerData.getSquad()
+            playerData.getSquad() // Pass playerData.getSquad() for consistency, though it's only used if playerClub matches
         );
 
         // Update the specific fixture block for the simulated match
         if (match.competition === Constants.COMPETITION_TYPE.LEAGUE) {
-            const targetLeagueBlock = gameState.leagues[0]?.currentSeasonFixtures.find(wb => wb.week === match.week && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
-            if (targetLeagueBlock) {
-                const matchIndexInBlock = targetLeagueBlock.matches.findIndex(m => m.id === match.id);
-                if (matchIndexInBlock !== -1) {
-                    targetLeagueBlock.matches[matchIndexInBlock].result = `${matchResult.homeScore}-${matchResult.awayScore}`;
-                    targetLeagueBlock.matches[matchIndexInBlock].played = true;
+            // Find the correct league for this match by checking if either team is in its allClubsData
+            const targetLeague = gameState.leagues.find(l => l.allClubsData.some(c => c.id === match.homeTeamId || c.id === match.awayTeamId));
+            if (targetLeague) {
+                const targetLeagueBlock = targetLeague.currentSeasonFixtures.find(wb => wb.week === match.week && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+                if (targetLeagueBlock) {
+                    const matchIndexInBlock = targetLeagueBlock.matches.findIndex(m => m.id === match.id);
+                    if (matchIndexInBlock !== -1) {
+                        targetLeagueBlock.matches[matchIndexInBlock].result = `${matchResult.homeScore}-${matchResult.awayScore}`;
+                        targetLeagueBlock.matches[matchIndexInBlock].played = true;
+                    }
                 }
+                // Update league table stats for the specific league
+                gameState.leagues = leagueData.updateLeagueTable(
+                    gameState.leagues,
+                    targetLeague.id, // Pass the ID of the specific league
+                    match.homeTeamId,
+                    match.awayTeamId,
+                    matchResult.homeScore,
+                    matchResult.awayScore
+                );
+            } else {
+                console.warn(`WARNING: League not found for AI match ${match.homeTeamName} vs ${match.awayTeamName}. Cannot update table.`);
             }
-            gameState.leagues = leagueData.updateLeagueTable( // Update league table stats
-                gameState.leagues,
-                gameState.leagues[0].id,
-                match.homeTeamId,
-                match.awayTeamId,
-                matchResult.homeScore,
-                matchResult.awayScore
-            );
         } else if (match.competition === Constants.COMPETITION_TYPE.COUNTY_CUP) {
             const targetCupBlock = gameState.countyCup.fixtures.find(wb => wb.week === match.week && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
             if (targetCupBlock) {
@@ -697,19 +725,19 @@ export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId, update
     }
 
     // Ensure opponentData's global list is updated with the latest state of all clubs
+    // Flatten all league clubs from all leagues, then add cup teams and player club
     const allClubsAfterAIMatches = Array.from(new Map([
-        ...(gameState.leagues[0]?.allClubsData || []).map(c => [c.id, c]),
+        ...(gameState.leagues.flatMap(league => league.allClubsData) || []).map(c => [c.id, c]),
         ...(gameState.countyCup?.teams || []).map(c => [c.id, c]),
-        [gameState.playerClub.id, gameState.playerClub] // Ensure player club is also included
+        [gameState.playerClub?.id, gameState.playerClub] // Ensure player club is also included, optional chaining
     ]).values());
     opponentData.setAllOpponentClubs(allClubsAfterAIMatches);
 
 
-    if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-        const playerClubInLeagueData = gameState.leagues[0].allClubsData.find(c => c.id === gameState.playerClub.id);
-        if (playerClubInLeagueData) {
-            gameState.playerClub.leagueStats = { ...playerClubInLeagueData.leagueStats };
-        }
+    // Update player club's league stats from the comprehensive list after all AI matches are done
+    const playerClubInAllClubs = allClubsAfterAIMatches.find(c => c.id === gameState.playerClub?.id); // Optional chaining
+    if (playerClubInAllClubs && gameState.playerClub) { // Ensure playerClub exists
+        gameState.playerClub.leagueStats = { ...playerClubInAllClubs.leagueStats };
     }
 
     updateUICallbacks.updateUI(); // Use passed updateUICallbacks
@@ -738,7 +766,7 @@ export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // N
     
     // Ensure player's team is explicitly added if they are active and not already in the filtered list
     // This handles cases where playerClub might not be in countyCup.teams initially or its status is outdated.
-    if (gameState.countyCup.playerTeamStatus === 'Active' && !teamsInCup.some(t => t.id === gameState.playerClub.id)) {
+    if (gameState.countyCup.playerTeamStatus === 'Active' && gameState.playerClub && !teamsInCup.some(t => t.id === gameState.playerClub.id)) { // Optional chaining
         teamsInCup.push(gameState.playerClub); // Use passed gameState.playerClub
     }
     // --- END FIX ---
@@ -751,7 +779,7 @@ export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // N
         return;
     }
 
-    let playerInCup = teamsInCup.find(t => t.id === gameState.playerClub.id);
+    let playerInCup = teamsInCup.find(t => t.id === gameState.playerClub?.id); // Optional chaining
     if (!playerInCup && gameState.countyCup.playerTeamStatus === 'Active') {
         // This block might be redundant if the above filtering is robust, but keeping for safety.
         teamsInCup.push(gameState.playerClub); // Use passed gameState.playerClub
@@ -786,7 +814,7 @@ export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // N
 
     let drawMessage = `The draw for County Cup ${Constants.COUNTY_CUP_ROUND_NAMES[matchWeekForThisRound]} is out!\n\n`;
     const playerMatch = cupFixturesThisRound.find(match =>
-        match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id
+        match.homeTeamId === gameState.playerClub?.id || match.awayTeamId === gameState.playerClub?.id // Optional chaining
     );
 
     // Log playerMatch details for debugging
@@ -841,20 +869,20 @@ export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // N
                         renderers.showModal('Opponent Customized!', `You've customized ${customizedOpponent.name}. Your County Cup match against them is scheduled for ${Main.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => {
                             renderers.hideModal();
                             console.log("DEBUG: Final customization modal 'Continue' clicked. Calling finalizeWeekProcessing with 'cup_opponent_customized_final'.");
-                            finalizeWeekProcessing(gsFinal, 'cup_opponent_customized_final', uicFinal); // Pass new context, uicFinal
+                            gameLoop.finalizeWeekProcessing(gsFinal, 'cup_opponent_customized_final', uicFinal); // Pass new context, uicFinal
                         }}], gsInner, uicInner, contextInner); // Pass all necessary state and callbacks
                     }, isPrimary: true }]
-                    , gs, uic, context);
+                    , gameState, updateUICallbacks, 'cup_draw_with_customization'); // Use gameState, updateUICallbacks
                 }, isPrimary: true },
                 { text: 'Continue Without Customizing', action: (gs, uic, context) => {
                     renderers.hideModal();
                     // Show final confirmation modal when skipping customization, then finalize week.
-                    const opponentName = playerMatch.homeTeamId === gs.playerClub.id ? playerMatch.awayTeamName : playerMatch.homeTeamName;
+                    const opponentName = playerMatch.homeTeamId === gs.playerClub?.id ? playerMatch.awayTeamName : playerMatch.homeTeamName; // Optional chaining
                     renderers.showModal('County Cup Draw Confirmed!', `Your County Cup match against ${opponentName} is scheduled for ${Main.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => {
                         renderers.hideModal();
                         console.log("DEBUG: Skip customization modal 'Continue' clicked. Calling finalizeWeekProcessing with 'cup_draw_normal'.");
-                        finalizeWeekProcessing(gsFinal, 'cup_draw_normal', uicFinal); // Pass context, uicFinal
-                    }}], gs, uic, context); // Pass all necessary state and callbacks
+                        gameLoop.finalizeWeekProcessing(gsFinal, 'cup_draw_normal', uicFinal); // Pass context, uicFinal
+                    }}], gameState, updateUICallbacks, 'cup_draw_normal'); // Use gameState, updateUICallbacks
                 } }
             ], gameState, updateUICallbacks, 'cup_draw_with_customization');
         } else { // No external opponent, or BYE
@@ -885,9 +913,10 @@ export function handleCountyCupMatch(gameState, updateUICallbacks) { // Now rece
     const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
 
     // --- NEW: Collect all AI matches for this week (both league and cup) ---
-    const currentLeague = gameState.leagues[0]; // Assuming player is in the first league for this check
+    // Find the player's current league to get its fixtures
+    const playerCurrentLeague = gameState.leagues.find(l => l.id === gameState.playerClub?.currentLeagueId); // Optional chaining
     const currentAbsoluteGameWeek = gameState.currentWeek;
-    const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+    const leagueWeekBlock = playerCurrentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
 
     let allAIMatchesForWeek = [];
 
@@ -904,7 +933,7 @@ export function handleCountyCupMatch(gameState, updateUICallbacks) { // Now rece
     // Add AI cup matches (excluding player's match if it exists and is handled separately)
     if (currentWeekCupBlock && currentWeekCupBlock.matches.length > 0) {
         const aiCupMatches = currentWeekCupBlock.matches.filter(match =>
-            match.homeTeamId !== gameState.playerClub.id && match.awayTeamId !== gameState.playerClub.id &&
+            match.homeTeamId !== gameState.playerClub?.id && match.awayTeamId !== gameState.playerClub?.id && // Ensure it's an AI match, optional chaining
             !match.played && match.awayTeamId !== 'BYE'
         );
         allAIMatchesForWeek.push(...aiCupMatches);
@@ -929,7 +958,7 @@ export function handleCountyCupMatch(gameState, updateUICallbacks) { // Now rece
     }
 
     const playerMatch = currentWeekCupBlock.matches.find(match =>
-        match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id
+        match.homeTeamId === gameState.playerClub?.id || match.awayTeamId === gameState.playerClub?.id // Optional chaining
     );
 
     if (playerMatch) {
@@ -1009,13 +1038,16 @@ export function finalizeWeekProcessing(gameState, dismissalContext, updateUICall
 
     // These steps now only occur once all match/event modals are dismissed and flow is returned.
     // 7. Update Player Fitness/Morale (Post-match/Weekly Decay)
-    const playerLeagueMatchForWeek = gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId)?.currentSeasonFixtures
-        .find(wb => wb.week === (gameState.currentWeek) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE)?.matches
-        .find(match => match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id);
+    // FIX: Ensure playerClub and currentLeagueId are valid before attempting to find league match
+    const playerLeagueMatchForWeek = gameState.playerClub?.currentLeagueId ? 
+        gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId)?.currentSeasonFixtures
+            .find(wb => wb.week === (gameState.currentWeek) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE)?.matches
+            .find(match => match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id)
+        : null;
     
     const playerCupMatchForWeek = gameState.countyCup.fixtures
         .find(wb => wb.week === gameState.currentWeek && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP)?.matches
-        .find(match => match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id);
+        .find(match => match.homeTeamId === gameState.playerClub?.id || match.awayTeamId === gameState.playerClub?.id); // Optional chaining
 
     const wasPlayerHomeMatch = !!playerLeagueMatchForWeek || !!playerCupMatchForWeek; // True if player had any match this week.
 

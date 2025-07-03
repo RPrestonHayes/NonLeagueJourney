@@ -69,33 +69,33 @@ export const GAME_WEEK_TO_MONTH_MAP = [
 // Recalculated based on the new 52-week calendar structure
 export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [
     10, // August Week 2 (Game Week 10)
-    15, // September Week 2 (Game Week 15) - shifted from 14
-    19, // October Week 2 (Game Week 19) - shifted from 18
-    23, // November Week 2 (Game Week 23) - shifted from 22
-    32, // January Week 2 (Game Week 32) - shifted from 30
-    37, // February Week 2 (Game Week 37) - shifted from 34
-    41, // March Week 2 (Game Week 41) - shifted from 38
-    46  // April Week 2 (Game Week 46 - Final Announcement) - shifted from 42
+    15, // September Week 2 (Game Week 15)
+    19, // October Week 2 (Game Week 19)
+    24, // November Week 3 (Game Week 24) - Adjusted for 5-week Nov
+    32, // January Week 2 (Game Week 32)
+    37, // February Week 2 (Game Week 37)
+    42, // March Week 3 (Game Week 42) - Adjusted for 5-week March
+    46  // April Week 2 (Game Week 46 - Final Announcement)
 ];
 export const COUNTY_CUP_MATCH_WEEKS = [
     12, // August Week 4 (Game Week 12)
-    17, // September Week 4 (Game Week 17) - shifted from 16
-    21, // October Week 4 (Game Week 21) - shifted from 20
-    25, // November Week 4 (Game Week 25) - shifted from 24
-    34, // January Week 4 (Game Week 34) - shifted from 32
-    39, // February Week 4 (Game Week 39) - shifted from 36
-    43, // March Week 4 (Game Week 43) - shifted from 40
-    48  // April Week 4 (Game Week 48 - Final) - shifted from 44
+    17, // September Week 4 (Game Week 17)
+    21, // October Week 4 (Game Week 21)
+    26, // November Week 5 (Game Week 26) - Adjusted for 5-week Nov
+    35, // January Week 5 (Game Week 35) - Adjusted for 5-week Jan
+    39, // February Week 4 (Game Week 39)
+    44, // March Week 5 (Game Week 44) - Adjusted for 5-week March
+    48  // April Week 4 (Game Week 48 - Final)
 ];
 
 export const COUNTY_CUP_ROUND_NAMES = {
     12: 'Round 1', // Keyed by absolute game week of the match
     17: 'Round 2',
     21: 'Round 3',
-    25: 'Round 4',
-    34: 'Round 5',
+    26: 'Round 4',
+    35: 'Round 5',
     39: 'Quarter-Finals',
-    43: 'Semi-Finals',
+    44: 'Semi-Finals',
     48: 'Final'
 };
 
@@ -190,7 +190,7 @@ export const ATTRIBUTE_MIN = 1;
 export const ATTRIBUTE_MAX = 20;
 
 // --- Regional Pyramid Structure ---
-export const NUM_REGIONAL_CLUBS = 60; // Total number of clubs in the regional pyramid (including player's)
+export const NUM_REGIONAL_CLUBS = 64; // Increased to 64 for more external cup teams
 
 export const LEAGUE_TIERS = {
     PREMIER: {
@@ -217,6 +217,12 @@ export const LEAGUE_TIERS = {
         promotedTeams: 2,
         relegatedTeams: 0, // No relegation from bottom tier
         seedRange: { min: 41, max: 60 } // Player's club will be seed 60
+    },
+    // NEW: Placeholder for higher-tier external teams (levels 4 and 5)
+    EXTERNAL_HIGHER_DIV: {
+        level: 4, // Higher than regional Premier
+        nameSuffix: 'External Higher Division',
+        seedRange: { min: 61, max: 64 } // Seeds for the new 4 external teams
     }
 };
 
