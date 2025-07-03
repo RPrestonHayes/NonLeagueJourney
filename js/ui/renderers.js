@@ -42,6 +42,8 @@ const committeeListContainer = document.getElementById('committeeList');
 const clubHistoryListContainer = document.getElementById('clubHistoryList');
 const financeBalanceDisplay = document.getElementById('financeBalanceDisplay');
 const opponentListCustomization = document.getElementById('opponentListCustomization');
+const opponentCustomizationModalTitle = opponentCustomizationModal.querySelector('h3'); // Get title element
+const opponentCustomizationModalText = opponentCustomizationModal.querySelector('p'); // Get text element
 
 
 // --- Core Screen Management ---
@@ -175,7 +177,7 @@ export function showModal(title, message, customChoices = [], gameState, updateU
         // Default 'Continue' now calls hideModal() and then the updateUICallbacks.
         choicesToRender.push({ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context to action
             hideModal(); 
-            console.log("DEBUG: here ");
+            console.log("DEBUG: showModal default action triggered.");
             // Use the provided updateUICallbacks and gameState
             if (uic && uic.finalizeWeekProcessing) {
                 uic.finalizeWeekProcessing(gs, context); // Call finalizer with correct gameState and context
@@ -241,8 +243,28 @@ export function renderNewGameModal() {
 }
 
 // --- Opponent Customization Modal ---
-export function renderOpponentCustomizationModal(opponentClubs) {
+/**
+ * Renders the opponent customization modal, with dynamic title and text based on context.
+ * @param {Array<object>} opponentClubs - Array of opponent club objects to customize.
+ * @param {string} context - 'league_start' or 'cup_opponent'.
+ */
+export function renderOpponentCustomizationModal(opponentClubs, context) {
     opponentListCustomization.innerHTML = '';
+
+    let titleText = 'Customize Your Rivals';
+    let introText = 'You can adjust the names and colors of your league opponents. This is a one-time change for personalization.';
+
+    if (context === 'cup_opponent') {
+        titleText = 'Customize Cup Opponent';
+        introText = 'You\'ve drawn a new team in the County Cup! You can customize their name and colors for a more personal experience. This change will be permanent for this club.';
+    } else if (context === 'league_start') {
+        titleText = 'Customize Your Rivals (One Time!)';
+        introText = 'You can adjust the names and colors of your league opponents. This is a one-time change for personalization.';
+    }
+
+    opponentCustomizationModalTitle.textContent = titleText;
+    opponentCustomizationModalText.textContent = introText;
+
 
     opponentClubs.forEach(club => {
         const div = document.createElement('div');
@@ -666,7 +688,7 @@ export function updateWeeklyTasksDisplay(tasks, availableHours) {
             const descriptionText = task.longDescription ? task.longDescription : task.description;
             listItem.innerHTML = `
                 <span>${task.description} (${task.baseHours} hrs)<br><small>${descriptionText}</small></span>
-                <button class="complete-task-btn ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" ${task.completed || availableHours < task.baseHours ? 'disabled' : ''}>
+                <button class="complete-task-btn ${task.completed ? 'completed' : ''}" data-task-id=\"${task.id}\" ${task.completed || availableHours < task.baseHours ? 'disabled' : ''}>
                     ${task.completed ? 'Completed' : 'Do Task'}
                 </button>
             `;

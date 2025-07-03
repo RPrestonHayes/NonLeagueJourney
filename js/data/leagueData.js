@@ -102,16 +102,29 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
     if (currentPoolSize === 0) targetDrawSize = 0; // No teams, no draw
     else if (currentPoolSize === 1) targetDrawSize = 2; // If only one team, need one more for a match
 
-    const numTeamsToGenerate = targetDrawSize - currentPoolSize;
+    // --- FIX START: Adjust numTeamsToGenerate for Round 1 to ensure ~24 teams ---
+    const isRoundOne = Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(week) === 0;
+    let numTeamsToGenerate = targetDrawSize - currentPoolSize;
 
-    // --- FIX: Generate new external opponents to fill the draw, prioritizing player's opponent ---
+    if (isRoundOne) {
+        const desiredTotalTeams = 24; // 12 league teams + 12 new
+        const currentLeagueTeamsCount = leagueTeamsInPool.length;
+        const currentExternalTeamsCount = externalTeamsInPool.length;
+        
+        // Calculate how many *new* external teams are needed to reach desiredTotalTeams
+        // This is (desiredTotalTeams - currentLeagueTeamsCount - currentExternalTeamsCount)
+        numTeamsToGenerate = Math.max(0, desiredTotalTeams - currentLeagueTeamsCount - currentExternalTeamsCount);
+
+        // Ensure targetDrawSize is at least desiredTotalTeams if it's Round 1
+        targetDrawSize = Math.max(targetDrawSize, desiredTotalTeams);
+    }
+    // --- FIX END ---
+
     let playerOpponent = null;
     let newlyGeneratedTeams = [];
 
     // Prioritize generating a new external opponent for the player's match if it's Round 1
     // and if there aren't enough external teams already in the pool.
-    const isRoundOne = Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(week) === 0; // Check if it's the first cup match week
-
     if (isRoundOne && externalTeamsInPool.length === 0 && numTeamsToGenerate > 0) {
         playerOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(10, 20)); // High quality for initial cup opponent
         playerOpponent.inCup = true;
@@ -121,10 +134,11 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
         opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), playerOpponent]);
         Main.gameState.countyCup.teams.push(playerOpponent); // Add to persistent cup teams
         externalTeamsInPool.push(playerOpponent); // Add to current external pool for draw
+        numTeamsToGenerate--; // Decrement as one team is generated
     }
 
     // Generate remaining new teams if needed to reach targetDrawSize
-    for (let i = 0; i < numTeamsToGenerate - newlyGeneratedTeams.length; i++) {
+    for (let i = 0; i < numTeamsToGenerate; i++) { // Loop based on adjusted numTeamsToGenerate
         const newTeamQuality = dataGenerator.getRandomInt(8, 18);
         const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, newTeamQuality);
         
@@ -142,8 +156,6 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
 
     // Reconstruct availableTeamsForDraw with newly generated teams
     availableTeamsForDraw = [...leagueTeamsInPool, ...externalTeamsInPool];
-
-    // --- END FIX: Dynamic Generation ---
 
     // Shuffle teams to ensure random draw
     for (let i = availableTeamsForDraw.length - 1; i > 0; i--) {
@@ -185,7 +197,7 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
             if (currentLeagueClubIdsMap.has(currentOpponent.id)) {
                 const availableExternalTeams = externalTeamsInPool.filter(t => t.id !== playerOpponent?.id && t.id !== currentOpponent.id);
                 if (availableExternalTeams.length > 0) {
-                    const newExternalOpponent = getRandomElement(availableExternalTeams);
+                    const newExternalOpponent = dataGenerator.getRandomElement(availableExternalTeams);
                     
                     // Swap: newExternalOpponent takes currentOpponent's place
                     if (isHomePlayer) {
@@ -268,6 +280,12 @@ export function rescheduleLeagueMatch(currentLeagues, playerClubId, originalAbso
         originalMatchIndex = originalWeekBlock.matches.findIndex(m => 
             (m.homeTeamId === playerClubId || m.awayTeamId === playerClubId) && !m.played
         );
+        // If player's match is not found, try to find *any* match between the given home/away IDs
+        if (originalMatchIndex === -1) {
+             originalMatchIndex = originalWeekBlock.matches.findIndex(m => 
+                (m.homeTeamId === playerClubId || m.awayTeamId === playerClubId) && !m.played
+             );
+        }
         if (originalMatchIndex !== -1) {
             matchToReschedule = { ...originalWeekBlock.matches[originalMatchIndex] };
         }

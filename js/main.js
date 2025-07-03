@@ -400,7 +400,7 @@ export function startNewGame(playerClubDetails) {
         const newOpponent = opponentData.generateSingleOpponentClub(gameState.playerCountyData, dataGenerator.getRandomInt(8, 20)); // Wider quality range
         // Only add if not already in the league teams (which are in countyCup.teams)
         if (!gameState.countyCup.teams.some(team => team.id === newOpponent.id)) {
-            newOpponent.inCup = true; // Assume they start in cup
+            newOpponent.inCup = true;
             newOpponent.eliminatedFromCup = false;
             gameState.countyCup.teams.push(newOpponent);
         }
@@ -452,15 +452,17 @@ export function startNewGame(playerClubDetails) {
     // Render opponent customization modal
     renderers.hideLoadingScreen();
     renderers.hideModal(); // Hide new game modal
+    // Pass 'league_start' context to the customization modal
     renderers.renderOpponentCustomizationModal(
-        opponentData.getAllOpponentClubs(gameState.playerClub.id)
+        opponentData.getAllOpponentClubs(gameState.playerClub.id),
+        'league_start' // NEW: Pass context
     );
     // Fix: Explicit action for showModal
     renderers.showModal('Your club is born!', 'Now, customize your league rivals before the season kicks off.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
-        renderers.hideModal(); // Hide this modal
+        renderers.hideModal();
         renderers.renderGameScreen('homeScreen'); // Go to home screen
         uic.updateUI(); // Update UI for the home screen
-    }, isPrimary: true }], gameState, updateUICallbacks, 'club_born'); // Pass gameState and callbacks
+    }, isPrimary: true }], gameState, updateUICallbacks, 'club_born');
     console.log("DEBUG: startNewGame() finished.");
 }
 
@@ -524,7 +526,7 @@ export function applyOpponentCustomization(customizedOpponents) {
         renderers.hideModal();
         renderers.renderGameScreen('homeScreen'); // Go to home screen
         uic.updateUI(); // Update UI for the home screen
-    }, isPrimary: true }], gameState, updateUICallbacks, 'rivals_customized'); // Pass gameState and callbacks
+    }, isPrimary: true }], gameState, updateUICallbacks, 'rivals_customized');
     saveGame(false);
     console.log("DEBUG: applyOpponentCustomization() finished.");
 }
@@ -546,7 +548,7 @@ export function loadGame() {
             renderers.hideModal();
             renderers.renderGameScreen('homeScreen'); // Go to home screen
             uic.updateUI(); // Update UI for loaded state
-        }, isPrimary: true }], gameState, updateUICallbacks, 'game_loaded_confirm'); // Pass gameState and callbacks
+        }, isPrimary: true }], gameState, updateUICallbacks, 'game_loaded_confirm');
         console.log("DEBUG: Game loaded successfully:", gameState);
 
         if (gameState.playerClub) {
