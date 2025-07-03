@@ -45,6 +45,14 @@ const opponentListCustomization = document.getElementById('opponentListCustomiza
 const opponentCustomizationModalTitle = opponentCustomizationModal.querySelector('h3'); // Get title element
 const opponentCustomizationModalText = opponentCustomizationModal.querySelector('p'); // Get text element
 
+// NEW: Edit Screen elements
+const clubToEditSelect = document.getElementById('clubToEditSelect');
+const editClubDetailsForm = document.getElementById('editClubDetailsForm');
+const editClubNameInput = document.getElementById('editClubNameInput');
+const editClubNicknameInput = document.getElementById('editClubNicknameInput');
+const editPrimaryColorInput = document.getElementById('editPrimaryColorInput');
+const editSecondaryColorInput = document.getElementById('editSecondaryColorInput');
+
 
 // --- Core Screen Management ---
 /**
@@ -251,8 +259,8 @@ export function renderNewGameModal() {
 export function renderOpponentCustomizationModal(opponentClubs, context) {
     opponentListCustomization.innerHTML = '';
 
-    let titleText = 'Customize Your Rivals';
-    let introText = 'You can adjust the names and colors of your league opponents. This is a one-time change for personalization.';
+    let titleText = '';
+    let introText = '';
 
     if (context === 'cup_opponent') {
         titleText = 'Customize Cup Opponent';
@@ -260,10 +268,19 @@ export function renderOpponentCustomizationModal(opponentClubs, context) {
     } else if (context === 'league_start') {
         titleText = 'Customize Your Rivals (One Time!)';
         introText = 'You can adjust the names and colors of your league opponents. This is a one-time change for personalization.';
+    } else {
+        // Fallback for any other unexpected context
+        titleText = 'Customize Opponents';
+        introText = 'Adjust the names and colors of these clubs.';
     }
 
-    opponentCustomizationModalTitle.textContent = titleText;
-    opponentCustomizationModalText.textContent = introText;
+    // Update the text content of the modal's title and introductory paragraph
+    if (opponentCustomizationModalTitle) {
+        opponentCustomizationModalTitle.textContent = titleText;
+    }
+    if (opponentCustomizationModalText) {
+        opponentCustomizationModalText.textContent = introText;
+    }
 
 
     opponentClubs.forEach(club => {
@@ -697,4 +714,26 @@ export function updateWeeklyTasksDisplay(tasks, availableHours) {
     } else {
         weeklyTasksList.innerHTML = `<li>No tasks available this week.</li>`;
     }
+}
+
+/**
+ * Renders the Edit Screen, populating the dropdown with uncustomized clubs.
+ * @param {object} gameState - The current gameState object.
+ */
+export function renderEditScreen(gameState) {
+    if (!clubToEditSelect) return;
+
+    clubToEditSelect.innerHTML = '<option value="">-- Select a Club --</option>'; // Reset dropdown
+    editClubDetailsForm.style.display = 'none'; // Hide form initially
+
+    const uncustomizedClubs = Main.opponentData.getAllOpponentClubs(gameState.playerClub.id)
+        .filter(club => club.customizationStatus === Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED)
+        .sort((a,b) => a.name.localeCompare(b.name)); // Sort alphabetically
+
+    uncustomizedClubs.forEach(club => {
+        const option = document.createElement('option');
+        option.value = club.id;
+        option.textContent = club.name;
+        clubToEditSelect.appendChild(option);
+    });
 }

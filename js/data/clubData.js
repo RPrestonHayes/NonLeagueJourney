@@ -80,12 +80,15 @@ const BASE_FACILITIES_PROPERTIES = {
 };
 
 let currentCommittee = [];
-let currentFinances = {};
+let currentFinances = {}; // This is no longer the primary finance object, it's part of playerClub
 
-// --- Club Creation ---
-export function createPlayerClub(details) {
-    const clubId = dataGenerator.generateUniqueId('PC');
+// --- NEW: Initializer functions for playerClub properties ---
 
+/**
+ * Creates the initial facilities object for a new club.
+ * @returns {object} The initial facilities state.
+ */
+export function createInitialFacilities() {
     const initialFacilities = {};
     for (const key in BASE_FACILITIES_PROPERTIES) {
         initialFacilities[key] = { ...BASE_FACILITIES_PROPERTIES[key] };
@@ -102,32 +105,48 @@ export function createPlayerClub(details) {
             initialFacilities[key].currentUpgradeCost = calculateUpgradeCost(initialFacilities[key].baseUpgradeCost, initialFacilities[key].level);
         }
     }
+    return initialFacilities;
+}
 
-    const initialCommittee = [
+/**
+ * Creates the initial committee members for a new club.
+ * @returns {Array<object>} An array of initial committee members.
+ */
+export function createInitialCommittee() {
+    const initialCommitteeMembers = [
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.SEC),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.TREAS),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.GRNDS),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.SOC)
     ];
-    currentCommittee = initialCommittee;
+    currentCommittee = initialCommitteeMembers; // Update internal reference
+    return initialCommitteeMembers;
+}
 
-    const newClubFinances = { balance: Constants.DEFAULT_STARTING_BALANCE, transactions: [] };
-    currentFinances = newClubFinances;
 
+// --- Club Creation (now just a template, actual club object built in main.js/dataGenerator) ---
+// This function is now deprecated as the player club is created within generateRegionalClubPool
+export function createPlayerClub(details) {
+    console.warn("createPlayerClub is deprecated. Player club is now created in generateRegionalClubPool.");
+    // This function is kept for compatibility but its role is diminished.
+    // It will return a basic structure.
     return {
-        id: clubId, name: details.clubName, nickname: details.nickname, 
-        location: details.hometown, // User-entered hometown name
-        groundPostcode: details.groundPostcode, // User-entered postcode
-        county: details.county, // Determined county name
+        id: dataGenerator.generateUniqueId('PC'),
+        name: details.clubName, nickname: details.nickname,
+        location: details.hometown,
+        groundPostcode: details.groundPostcode,
+        county: details.county,
         kitColors: { primary: details.primaryColor, secondary: details.secondaryColor },
-        finances: newClubFinances,
-        facilities: initialFacilities,
-        committee: initialCommittee, // Stored directly in club object for consistency
+        finances: { balance: Constants.DEFAULT_STARTING_BALANCE, transactions: [] },
+        facilities: createInitialFacilities(),
+        committee: createInitialCommittee(),
         reputation: 10, fanbase: 0,
         customizationHistory: { nameChanges: 0, colorChanges: 0 },
         leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
         finalLeaguePosition: null,
-        squad: [] // FIX: Initialize squad as an empty array here to prevent undefined errors
+        squad: [],
+        initialSeedQuality: Constants.NUM_REGIONAL_CLUBS, // Default to lowest if created via this deprecated function
+        potentialLeagueLevel: Constants.LEAGUE_TIERS.DIV2.level // Default to lowest league
     };
 }
 
@@ -140,12 +159,12 @@ export function addTransaction(currentFinancesState, amount, type, description) 
     };
     const updatedTransactions = [...currentFinancesState.transactions, newTransaction];
     const newBalance = currentFinancesState.balance + amount;
-    currentFinances = { balance: newBalance, transactions: updatedTransactions };
+    currentFinances = { balance: newBalance, transactions: updatedTransactions }; // Update internal reference
     return currentFinances;
 }
 
 export function getFinances() {
-    return { ...currentFinances };
+    return { ...currentFinances }; // Returns a copy of the internal reference
 }
 
 

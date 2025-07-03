@@ -8,7 +8,7 @@
 // --- Game Phases ---
 export const GAME_PHASE = {
     SETUP: 'setup',
-    OPPONENT_CUSTOMIZATION: 'opponent_customization',
+    OPPONENT_CUSTOMIZATION: 'opponent_customization', // Still needed for cup opponents
     PRE_SEASON_PLANNING: 'pre_season',
     WEEKLY_PLANNING: 'weekly_planning',
     MATCH_DAY: 'match_day',
@@ -23,8 +23,11 @@ export const DECEMBER_HOURS_REDUCTION = 5; // Hours reduced during December
 
 // --- Season Length & Calendar ---
 export const PRE_SEASON_WEEKS = 4; // June Weeks 1-4
-export const LEAGUE_MATCH_WEEKS = 40; // Total weeks for league matches (approx. 38 matches + buffer)
-export const TOTAL_LEAGUE_WEEKS = PRE_SEASON_WEEKS + LEAGUE_MATCH_WEEKS; // Total weeks covering pre-season and league matches (44 weeks)
+export const TOTAL_GAME_WEEKS_IN_YEAR = 52; // Total weeks in the game year
+
+// LEAGUE_MATCH_WEEKS is now derived from TOTAL_GAME_WEEKS_IN_YEAR - PRE_SEASON_WEEKS
+export const LEAGUE_MATCH_WEEKS = TOTAL_GAME_WEEKS_IN_YEAR - PRE_SEASON_WEEKS; // 52 - 4 = 48 weeks
+export const TOTAL_LEAGUE_WEEKS = TOTAL_GAME_WEEKS_IN_YEAR; // The entire 52 weeks is the "league season" cycle
 
 export const SEASON_START_MONTH_INDEX = 5; // June (0-indexed: Jan=0, Feb=1...June=5)
 export const MONTH_NAMES = [
@@ -32,75 +35,71 @@ export const MONTH_NAMES = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-// New Calendar Flow (approximate weeks, adjust as needed)
-// This map helps the calendar string generation and event scheduling
-// startWeek here is the absolute gameState.currentWeek value
+// NEW Calendar Flow: 52 weeks total, with varying month lengths
+// startWeek is the absolute gameState.currentWeek value
 export const GAME_WEEK_TO_MONTH_MAP = [
     // June: Pre-season (Weeks 1-4)
-    { monthIdxOffset: 0, weeks: 4, name: 'June', isPreSeason: true, startWeek: 1 },
-    // July: League starts (Weeks 5-8, which is July Week 1-4)
-    { monthIdxOffset: 1, weeks: 4, name: 'July', isLeague: true, startWeek: 5 },
-    // August: League + Cup Round 1 (Weeks 9-12)
-    { monthIdxOffset: 2, weeks: 4, name: 'August', isLeague: true, startWeek: 9 },
-    // September: League + Cup Round 2 (Weeks 13-16)
-    { monthIdxOffset: 3, weeks: 4, name: 'September', isLeague: true, startWeek: 13 },
-    // October: League + Cup Round 3 (Weeks 17-20)
-    { monthIdxOffset: 4, weeks: 4, name: 'October', isLeague: true, startWeek: 17 },
-    // November: League + Cup Round 4 (Weeks 21-24)
-    { monthIdxOffset: 5, weeks: 4, name: 'November', isLeague: true, startWeek: 21 },
-    // December: League + Special Conditions (Weeks 25-28)
-    { monthIdxOffset: 6, weeks: 4, name: 'December', isLeague: true, isSpecialMonth: true, startWeek: 25 },
-    // January: League + Cup Round 5 (Weeks 29-32)
-    { monthIdxOffset: 7, weeks: 4, name: 'January', isLeague: true, startWeek: 29 },
-    // February: League + Cup QF (Weeks 33-36)
-    { monthIdxOffset: 8, weeks: 4, name: 'February', isLeague: true, startWeek: 33 },
-    // March: League + Cup SF (Weeks 37-40)
-    { monthIdxOffset: 9, weeks: 4, name: 'March', isLeague: true, startWeek: 37 },
-    // April: League + Cup Final (Weeks 41-44)
-    { monthIdxOffset: 10, weeks: 4, name: 'April', isLeague: true, startWeek: 41 },
-    // May: League Ends, Final weeks (Weeks 45-48)
-    { monthIdxOffset: 11, weeks: 4, name: 'May', isLeague: true, startWeek: 45 }
-    // Total weeks in season cycle: 48.
+    { monthIdxOffset: 0, weeks: 4, name: 'June', isPreSeason: true, startWeek: 1 }, // Week 1-4
+    // July: League starts (Weeks 5-8)
+    { monthIdxOffset: 1, weeks: 4, name: 'July', isLeague: true, startWeek: 5 }, // Week 5-8
+    // August: League (Weeks 9-13) - 5 weeks
+    { monthIdxOffset: 2, weeks: 5, name: 'August', isLeague: true, startWeek: 9 }, // Week 9-13
+    // September: League (Weeks 14-17) - 4 weeks
+    { monthIdxOffset: 3, weeks: 4, name: 'September', isLeague: true, startWeek: 14 }, // Week 14-17
+    // October: League (Weeks 18-21) - 4 weeks
+    { monthIdxOffset: 4, weeks: 4, name: 'October', isLeague: true, startWeek: 18 }, // Week 18-21
+    // November: League (Weeks 22-26) - 5 weeks
+    { monthIdxOffset: 5, weeks: 5, name: 'November', isLeague: true, startWeek: 22 }, // Week 22-26
+    // December: League + Special Conditions (Weeks 27-30) - 4 weeks
+    { monthIdxOffset: 6, weeks: 4, name: 'December', isLeague: true, isSpecialMonth: true, startWeek: 27 }, // Week 27-30
+    // January: League (Weeks 31-35) - 5 weeks
+    { monthIdxOffset: 7, weeks: 5, name: 'January', isLeague: true, startWeek: 31 }, // Week 31-35
+    // February: League (Weeks 36-39) - 4 weeks
+    { monthIdxOffset: 8, weeks: 4, name: 'February', isLeague: true, startWeek: 36 }, // Week 36-39
+    // March: League (Weeks 40-44) - 5 weeks
+    { monthIdxOffset: 9, weeks: 5, name: 'March', isLeague: true, startWeek: 40 }, // Week 40-44
+    // April: League (Weeks 45-48) - 4 weeks
+    { monthIdxOffset: 10, weeks: 4, name: 'April', isLeague: true, startWeek: 45 }, // Week 45-48
+    // May: League Ends, Final weeks (Weeks 49-52) - 4 weeks
+    { monthIdxOffset: 11, weeks: 4, name: 'May', isLeague: true, startWeek: 49 } // Week 49-52
 ];
 
 
 // County Cup Schedule (Absolute gameState.currentWeek values)
-// These are the absolute game weeks when announcements and matches occur.
+// Recalculated based on the new 52-week calendar structure
 export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [
     10, // August Week 2 (Game Week 10)
-    14, // September Week 2 (Game Week 14)
-    18, // October Week 2 (Game Week 18)
-    22, // November Week 2 (Game Week 22)
-    30, // January Week 2 (Game Week 30)
-    34, // February Week 2 (Game Week 34)
-    38, // March Week 2 (Game Week 38)
-    42  // April Week 2 (Game Week 42 - Final Announcement)
+    15, // September Week 2 (Game Week 15) - shifted from 14
+    19, // October Week 2 (Game Week 19) - shifted from 18
+    23, // November Week 2 (Game Week 23) - shifted from 22
+    32, // January Week 2 (Game Week 32) - shifted from 30
+    37, // February Week 2 (Game Week 37) - shifted from 34
+    41, // March Week 2 (Game Week 41) - shifted from 38
+    46  // April Week 2 (Game Week 46 - Final Announcement) - shifted from 42
 ];
 export const COUNTY_CUP_MATCH_WEEKS = [
-    12, // August Week 4 (Game Week 12 - Round 1 Match)
-    16, // September Week 4 (Game Week 16 - Round 2 Match)
-    20, // October Week 4 (Game Week 20 - Round 3 Match)
-    24, // November Week 4 (Game Week 24 - Round 4 Match)
-    32, // January Week 4 (Game Week 32 - Round 5 Match)
-    36, // February Week 4 (Game Week 36 - Quarter-Finals)
-    40, // March Week 4 (Game Week 40 - Semi-Finals)
-    44  // April Week 4 (Game Week 44 - Final)
+    12, // August Week 4 (Game Week 12)
+    17, // September Week 4 (Game Week 17) - shifted from 16
+    21, // October Week 4 (Game Week 21) - shifted from 20
+    25, // November Week 4 (Game Week 25) - shifted from 24
+    34, // January Week 4 (Game Week 34) - shifted from 32
+    39, // February Week 4 (Game Week 39) - shifted from 36
+    43, // March Week 4 (Game Week 43) - shifted from 40
+    48  // April Week 4 (Game Week 48 - Final) - shifted from 44
 ];
 
 export const COUNTY_CUP_ROUND_NAMES = {
     12: 'Round 1', // Keyed by absolute game week of the match
-    16: 'Round 2',
-    20: 'Round 3',
-    24: 'Round 4',
-    32: 'Round 5',
-    36: 'Quarter-Finals',
-    40: 'Semi-Finals',
-    44: 'Final'
+    17: 'Round 2',
+    21: 'Round 3',
+    25: 'Round 4',
+    34: 'Round 5',
+    39: 'Quarter-Finals',
+    43: 'Semi-Finals',
+    48: 'Final'
 };
 
 export const COMMITTEE_MEETING_FREQUENCY_WEEKS = 4; // Unchanged
-
-export const TOTAL_GAME_WEEKS_IN_YEAR = 52; // Still using a 52-week year for full cycle
 
 // --- Player Attributes ---
 export const PLAYER_ATTRIBUTES = {
@@ -187,12 +186,44 @@ export const COMPETITION_TYPE = {
 // --- Default Values / Game Settings ---
 export const DEFAULT_STARTING_BALANCE = 500;
 export const DEFAULT_INITIAL_PLAYERS = 15;
-export const DEFAULT_LEAGUE_SIZE = 12; // Assuming 12 teams for now, total matches 22
 export const ATTRIBUTE_MIN = 1;
 export const ATTRIBUTE_MAX = 20;
 
+// --- Regional Pyramid Structure ---
+export const NUM_REGIONAL_CLUBS = 60; // Total number of clubs in the regional pyramid (including player's)
+
+export const LEAGUE_TIERS = {
+    PREMIER: {
+        level: 3,
+        nameSuffix: 'Premier Division',
+        numTeams: 20,
+        promotedTeams: 2, // Teams promoted to a higher, non-regional league (e.g., National League System Step 6)
+        relegatedTeams: 2,
+        // Seed range for this league (inclusive, 1 is best)
+        seedRange: { min: 1, max: 20 }
+    },
+    DIV1: {
+        level: 2,
+        nameSuffix: 'Division One',
+        numTeams: 20,
+        promotedTeams: 2,
+        relegatedTeams: 2,
+        seedRange: { min: 21, max: 40 }
+    },
+    DIV2: {
+        level: 1, // Lowest tier
+        nameSuffix: 'Division Two',
+        numTeams: 20,
+        promotedTeams: 2,
+        relegatedTeams: 0, // No relegation from bottom tier
+        seedRange: { min: 41, max: 60 } // Player's club will be seed 60
+    }
+};
+
 // Initial pool size for County Cup teams generated at game start
-export const INITIAL_CUP_POOL_SIZE = 0; // Generate up to no cup teams at begin instead generate them as we need them
+// Now that we have 60 clubs, the INITIAL_CUP_POOL_SIZE can be 0,
+// as the cup draw will pull from the existing 60 clubs + generate new ones as needed.
+export const INITIAL_CUP_POOL_SIZE = 0;
 
 // Kit Colors (for generation)
 export const KIT_COLORS = [
@@ -200,3 +231,9 @@ export const KIT_COLORS = [
     '#FFFFFF', '#000000', '#C0C0C0', '#800080', '#008000', '#800000',
     '#4B0082', '#A52A2A', '#D2B48C', '#F5F5DC'
 ];
+
+// --- Club Customization Status ---
+export const CLUB_CUSTOMIZATION_STATUS = {
+    NOT_CUSTOMIZED: 'not_customized',
+    CUSTOMIZED_ONCE: 'customized_once'
+};

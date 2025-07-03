@@ -15,6 +15,8 @@ import * as Constants from '../utils/constants.js';
 import * as taskLogic from '../logic/taskLogic.js';
 // Import dataGenerator for postcode lookup
 import * as dataGenerator from '../utils/dataGenerator.js';
+// Import opponentData to access and update club data
+import * as opponentData from '../data/opponentData.js';
 
 
 // --- Cached DOM Elements ---
@@ -35,13 +37,23 @@ const primaryColorInput = document.getElementById('primaryColorInput');
 const secondaryColorInput = document.getElementById('secondaryColorInput');
 const createGameBtn = document.getElementById('createGameBtn');
 
-// Opponent Customization Modal elements
+// Opponent Customization Modal elements (still used for cup opponents)
 const opponentCustomizationModal = document.getElementById('opponentCustomizationModal');
 const opponentListCustomization = document.getElementById('opponentListCustomization');
 const saveOpponentCustomizationBtn = document.getElementById('saveOpponentCustomizationBtn');
 
 // Weekly Tasks
 const weeklyTasksList = document.getElementById('weeklyTasksList');
+
+// NEW: Edit Screen elements
+const editScreen = document.getElementById('editScreen');
+const clubToEditSelect = document.getElementById('clubToEditSelect');
+const editClubDetailsForm = document.getElementById('editClubDetailsForm');
+const editClubNameInput = document.getElementById('editClubNameInput');
+const editClubNicknameInput = document.getElementById('editClubNicknameInput');
+const editPrimaryColorInput = document.getElementById('editPrimaryColorInput');
+const editSecondaryColorInput = document.getElementById('editSecondaryColorInput');
+const saveEditedClubBtn = document.getElementById('saveEditedClubBtn');
 
 
 // --- Initialization Function ---
@@ -57,6 +69,10 @@ export function initGlobalListeners() {
         button.addEventListener('click', (event) => {
             const screenId = event.target.dataset.screen + 'Screen'; // Append 'Screen' to match div IDs
             renderers.renderGameScreen(screenId);
+            // NEW: If navigating to edit screen, render it
+            if (screenId === 'editScreen') {
+                renderers.renderEditScreen(Main.gameState);
+            }
             Main.updateUI(); // Ensure UI updates for the new screen
         });
     });
@@ -83,7 +99,7 @@ export function initGlobalListeners() {
         createGameBtn.addEventListener('click', handleCreateGame);
     }
 
-    // --- Opponent Customization Modal Event Listeners ---
+    // --- Opponent Customization Modal Event Listeners (for cup opponents) ---
     if (saveOpponentCustomizationBtn) {
         saveOpponentCustomizationBtn.addEventListener('click', handleSaveOpponentCustomization);
     }
@@ -95,6 +111,14 @@ export function initGlobalListeners() {
                 handleCompleteTask(event.target);
             }
         });
+    }
+
+    // NEW: Edit Screen Event Listeners
+    if (clubToEditSelect) {
+        clubToEditSelect.addEventListener('change', handleClubSelectForEdit);
+    }
+    if (saveEditedClubBtn) {
+        saveEditedClubBtn.addEventListener('click', handleSaveEditedClub);
     }
 }
 
@@ -147,7 +171,7 @@ function handleCreateGame() {
 }
 
 /**
- * Handles the "Save Opponent Customization" button click.
+ * Handles the "Save Opponent Customization" button click for the cup opponent modal.
  * Collects data from the dynamically generated opponent forms.
  */
 function handleSaveOpponentCustomization() {
@@ -228,5 +252,94 @@ function handleCompleteTask(buttonElement) {
         } else {
             renderers.showModal('Not Enough Hours', `You need exactly ${task.baseHours} hours for this task, but only have ${Main.gameState.availableHours} remaining! You cannot do this task partially.`, [{ text: 'OK', action: renderers.hideModal }]);
         }
+    }
+}
+
+// NEW: Edit Screen Handlers
+/**
+ * Handles selection of a club from the dropdown on the Edit screen.
+ * Populates the form with the selected club's data.
+ */
+function handleClubSelectForEdit() {
+    const selectedClubId = clubToEditSelect.value;
+    if (selectedClubId) {
+        const club = opponentData.getOpponentClub(selectedClubId);
+        if (club) {
+            editClubNameInput.value = club.name;
+            editClubNicknameInput.value = club.nickname || '';
+            editPrimaryColorInput.value = club.kitColors.primary;
+            editSecondaryColorInput.value = club.kitColors.secondary;
+            editClubDetailsForm.style.display = 'block';
+            saveEditedClubBtn.dataset.clubId = club.id; // Store ID on button for saving
+        }
+    } else {
+        editClubDetailsForm.style.display = 'none';
+        saveEditedClubBtn.dataset.clubId = '';
+    }
+}
+
+/**
+ * Handles saving changes for a club from the Edit screen.
+ * Updates club data and marks it as customized.
+ */
+function handleSaveEditedClub() {
+    const clubId = saveEditedClubBtn.dataset.clubId;
+    if (!clubId) {
+        renderers.showModal('Error', 'No club selected for editing.', [{ text: 'OK', action: renderers.hideModal }]);
+        return;
+    }
+
+    const newName = editClubNameInput.value.trim();
+    const newNickname = editClubNicknameInput.value.trim();
+    const newPrimaryColor = editPrimaryColorInput.value;
+    const newSecondaryColor = editSecondaryColorInput.value;
+
+    if (!newName || !newNickname) {
+        renderers.showModal('Input Error', 'Please fill in both name and nickname.', [{ text: 'OK', action: renderers.hideModal }]);
+        return;
+    }
+    if (newPrimaryColor === newSecondaryColor) {
+        renderers.showModal('Kit Color Error', 'Primary and Secondary kit colors cannot be the same.', [{ text: 'OK', action: renderers.hideModal }]);
+        return;
+    }
+
+    const clubToUpdate = opponentData.getOpponentClub(clubId);
+    if (clubToUpdate) {
+        clubToUpdate.name = newName;
+        clubToUpdate.nickname = newNickname;
+        clubToUpdate.kitColors.primary = newPrimaryColor;
+        clubToUpdate.kitColors.secondary = newSecondaryColor;
+        clubToUpdate.customizationStatus = Constants.CLUB_CUSTOMIZATION_STATUS.CUSTOMIZED_ONCE; // Mark as customized
+
+        // Update in Main.gameState as well for consistency, especially if it's the player's club
+        if (Main.gameState.playerClub.id === clubId) {
+            Main.gameState.playerClub.name = newName;
+            Main.gameState.playerClub.nickname = newNickname;
+            Main.gameState.playerClub.kitColors.primary = newPrimaryColor;
+            Main.gameState.playerClub.kitColors.secondary = newSecondaryColor;
+            Main.applyThemeColors(newPrimaryColor, newSecondaryColor); // Apply theme if player's club
+        } else {
+            // If it's an AI club, ensure it's updated in the league and cup data if present
+            Main.gameState.leagues.forEach(league => {
+                const clubInLeague = league.allClubsData.find(c => c.id === clubId);
+                if (clubInLeague) {
+                    Object.assign(clubInLeague, { name: newName, nickname: newNickname, kitColors: { primary: newPrimaryColor, secondary: newSecondaryColor } });
+                }
+            });
+            Main.gameState.countyCup.teams.forEach(cupTeam => {
+                if (cupTeam.id === clubId) {
+                    Object.assign(cupTeam, { name: newName, nickname: newNickname, kitColors: { primary: newPrimaryColor, secondary: newSecondaryColor } });
+                }
+            });
+        }
+
+        Main.saveGame(true);
+        renderers.showModal('Changes Saved!', `${newName} details updated. This club can no longer be customized from this screen.`, [{ text: 'OK', action: () => {
+            renderers.hideModal();
+            renderers.renderEditScreen(Main.gameState); // Re-render edit screen to update dropdown
+            Main.updateUI();
+        }}]);
+    } else {
+        renderers.showModal('Error', 'Club not found for update.', [{ text: 'OK', action: renderers.hideModal }]);
     }
 }

@@ -206,6 +206,77 @@ export function generateClubIdentity(baseLocationRegion) {
     return { name: finalClubName.trim(), nickname: clubNickname };
 }
 
+/**
+ * Generates the initial pool of all regional clubs (AI + Player) with assigned seed qualities.
+ * @param {object} playerCountyData - The county data object for the player's chosen location.
+ * @param {object} playerClubDetails - Details of the player's club (id, name, nickname, kitColors).
+ * @returns {Array<object>} An array of all 60 club objects, including the player's, with seed qualities.
+ */
+export function generateRegionalClubPool(playerCountyData, playerClubDetails) {
+    const allClubs = [];
+    const townsPool = [...playerCountyData.towns];
+
+    // Create AI clubs first, assign seeds 1 to 59
+    for (let i = 0; i < Constants.NUM_REGIONAL_CLUBS - 1; i++) {
+        const id = generateUniqueId('C');
+        let identity = generateClubIdentity(playerCountyData);
+        let name = identity.name;
+        let nickname = identity.nickname;
+        const kitColors = generateKitColors();
+
+        // Assign initialSeedQuality (1 is best, 59 is worst AI)
+        const initialSeedQuality = i + 1; // 1 to 59
+
+        // Overall Team Quality (higher for better seeds)
+        // Scale quality from 20 (best seed 1) down to 5 (worst AI seed 59)
+        const overallTeamQuality = Math.max(5, Math.round(20 - (initialSeedQuality - 1) * (15 / (Constants.NUM_REGIONAL_CLUBS - 2))));
+
+        // Add a chance for "reserve" teams from major towns in the region
+        if (getRandomInt(1, 100) < 30 && townsPool.length > 0) {
+            const majorTownCandidates = townsPool.filter(t => t.length > 7 || ['Leicester', 'Nottingham', 'Derby', 'Birmingham', 'Sheffield', 'Manchester', 'Liverpool', 'Leeds', 'Bristol', 'Newcastle'].includes(t));
+            const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : townsPool);
+            
+            if (majorTown) {
+                name = `${majorTown} ${getRandomElement(['Reserves', 'U23s', 'Development Squad'])}`;
+            }
+        }
+
+        allClubs.push({
+            id: id, name: name, location: getRandomElement(townsPool), nickname: nickname, kitColors: kitColors,
+            overallTeamQuality: overallTeamQuality,
+            currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
+            leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+            inCup: true, // Assume all initial clubs are eligible for the cup
+            eliminatedFromCup: false,
+            initialSeedQuality: initialSeedQuality, // Store the seed for sorting into leagues
+            potentialLeagueLevel: 0, // Will be set by leagueData based on tier
+            customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED // NEW: Default to not customized
+        });
+    }
+
+    // Add Player's Club as the lowest seed (60)
+    allClubs.push({
+        id: playerClubDetails.id,
+        name: playerClubDetails.clubName,
+        location: playerClubDetails.hometown,
+        nickname: playerClubDetails.nickname,
+        kitColors: playerClubDetails.kitColors,
+        overallTeamQuality: getRandomInt(1, 5), // Player club starts at lowest quality
+        currentLeagueId: null,
+        finalLeaguePosition: null,
+        leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+        inCup: true,
+        eliminatedFromCup: false,
+        initialSeedQuality: Constants.NUM_REGIONAL_CLUBS, // Player is the last seed
+        potentialLeagueLevel: 0, // Will be set by leagueData based on tier
+        customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.CUSTOMIZED_ONCE // NEW: Player's club is customized by default
+    });
+
+    console.log(`Generated ${allClubs.length} regional clubs.`);
+    return allClubs;
+}
+
+
 // --- Committee Member Generation ---
 export function generateCommitteeMember(role) {
     const id = generateUniqueId('CM');
@@ -422,13 +493,13 @@ export function generateMatchSchedule(playerClubId, allTeamsData, season, compet
 
 
 // --- Initial Opponent Club Generation (structural data) ---
-/**
- * Generates initial opponent clubs based on the player's chosen county data.
- * @param {object} playerCountyData - The county data object for the player's chosen location.
- * @returns {Array<object>} An array of opponent club structural data.
- */
+// This function is now mostly replaced by generateRegionalClubPool
 export function generateInitialOpponentClubs(playerCountyData) { // Now expects a countyData object
-    const opponentClubs = [];
+    const generatedOpponents = [];
+    // This function will likely become obsolete or be used for generating clubs outside the initial 60 pool.
+    // Keeping it for compatibility if any old code paths still reference it.
+    console.warn("generateInitialOpponentClubs called. This function might be deprecated soon for initial league setup.");
+
     const townsPool = [...playerCountyData.towns]; // Use towns from the selected county
 
     for (let i = 0; i < Constants.DEFAULT_LEAGUE_SIZE - 1; i++) {
@@ -440,9 +511,8 @@ export function generateInitialOpponentClubs(playerCountyData) { // Now expects 
 
         // Add a chance for "reserve" teams from major towns in the region
         if (getRandomInt(1, 100) < 30) {
-            // Simple heuristic for "major" town: longer names, or specific known larger towns
             const majorTownCandidates = townsPool.filter(t => t.length > 7 || ['Leicester', 'Nottingham', 'Derby', 'Birmingham', 'Sheffield', 'Manchester', 'Liverpool', 'Leeds', 'Bristol', 'Newcastle'].includes(t));
-            const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : townsPool); // Fallback to any town if no "major" ones
+            const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : townsPool);
             
             if (majorTown) {
                 name = `${majorTown} ${getRandomElement(['Reserves', 'U23s', 'Development Squad'])}`;
@@ -450,32 +520,29 @@ export function generateInitialOpponentClubs(playerCountyData) { // Now expects 
             }
         }
 
-        opponentClubs.push({
+        generatedOpponents.push({
             id: id, name: name, location: getRandomElement(townsPool), nickname: nickname, kitColors: kitColors,
             overallTeamQuality: getRandomInt(5, 10), // Initial league opponents are lower quality
             currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
-            leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
+            leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+            inCup: true, // Assume all initial league teams are in the cup
+            eliminatedFromCup: false,
+            potentialLeagueLevel: 0 // Default for league teams
         });
     }
-    return opponentClubs;
+    console.log("Initial opponent clubs generated:", generatedOpponents.map(c => c.name));
+    return [...generatedOpponents];
 }
 
 // --- Initial League Name Generation ---
 /**
  * Generates an initial league name based on the player's chosen county data.
+ * This is now used to get the county prefix for tiered leagues.
  * @param {object} playerCountyData - The county data object for the player's chosen location.
- * @returns {object} An object { id: string, name: string }.\
+ * @returns {string} The county name (e.g., "Leicestershire").
  */
-export function generateInitialLeagueName(playerCountyData) { // Now expects a countyData object
-    const leagueId = generateUniqueId('L');
-    const countyName = playerCountyData.county;
-
-    const regionalPrefixes = ['County', 'District', 'Regional', 'Area'];
-    const divisionSuffixes = ['Division Three', 'Division Two', 'South', 'North', 'East', 'West', 'Alliance'];
-
-    let leagueName = `${countyName} & ${getRandomElement(regionalPrefixes)} League ${getRandomElement(divisionSuffixes)}`;
-
-    return { id: leagueId, name: leagueName.trim() };
+export function getCountyNameForLeagues(playerCountyData) { // Renamed and modified
+    return playerCountyData.county;
 }
 
 // --- Kit Color Generation ---

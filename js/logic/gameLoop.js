@@ -16,7 +16,7 @@ import * as eventLogic from './eventLogic.js';
 import * as playerInteractionLogic from './playerInteractionLogic.js'; // Correct path
 import * as committeeLogic from './committeeLogic.js'; // Correct path
 import * as renderers from '../ui/renderers.js';
-import * as Main from '../main.js';
+// REMOVED: import * as Main from '../main.js'; // This caused circular dependency
 
 
 // --- Helper Functions (internal to gameLoop.js) ---
@@ -50,7 +50,7 @@ function hasCupMatchThisWeek(teamId, week, countyCupFixtures) {
  * Processes the tasks that the player has allocated hours to for the current week.
  * @param {object} gameState - The current mutable gameState object.
  */
-function processPlayerTasks(gameState) { // Internal helper, not exported
+function processPlayerTasks(gameState) { // Internal helper, now receives gameState
     console.log("DEBUG: Processing weekly tasks (just logging now, outcomes handled on click)...");
     const tasksToProcess = gameState.weeklyTasks.filter(task => task.completed);
 
@@ -71,11 +71,11 @@ function processPlayerTasks(gameState) { // Internal helper, not exported
 /**
  * Applies natural weekly facility changes (decay/improvement) and checks for grade degradation.
  * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  * @returns {void}
  */
-function applyNaturalFacilityChanges(gameState) { // Internal helper, not exported
+function applyNaturalFacilityChanges(gameState, updateUICallbacks) { // Now receives updateUICallbacks
     const facilities = gameState.playerClub.facilities;
-    const updateUICallbacks = Main.getUpdateUICallbacks();
 
     for (const key in facilities) {
         const facility = facilities[key];
@@ -102,7 +102,7 @@ function applyNaturalFacilityChanges(gameState) { // Internal helper, not export
                 const newGrade = gameState.playerClub.facilities[key].grade;
                 renderers.showModal('Facility Degraded!', `${facility.name} condition has been poor, degrading from Grade ${oldGrade} to Grade ${newGrade}!`, [{ text: 'Drat!', action: (gs, uic, context) => {
                     renderers.hideModal();
-                    gameLoop.processRemainingWeekEvents(gs, 'facility_degraded');
+                    gameLoop.processRemainingWeekEvents(gs, 'facility_degraded', uic); // Pass uic
                 } }], gameState, updateUICallbacks, 'facility_degraded');
                 gameState.messages.push({ week: gameState.currentWeek, text: `Facility Degraded: ${facility.name} from Grade ${oldGrade} to Grade ${newGrade}.` });
                 return;
@@ -115,7 +115,7 @@ function applyNaturalFacilityChanges(gameState) { // Internal helper, not export
  * Applies weekly expenses to the club's finances.
  * @param {object} gameState - The current mutable gameState object.
  */
-function applyWeeklyExpenses(gameState) { // Internal helper, not exported
+function applyWeeklyExpenses(gameState) { // Internal helper, now receives gameState
     const totalMaintenanceCost = clubData.calculateTotalMaintenanceCost(gameState.playerClub.facilities);
     if (totalMaintenanceCost > 0) {
         gameState.playerClub.finances = clubData.addTransaction(
@@ -133,7 +133,7 @@ function applyWeeklyExpenses(gameState) { // Internal helper, not exported
  * @param {object} gameState - The current mutable gameState object.
  * @param {boolean} isHomeMatch - True if the match was played at player's home ground.
  */
-function applyMatchDayFacilityDamage(gameState, isHomeMatch) { // Internal helper, not exported
+function applyMatchDayFacilityDamage(gameState, isHomeMatch) { // Internal helper, now receives gameState
     if (!isHomeMatch) return;
 
     const facilities = gameState.playerClub.facilities;
@@ -168,7 +168,7 @@ function applyMatchDayFacilityDamage(gameState, isHomeMatch) { // Internal helpe
  * Updates player fitness and applies morale decay/changes.
  * @param {object} gameState - The current mutable gameState object.
  */
-function updatePlayerStatus(gameState) { // Internal helper, not exported
+function updatePlayerStatus(gameState) { // Internal helper, now receives gameState
     console.log("DEBUG: Updating player status...");
     const squad = gameState.playerClub?.squad || [];
     if (!Array.isArray(squad) || squad.length === 0) {
@@ -189,7 +189,7 @@ function updatePlayerStatus(gameState) { // Internal helper, not exported
             if (updatedPlayer.status.injuryReturnDate === "Next Week") {
                 updatedPlayer.status.injuryStatus = 'Fit';
                 updatedPlayer.status.injuryReturnDate = null;
-                Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${updatedPlayer.name} has recovered from injury.` });
+                gameState.messages.push({ week: gameState.currentWeek, text: `${updatedPlayer.name} has recovered from injury.` }); // Use passed gameState
             }
         }
         if (updatedPlayer.status.suspended && updatedPlayer.status.suspensionGames > 0) {
@@ -197,7 +197,7 @@ function updatePlayerStatus(gameState) { // Internal helper, not exported
             if (updatedPlayer.status.suspensionGames === 0) {
                 updatedPlayer.status.suspended = false;
                 updatedPlayer.status.injuryStatus = 'Fit'; // Reset injury status as well if it was 'Absent'
-                Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${updatedPlayer.name}'s suspension has ended.` });
+                gameState.messages.push({ week: gameState.currentWeek, text: `${updatedPlayer.name}'s suspension has ended.` }); // Use passed gameState
             }
         }
 
@@ -209,96 +209,102 @@ function updatePlayerStatus(gameState) { // Internal helper, not exported
 /**
  * Handles end of season logic: promotions, relegations, awards, reset stats, new fixtures.
  * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  */
-function endSeason(gameState) { // Internal helper, not exported
+function endSeason(gameState, updateUICallbacks) { // Now receives updateUICallbacks
     console.log(`--- End of Season ${gameState.currentSeason} ---`);
     gameState.gamePhase = Constants.GAME_PHASE.END_OF_SEASON;
-    const updateUICallbacks = Main.getUpdateUICallbacks();
 
-    const allClubsForLeague = [gameState.playerClub, ...opponentData.getAllOpponentClubs(gameState.playerClub.id)];
-    gameState.leagues = leagueData.processEndOfSeason(gameState.leagues, allClubsForLeague);
+    // Find the player's current league to get its name for the summary
+    const playerCurrentLeague = gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId);
+    const allClubsForLeague = opponentData.getAllOpponentClubs(null); // Get all clubs for processing
 
+    // Process end of season for ALL leagues
+    const updatedLeaguesAfterSeason = gameState.leagues.map(league => {
+        const clubsInThisLeague = allClubsForLeague.filter(club => club.currentLeagueId === league.id);
+        return leagueData.processEndOfSeason([league], clubsInThisLeague)[0]; // processEndOfSeason expects array of leagues
+    });
+    gameState.leagues = updatedLeaguesAfterSeason;
+
+    // Update player club's final position and league stats from the updated allClubsForLeague
     const playerClubInLeagueData = allClubsForLeague.find(c => c.id === gameState.playerClub.id);
     if (playerClubInLeagueData) {
         gameState.playerClub.finalLeaguePosition = playerClubInLeagueData.finalLeaguePosition;
         gameState.playerClub.leagueStats = { ...playerClubInLeagueData.leagueStats };
+        // Update player's current league ID if they were promoted/relegated
+        gameState.playerClub.currentLeagueId = playerClubInLeagueData.currentLeagueId;
     }
 
 
-    const currentLeague = gameState.leagues[0];
     const playerFinalPos = gameState.playerClub.finalLeaguePosition;
     const playerFinalPoints = gameState.playerClub.leagueStats.points;
 
 
-    let seasonSummaryMessage = `Season ${gameState.currentSeason} concluded. You finished ${playerFinalPos}th in the ${currentLeague.name} with ${playerFinalPoints} points.`;
+    let seasonSummaryMessage = `Season ${gameState.currentSeason} concluded. You finished ${playerFinalPos}th in the ${playerCurrentLeague?.name || 'your league'} with ${playerFinalPoints} points.`;
     let endSeasonModalTitle = 'Season Concluded';
 
-    if (playerFinalPos && playerFinalPos <= currentLeague.promotedTeams) {
-        endSeasonModalTitle = 'PROMOTED!';
-        seasonSummaryMessage = `PROMOTED! Congratulations! You finished ${playerFinalPos}st in the ${currentLeague.name} with ${playerFinalPoints} points. Prepare for a new challenge!`;
-        const prizeMoney = dataGenerator.getRandomInt(500, 1500);
-        gameState.playerClub.finances = clubData.addTransaction(
-            gameState.playerClub.finances,
-            prizeMoney,
-            Constants.TRANSACTION_TYPE.PRIZE_MONEY,
-            'Promotion Prize Money'
-        );
-        seasonSummaryMessage += ` Received £${prizeMoney.toFixed(2)} prize money.`;
-    } else if (playerFinalPos && playerFinalPos > currentLeague.numTeams - currentLeague.relegatedTeams) {
-        endSeasonModalTitle = 'RELEGATED!';
-        seasonSummaryMessage = `RELEGATED! Oh no! You finished ${playerFinalPos}th in the ${currentLeague.name} with ${playerFinalPoints} points. Time for rebuilding.`;
+    if (playerFinalPos && playerCurrentLeague) {
+        if (playerFinalPos <= playerCurrentLeague.promotedTeams) {
+            endSeasonModalTitle = 'PROMOTED!';
+            seasonSummaryMessage = `PROMOTED! Congratulations! You finished ${playerFinalPos}st in the ${playerCurrentLeague.name} with ${playerFinalPoints} points. Prepare for a new challenge!`;
+            const prizeMoney = dataGenerator.getRandomInt(500, 1500);
+            gameState.playerClub.finances = clubData.addTransaction(
+                gameState.playerClub.finances,
+                prizeMoney,
+                Constants.TRANSACTION_TYPE.PRIZE_MONEY,
+                'Promotion Prize Money'
+            );
+            seasonSummaryMessage += ` Received £${prizeMoney.toFixed(2)} prize money.`;
+        } else if (playerFinalPos > (playerCurrentLeague.numTeams - playerCurrentLeague.relegatedTeams)) {
+            endSeasonModalTitle = 'RELEGATED!';
+            seasonSummaryMessage = `RELEGATED! Oh no! You finished ${playerFinalPos}th in the ${playerCurrentLeague.name} with ${playerFinalPoints} points. Time for rebuilding.`;
+        }
     }
 
     renderers.showModal(endSeasonModalTitle, seasonSummaryMessage, [{ text: 'Review Season', action: (gs, uic, context) => {
         renderers.hideModal();
-        finalizeWeekProcessing(gs, context);
+        gameLoop.finalizeWeekProcessing(gs, 'end_of_season_review', uic); // Pass uic
     } }], gameState, updateUICallbacks, 'end_of_season_review');
     gameState.messages.push({ week: gameState.currentWeek, text: `Season ${gameState.currentSeason} concluded.` });
 
 
     gameState.playerClub.squad = playerData.resetPlayerSeasonStats();
-    opponentData.resetOpponentSeasonalStats();
+    opponentData.resetOpponentSeasonalStats(); // Resets stats for all AI clubs
+    
+    // Reset league stats for player club
     gameState.playerClub.leagueStats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
     
     // Reset cup status for next season
     gameState.countyCup = {
         competitionId: dataGenerator.generateUniqueId('CUP'),
-        teams: [...gameState.leagues[0].allClubsData], // Start with league teams for next season's cup pool
+        teams: [...opponentData.getAllOpponentClubs(null)], // Start with ALL clubs in game world for next season's cup pool
         fixtures: [],
         currentRound: 0,
         playerTeamStatus: 'Active', // Player team is active in cup for new season
         opponentToCustomize: null
     };
 
-    // Add a few extra potential cup opponents from the region for the new season
-    for (let i = 0; i < 5; i++) { // Add 5 extra potential cup teams
-        const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(8, 15)); // Generate with varied quality
-        if (!gameState.countyCup.teams.some(team => team.id === newOpponent.id)) {
-            newOpponent.inCup = true;
-            newOpponent.eliminatedFromCup = false;
-            gameState.countyCup.teams.push(newOpponent);
-            opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
-        }
-    }
-
+    // No need to add extra cup opponents here, as generateRegionalClubPool already created all 60.
+    // The cup draw logic will pull from allClubsInGameWorld.
 
     gameState.currentSeason++;
     gameState.currentWeek = 1;
     gameState.gamePhase = Constants.GAME_PHASE.OFF_SEASON;
 
-    // Regenerate league fixtures for new season
-    currentLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
-        gameState.playerClub.id,
-        [gameState.playerClub, ...opponentData.getAllOpponentClubs(gameState.playerClub.id)],
-        gameState.currentSeason,
-        Constants.COMPETITION_TYPE.LEAGUE
-    );
-    gameState.leagues[0] = currentLeague;
+    // Regenerate league fixtures for all leagues for new season
+    gameState.leagues.forEach(league => {
+        league.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
+            gameState.playerClub.id,
+            league.allClubsData, // Pass only clubs relevant to this league
+            gameState.currentSeason,
+            Constants.COMPETITION_TYPE.LEAGUE
+        );
+    });
 
     renderers.renderGameScreen('homeScreen');
     renderers.showModal(`Season ${gameState.currentSeason - 1} Concluded!`, `Prepare for Season ${gameState.currentSeason}.`, [{ text: 'Continue', action: (gs, uic, context) => {
         renderers.hideModal();
-        finalizeWeekProcessing(gs, context);
+        gameLoop.finalizeWeekProcessing(gs, 'season_start_continue', uic); // Pass uic
     } }], gameState, updateUICallbacks, 'season_start_continue');
 }
 
@@ -308,17 +314,17 @@ function endSeason(gameState) { // Internal helper, not exported
  * It initiates the sequence of events for the current week.
  * @param {object} gameState - The current mutable gameState object.
  * @param {number} [resumeStep=0] - Internal parameter to resume week processing from a specific step.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  * @returns {boolean} True if an interactive modal was displayed by this execution of advanceWeek,
  * false otherwise. If true, the caller (main.js) should NOT finalize the week, but
  * wait for the modal's action to trigger processAIMatchesAndFinalizeWeek or finalizeWeekProcessing.
  */
-export function advanceWeek(gameState, resumeStep = 0) {
+export function advanceWeek(gameState, resumeStep = 0, updateUICallbacks) { // Now receives updateUICallbacks
     console.log(`--- Starting processing for Season ${gameState.currentSeason}, Week ${gameState.currentWeek} (Resume Step: ${resumeStep}) ---`);
 
     // NEW: Set processing flag to true at the very start of the week's processing
-    Main.gameState.isProcessingWeek = true;
-
-    const updateUICallbacks = Main.getUpdateUICallbacks();
+    // Use gameState directly, as Main.gameState might not be updated yet in some contexts
+    gameState.isProcessingWeek = true; 
 
     // Define currentMonthBlock and currentMonthName at the top of the function
     const currentMonthBlock = Constants.GAME_WEEK_TO_MONTH_MAP.find(block => {
@@ -339,7 +345,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // If this is the initial call for the week, do the basic weekly setup
     if (resumeStep === 0) {
         processPlayerTasks(gameState); // Now correctly called as an internal function
-        applyNaturalFacilityChanges(gameState); // Now correctly called as an internal function
+        applyNaturalFacilityChanges(gameState, updateUICallbacks); // Now correctly called as an internal function, pass updateUICallbacks
         if (renderers.getModalDisplayStatus() === 'flex') { return true; } 
         applyWeeklyExpenses(gameState); // Now correctly called as an internal function
         if (renderers.getModalDisplayStatus() === 'flex') { return true; } 
@@ -353,7 +359,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // Step 1: Committee Meeting
     if (resumeStep <= 1 && gameState.currentWeek > 0 && gameState.currentWeek % Constants.COMMITTEE_MEETING_FREQUENCY_WEEKS === 0 && renderers.getModalDisplayStatus() === 'none') {
         console.log("DEBUG: Monthly committee meeting scheduled.");
-        committeeLogic.startCommitteeMeeting(gameState); // This shows a modal
+        committeeLogic.startCommitteeMeeting(gameState, updateUICallbacks); // Pass updateUICallbacks
         gameState.messages.push({ week: gameState.currentWeek, text: `Monthly committee meeting held.` });
         return true; // Modal shown, execution stops here
     }
@@ -361,7 +367,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // Step 2: Random Event
     if (resumeStep <= 2 && (gameState.currentWeek > Constants.PRE_SEASON_WEEKS || gameState.gamePhase === Constants.GAME_PHASE.PRE_SEASON_PLANNING) && renderers.getModalDisplayStatus() === 'none') {
         const eventMultiplier = (currentMonthName === 'December') ? Constants.DECEMBER_BAD_EVENT_CHANCE_MULTIPLIER : 1;
-        const triggeredEvent = eventLogic.triggerRandomEvent(gameState, eventMultiplier); // This might show a modal
+        const triggeredEvent = eventLogic.triggerRandomEvent(gameState, eventMultiplier, updateUICallbacks); // Pass updateUICallbacks
         if (triggeredEvent) {
             gameState.messages.push({ week: gameState.currentWeek, text: `${triggeredEvent.title}: ${triggeredEvent.description}` });
             return true; // Modal shown, execution stops here
@@ -369,7 +375,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     }
 
     // --- Match Logic & Cup Announcements: Order is CRITICAL ---
-    const currentLeague = gameState.leagues[0];
+    const currentLeague = gameState.leagues[0]; // Assuming player is always in the first league object for now
     const isLeagueMatchCalendarWeek = currentMonthBlock && currentMonthBlock.isLeague;
     const isCupMatchWeek = Constants.COUNTY_CUP_MATCH_WEEKS.includes(gameState.currentWeek);
 
@@ -377,7 +383,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // If it's a cup match week, handle the player's cup match or week off.
     // This will either show a match briefing modal or a "week off" modal.
     if (resumeStep <= 3 && renderers.getModalDisplayStatus() === 'none' && isCupMatchWeek) {
-        handleCountyCupMatch(gameState); // This function will always show a modal if player has a match/bye/eliminated
+        handleCountyCupMatch(gameState, updateUICallbacks); // Pass updateUICallbacks
         return true; // Stop here, modal dismissal will continue the flow
     }
 
@@ -385,7 +391,9 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // If it's a regular league week and not a cup match week, simulate league matches.
     if (resumeStep <= 4 && renderers.getModalDisplayStatus() === 'none' && isLeagueMatchCalendarWeek && !isCupMatchWeek && currentLeague) {
         const currentAbsoluteGameWeek = gameState.currentWeek;
-        let currentWeekLeagueBlock = currentLeague.currentSeasonFixtures.find(wb =>
+        // Find the player's current league
+        const playerCurrentLeague = gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId);
+        let currentWeekLeagueBlock = playerCurrentLeague?.currentSeasonFixtures.find(wb =>
             wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE
         );
 
@@ -401,7 +409,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
                 if (homeTeamHasCupMatch || awayTeamHasCupMatch) {
                     // Reschedule this league match
                     const rescheduled = leagueData.rescheduleLeagueMatch(
-                        gameState.leagues,
+                        gameState.leagues, // Pass all leagues
                         match.homeTeamId, // Pass home team ID
                         match.awayTeamId, // Pass away team ID
                         currentAbsoluteGameWeek,
@@ -423,9 +431,9 @@ export function advanceWeek(gameState, resumeStep = 0) {
                 currentWeekLeagueBlock.matches = currentWeekLeagueBlock.matches.filter(match => !matchesToReschedule.includes(match.id));
                 // IMPORTANT: Since we modified currentWeekLeagueBlock.matches, we need to update the league's fixtures array
                 // with this new version of the week block. Otherwise, the original fixtures object still contains the rescheduled matches.
-                const leagueFixtureBlockIndex = currentLeague.currentSeasonFixtures.findIndex(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+                const leagueFixtureBlockIndex = playerCurrentLeague.currentSeasonFixtures.findIndex(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
                 if (leagueFixtureBlockIndex !== -1) {
-                    currentLeague.currentSeasonFixtures[leagueFixtureBlockIndex] = { ...currentWeekLeagueBlock };
+                    playerCurrentLeague.currentSeasonFixtures[leagueFixtureBlockIndex] = { ...currentWeekLeagueBlock };
                 }
             }
 
@@ -437,21 +445,19 @@ export function advanceWeek(gameState, resumeStep = 0) {
                 if (!gameState.playerClub.facilities[Constants.FACILITIES.PITCH].isUsable && playerMatch.homeTeamId === gameState.playerClub.id && renderers.getModalDisplayStatus() === 'none') {
                     renderers.showModal('Match Postponed!', `Your pitch is unplayable! The home match against ${playerMatch.awayTeamName} has been postponed.`, [{ text: 'Drat!', action: (gs, uic, context) => {
                         renderers.hideModal();
-                        // Pass the modified currentWeekLeagueBlock (with rescheduled matches removed) to processAIMatchesAndFinalizeWeek
-                        processAIMatchesAndFinalizeWeek(gs, playerMatch.id); // No currentWeekBlock passed directly
+                        processAIMatchesAndFinalizeWeek(gs, playerMatch.id, uic); // Pass playerMatch.id, uic
                     } }], gameState, updateUICallbacks, 'match_postponed');
                     gameState.messages.push({ week: gameState.currentWeek, text: `Home match against ${playerMatch.awayTeamName} postponed due to unplayable pitch.` });
                     playerMatch.result = "P-P";
                     playerMatch.played = true;
                     return true;
                 } else if (renderers.getModalDisplayStatus() === 'none') {
-                    matchLogic.preMatchBriefing(gameState, playerMatch);
+                    matchLogic.preMatchBriefing(gameState, playerMatch, updateUICallbacks); // Pass updateUICallbacks
                     return true;
                 }
             } else if (matchesToProcess.length > 0) {
                 // If no player match, but there are AI league matches that didn't clash, process them
-                // Pass the modified currentWeekLeagueBlock (with rescheduled matches removed) to processAIMatchesAndFinalizeWeek
-                processAIMatchesAndFinalizeWeek(gameState, null); // No player match, no specific block to pass
+                processAIMatchesAndFinalizeWeek(gameState, null, updateUICallbacks); // Pass null for playerMatchId, uic
                 return true; // This will show a modal if AI matches were played, or finalize if not.
             }
         }
@@ -462,7 +468,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     if (resumeStep <= 5 && renderers.getModalDisplayStatus() === 'none') {
         // Collect all AI matches for this week (both league and cup)
         const currentAbsoluteGameWeek = gameState.currentWeek;
-        const currentLeague = gameState.leagues[0];
+        const currentLeague = gameState.leagues[0]; // Assuming player is in the first league for this check
         const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
         const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentAbsoluteGameWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
 
@@ -483,12 +489,12 @@ export function advanceWeek(gameState, resumeStep = 0) {
 
         if (allAIMatchesForWeek.length > 0) {
             renderers.showModal('Quiet Week (AI Matches Played)', 'No direct events for you, but other matches were played this week.', [], gameState, updateUICallbacks, 'quiet_week');
-            processAIMatchesAndFinalizeWeek(gameState, null); // No player match, no specific block to pass
+            processAIMatchesAndFinalizeWeek(gameState, null, updateUICallbacks); // Pass null for playerMatchId, uic
         } else {
             renderers.showModal('Quiet Week', 'Nothing major happened this week. Focus on building your club!', [], gameState, updateUICallbacks, 'quiet_week');
             console.log(gameState.currentWeek)
             gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
-            finalizeWeekProcessing(gameState, 'quiet_week'); // Directly finalize if truly quiet
+            finalizeWeekProcessing(gameState, 'quiet_week', updateUICallbacks); // Directly finalize if truly quiet, pass uic
         }
         return true;
     }
@@ -498,7 +504,7 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // This typically means a modal was already active from a prior step (e.g., a task completion).
     console.log("DEBUG: advanceWeek finished, no new modal triggered. Assuming prior modal handled continuation.");
     // If no modal was triggered by advanceWeek, then finalize the week directly.
-    finalizeWeekProcessing(gameState, 'no_modal_triggered_by_advance_week'); // Call finalize directly
+    finalizeWeekProcessing(gameState, 'no_modal_triggered_by_advance_week', updateUICallbacks); // Call finalize directly, pass uic
     return false; // Indicate no modal was shown by this direct call
 }
 
@@ -507,10 +513,10 @@ export function advanceWeek(gameState, resumeStep = 0) {
  * This is called by the action handlers of modals.
  * @param {object} gameState - The mutable gameState.
  * @param {string} dismissalContext - The context from which the modal was dismissed.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  */
-export function processRemainingWeekEvents(gameState, dismissalContext) { // EXPORTED
+export function processRemainingWeekEvents(gameState, dismissalContext, updateUICallbacks) { // Now receives updateUICallbacks
     console.log(`DEBUG: processRemainingWeekEvents called. Context: ${dismissalContext}.`);
-    const updateUICallbacks = Main.getUpdateUICallbacks();
 
     // Determine the current step based on the dismissal context to resume from the next logical step
     let nextStepToResume = 0; // Default to start of week processing if context is unclear
@@ -584,9 +590,9 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
     // Now, call advanceWeek again, telling it where to resume.
     // If nextStepToResume === 7, it means the week's processing is complete, so we finalize.
     if (nextStepToResume === 7) {
-        finalizeWeekProcessing(gameState, dismissalContext);
+        finalizeWeekProcessing(gameState, dismissalContext, updateUICallbacks); // Pass updateUICallbacks
     } else {
-        advanceWeek(gameState, nextStepToResume);
+        advanceWeek(gameState, nextStepToResume, updateUICallbacks); // Pass updateUICallbacks
     }
 }
 
@@ -597,15 +603,15 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
  * This function now *always* retrieves the relevant matches for the current week from gameState.
  * @param {object} gameState - The current mutable gameState.
  * @param {string|null} playerMatchId - The ID of the player's match for the week, or null if none.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  */
-export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId) { // currentWeekBlock parameter removed
+export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId, updateUICallbacks) { // currentWeekBlock parameter removed, updateUICallbacks added
     console.log(`DEBUG: processAIMatchesAndFinalizeWeek called. Simulating AI matches for Week ${gameState.currentWeek}.`);
     
     let aiMatchesPlayed = false;
-    const updateUICallbacks = Main.getUpdateUICallbacks();
 
     const currentAbsoluteGameWeek = gameState.currentWeek;
-    const currentLeague = gameState.leagues[0];
+    const currentLeague = gameState.leagues[0]; // Assuming player is in the first league for now
     const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
     const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentAbsoluteGameWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
 
@@ -706,22 +712,22 @@ export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId) { // c
         }
     }
 
-    Main.updateUI();
+    updateUICallbacks.updateUI(); // Use passed updateUICallbacks
 
     if (aiMatchesPlayed && renderers.getModalDisplayStatus() === 'none') {
         renderers.showModal('Matches Played', `Other matches were played this week.`, [], gameState, updateUICallbacks, 'ai_matches_summary');
         gameState.messages.push({ week: gameState.currentWeek, text: `Other matches played this week.` });
     } else {
-        finalizeWeekProcessing(gameState, 'no_ai_matches_or_modal_active');
+        finalizeWeekProcessing(gameState, 'no_ai_matches_or_modal_active', updateUICallbacks); // Pass updateUICallbacks
     }
 }
 
 /**
  * Handles the announcement and draw for a county cup round.
  * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  */
-export function handleCountyCupAnnouncement(gameState) { // EXPORTED
-    const updateUICallbacks = Main.getUpdateUICallbacks();
+export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // Now receives updateUICallbacks
     const currentRoundWeek = gameState.currentWeek;
     const currentRoundNum = Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.indexOf(currentRoundWeek) + 1;
     gameState.countyCup.currentRound = currentRoundNum;
@@ -733,7 +739,7 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
     // Ensure player's team is explicitly added if they are active and not already in the filtered list
     // This handles cases where playerClub might not be in countyCup.teams initially or its status is outdated.
     if (gameState.countyCup.playerTeamStatus === 'Active' && !teamsInCup.some(t => t.id === gameState.playerClub.id)) {
-        teamsInCup.push(Main.gameState.playerClub); // Use Main.gameState.playerClub for the most up-to-date player club object
+        teamsInCup.push(gameState.playerClub); // Use passed gameState.playerClub
     }
     // --- END FIX ---
 
@@ -748,7 +754,7 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
     let playerInCup = teamsInCup.find(t => t.id === gameState.playerClub.id);
     if (!playerInCup && gameState.countyCup.playerTeamStatus === 'Active') {
         // This block might be redundant if the above filtering is robust, but keeping for safety.
-        teamsInCup.push(Main.gameState.playerClub);
+        teamsInCup.push(gameState.playerClub); // Use passed gameState.playerClub
     } else if (playerInCup && gameState.countyCup.playerTeamStatus === 'Not Entered') {
         gameState.countyCup.playerTeamStatus = 'Active';
     }
@@ -782,6 +788,11 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
     const playerMatch = cupFixturesThisRound.find(match =>
         match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id
     );
+
+    // Log playerMatch details for debugging
+    console.log("DEBUG: handleCountyCupAnnouncement - playerMatch:", playerMatch);
+    console.log("DEBUG: handleCountyCupAnnouncement - matchWeekForThisRound:", matchWeekForThisRound);
+
 
     if (playerMatch) {
         drawMessage += `Your match: **${playerMatch.homeTeamName} vs ${playerMatch.awayTeamName}**\n\n`;
@@ -829,7 +840,8 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
                         // Show final confirmation modal after customization, then finalize week.
                         renderers.showModal('Opponent Customized!', `You've customized ${customizedOpponent.name}. Your County Cup match against them is scheduled for ${Main.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => {
                             renderers.hideModal();
-                            uicFinal.finalizeWeekProcessing(gsFinal, 'cup_opponent_customized_final'); // Pass new context
+                            console.log("DEBUG: Final customization modal 'Continue' clicked. Calling finalizeWeekProcessing with 'cup_opponent_customized_final'.");
+                            finalizeWeekProcessing(gsFinal, 'cup_opponent_customized_final', uicFinal); // Pass new context, uicFinal
                         }}], gsInner, uicInner, contextInner); // Pass all necessary state and callbacks
                     }, isPrimary: true }]
                     , gs, uic, context);
@@ -840,7 +852,8 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
                     const opponentName = playerMatch.homeTeamId === gs.playerClub.id ? playerMatch.awayTeamName : playerMatch.homeTeamName;
                     renderers.showModal('County Cup Draw Confirmed!', `Your County Cup match against ${opponentName} is scheduled for ${Main.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => {
                         renderers.hideModal();
-                        uicFinal.finalizeWeekProcessing(gsFinal, 'cup_draw_normal'); // Pass context
+                        console.log("DEBUG: Skip customization modal 'Continue' clicked. Calling finalizeWeekProcessing with 'cup_draw_normal'.");
+                        finalizeWeekProcessing(gsFinal, 'cup_draw_normal', uicFinal); // Pass context, uicFinal
                     }}], gs, uic, context); // Pass all necessary state and callbacks
                 } }
             ], gameState, updateUICallbacks, 'cup_draw_with_customization');
@@ -862,17 +875,17 @@ export function handleCountyCupAnnouncement(gameState) { // EXPORTED
 /**
  * Handles the County Cup Match Day processing.
  * @param {object} gameState - The current mutable gameState object.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  * @returns {void}
  */
-export function handleCountyCupMatch(gameState) { // EXPORTED
-    const updateUICallbacks = Main.getUpdateUICallbacks();
+export function handleCountyCupMatch(gameState, updateUICallbacks) { // Now receives updateUICallbacks
     const currentWeek = gameState.currentWeek;
     const currentCupRoundName = Constants.COUNTY_CUP_ROUND_NAMES[currentWeek];
 
     const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
 
     // --- NEW: Collect all AI matches for this week (both league and cup) ---
-    const currentLeague = gameState.leagues[0];
+    const currentLeague = gameState.leagues[0]; // Assuming player is in the first league for this check
     const currentAbsoluteGameWeek = gameState.currentWeek;
     const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
 
@@ -908,9 +921,9 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
         // Process combined AI matches if any, then finalize
         if (allAIMatchesForWeek.length > 0) {
             // Create a dummy currentWeekBlock for processAIMatchesAndFinalizeWeek
-            processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
+            processAIMatchesAndFinalizeWeek(gameState, null, updateUICallbacks); // Pass null for playerMatchId, uic
         } else {
-            finalizeWeekProcessing(gameState, 'cup_match_none_or_eliminated');
+            finalizeWeekProcessing(gameState, 'cup_match_none_or_eliminated', updateUICallbacks);
         }
         return;
     }
@@ -924,24 +937,24 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
             renderers.showModal('County Cup', `You have a BYE this County Cup round.`, [], gameState, updateUICallbacks, 'cup_match_bye_player');
             // Process combined AI matches if any, then finalize
             if (allAIMatchesForWeek.length > 0) {
-                processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
+                processAIMatchesAndFinalizeWeek(gameState, null, updateUICallbacks); // Pass null for playerMatchId, uic
             } else {
-                finalizeWeekProcessing(gameState, 'cup_match_bye_player');
+                finalizeWeekProcessing(gameState, 'cup_match_bye_player', updateUICallbacks);
             }
             return;
         }
         
         if (gameState.countyCup.playerTeamStatus === 'Active') {
-            matchLogic.preMatchBriefing(gameState, playerMatch);
+            matchLogic.preMatchBriefing(gameState, playerMatch, updateUICallbacks); // Pass updateUICallbacks
             return;
         } else {
             // If playerMatch exists but playerTeamStatus is not 'Active' (e.g., 'Eliminated' from a previous round)
             renderers.showModal('County Cup', `You were expected to play, but your cup status is ${gameState.countyCup.playerTeamStatus}. This is a week off.`, [], gameState, updateUICallbacks, 'cup_match_unexpected_status');
             // Process combined AI matches if any, then finalize
             if (allAIMatchesForWeek.length > 0) {
-                processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
+                processAIMatchesAndFinalizeWeek(gameState, null, updateUICallbacks); // Pass null for playerMatchId, uic
             } else {
-                finalizeWeekProcessing(gameState, 'cup_match_unexpected_status');
+                finalizeWeekProcessing(gameState, 'cup_match_unexpected_status', updateUICallbacks);
             }
             return;
         }
@@ -954,9 +967,9 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
         }
         // Process combined AI matches if any, then finalize
         if (allAIMatchesForWeek.length > 0) {
-            processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
+            processAIMatchesAndFinalizeWeek(gameState, null, updateUICallbacks); // Pass null for playerMatchId, uic
         } else {
-            finalizeWeekProcessing(gameState, 'cup_match_no_player_match_ai_only');
+            finalizeWeekProcessing(gameState, 'cup_match_no_player_match_ai_only', updateUICallbacks);
         }
         return;
     }
@@ -966,25 +979,29 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
  * This function encapsulates the very final steps of the week progression.
  * It's called by the last action button in the modal chain (e.g., after the match report).
  * @param {object} gameState - The mutable gameState.
- * @param {string} dismissalContext - The type of modal that was just dismissed, or reason for direct call.
+ * @param {string} dismissalContext - The context from which the modal was dismissed.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  */
-export function finalizeWeekProcessing(gameState, dismissalContext) { // EXPORTED to be called by modal actions
+export function finalizeWeekProcessing(gameState, dismissalContext, updateUICallbacks) { // Now receives updateUICallbacks
     console.log(`DEBUG: finalizeWeekProcessing called. Context: ${dismissalContext}. Finishing week processing.`);
     // Log the current game week and dismissal context for debugging
     console.log(`DEBUG: finalizeWeekProcessing: Current Week: ${gameState.currentWeek}, Dismissal Context: ${dismissalContext}`);
-    console.log(`DEBUG: COUNTY_CUP_ANNOUNCEMENT_WEEKS includes current week: ${Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(gameState.currentWeek)}`);
-    console.log(`DEBUG: Dismissal context is in exclusion list: ${['cup_draw_no_match', 'cup_draw_normal', 'cup_draw_bye', 'cup_draw_with_customization', 'cup_opponent_customized_final'].includes(dismissalContext)}`);
+    const isAnnouncementWeek = Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(gameState.currentWeek);
+    const isDismissalContextExcluded = ['cup_draw_no_match', 'cup_draw_normal', 'cup_draw_bye', 'cup_draw_with_customization', 'cup_opponent_customized_final'].includes(dismissalContext);
+    
+    console.log(`DEBUG: isAnnouncementWeek: ${isAnnouncementWeek}`);
+    console.log(`DEBUG: isDismissalContextExcluded: ${isDismissalContextExcluded}`);
+    console.log(`DEBUG: Condition for re-triggering announcement: ${isAnnouncementWeek && !isDismissalContextExcluded}`);
 
 
     // --- Handle County Cup Announcement *before* week increments ---
     // This ensures the announcement happens for the current week, after matches.
     // It will show a modal, and that modal's dismissal will call finalizeWeekProcessing again,
     // but with a cup_draw_... context, allowing the week to finally increment.
-    if (Constants.COUNTY_CUP_ANNOUNCEMENT_WEEKS.includes(gameState.currentWeek) && 
-        !['cup_draw_no_match', 'cup_draw_normal', 'cup_draw_bye', 'cup_draw_with_customization', 'cup_opponent_customized_final'].includes(dismissalContext)) { // Added 'cup_opponent_customized_final'
+    if (isAnnouncementWeek && !isDismissalContextExcluded) {
         
         console.log(`DEBUG: Triggering County Cup Announcement for Week ${gameState.currentWeek}`);
-        handleCountyCupAnnouncement(gameState);
+        handleCountyCupAnnouncement(gameState, updateUICallbacks); // Pass updateUICallbacks
         return; // IMPORTANT: Return here. The dismissal of the cup announcement modal will call finalizeWeekProcessing again.
     }
     // --- END NEW ---
@@ -992,7 +1009,7 @@ export function finalizeWeekProcessing(gameState, dismissalContext) { // EXPORTE
 
     // These steps now only occur once all match/event modals are dismissed and flow is returned.
     // 7. Update Player Fitness/Morale (Post-match/Weekly Decay)
-    const playerLeagueMatchForWeek = gameState.leagues[0]?.currentSeasonFixtures
+    const playerLeagueMatchForWeek = gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId)?.currentSeasonFixtures
         .find(wb => wb.week === (gameState.currentWeek) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE)?.matches
         .find(match => match.homeTeamId === gameState.playerClub.id || match.awayTeamId === gameState.playerClub.id);
     
@@ -1011,13 +1028,13 @@ export function finalizeWeekProcessing(gameState, dismissalContext) { // EXPORTE
     } else {
         console.error("ERROR: gameState is not an object in finalizeWeekProcessing. Cannot advance week.");
         // NEW: Reset flag on error to allow retrying
-        Main.gameState.isProcessingWeek = false;
+        gameState.isProcessingWeek = false; // Use gameState directly
         return; // Prevent further errors
     }
 
     // 9. Check for End of Season
     if (gameState.currentWeek > Constants.TOTAL_LEAGUE_WEEKS) {
-        endSeason(gameState);
+        endSeason(gameState, updateUICallbacks); // Pass updateUICallbacks
     } else {
         const nextMonthBlock = Constants.GAME_WEEK_TO_MONTH_MAP.find(block => {
             let cumulative = 0;
@@ -1036,13 +1053,13 @@ export function finalizeWeekProcessing(gameState, dismissalContext) { // EXPORTE
 
         gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
         gameState.gamePhase = Constants.GAME_PHASE.WEEKLY_PLANNING;
-        Main.updateUI();
-        Main.saveGame(false);
+        updateUICallbacks.updateUI(); // Use passed updateUICallbacks
+        updateUICallbacks.saveGame(false); // Use passed updateUICallbacks
         renderers.renderGameScreen('homeScreen');
     }
 
     // NEW: Reset processing flag at the very end of successful week finalization
-    Main.gameState.isProcessingWeek = false;
+    gameState.isProcessingWeek = false; // Use gameState directly
 
     console.log(`DEBUG: Week ${gameState.currentWeek - 1} finished. Next: Week ${gameState.currentWeek}`);
 }

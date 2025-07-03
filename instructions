@@ -1,0 +1,10 @@
+Okay I'm actually gonna plan a radical change to the way customisation and data generation in the game works throughout.
+
+
+
+So instead of being able to customise our league opponents at the start of the game we will just generate them. We will also generate up to 59 clubs  at the start of the game, these will be randomly given a seed so that they are ordered 1-59, the players club will be seed 60. Then the league generated for us will be called 
+
+COUNTYNAME DIVISION 2, the division above will be COUNTYNAME DIVISION 1, and the top division will be COUNTY PREMIER DIVISION. 
+
+
+index

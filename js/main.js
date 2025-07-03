@@ -3,53 +3,28 @@
 console.log("DEBUG: main.js started execution.");
 
 // --- Module Imports ---
-console.log("DEBUG: Attempting to import localStorageManager...");
+// IMPORTANT: Place all imports at the very top for consistent loading
 import * as localStorageManager from './utils/localStorageManager.js';
-console.log("DEBUG: localStorageManager imported successfully.");
-
-console.log("DEBUG: Attempting to import dataGenerator...");
 import * as dataGenerator from './utils/dataGenerator.js';
-console.log("DEBUG: dataGenerator imported successfully.");
-
-console.log("DEBUG: Attempting to import renderers...");
 import * as renderers from './ui/renderers.js';
-console.log("DEBUG: renderers imported successfully.");
-
-console.log("DEBUG: Attempting to import eventHandlers...");
 import * as eventHandlers from './ui/eventHandlers.js';
-console.log("DEBUG: eventHandlers imported successfully.");
-
-console.log("DEBUG: Attempting to import clubData...");
 import * as clubData from './data/clubData.js';
-console.log("DEBUG: clubData imported successfully.");
-
-console.log("DEBUG: Attempting to import playerData...");
 import * as playerData from './data/playerData.js';
-console.log("DEBUG: playerData imported successfully.");
-
-console.log("DEBUG: Attempting to import opponentData...");
 import * as opponentData from './data/opponentData.js';
-console.log("DEBUG: opponentData imported successfully.");
-
-console.log("DEBUG: Attempting to import leagueData...");
 import * as leagueData from './data/leagueData.js';
-console.log("DEBUG: leagueData imported successfully.");
-
-console.log("DEBUG: Attempting to import gameLoop...");
 import * as gameLoop from './logic/gameLoop.js';
-console.log("DEBUG: gameLoop imported successfully.");
-
-console.log("DEBUG: Attempting to import Constants...");
 import * as Constants from './utils/constants.js';
-console.log("DEBUG: Constants imported successfully.");
-
 import { getContrastingTextColor } from './utils/coloursUtils.js';
+import { UK_COUNTIES_DATA } from './data/CountiesData.js'; // MOVED: Ensure this is imported early
+
+
+console.log("DEBUG: All modules attempted import.");
 
 
 // --- Global Game State Object ---
 export let gameState = {
     playerClub: null,
-    leagues: [],
+    leagues: [], // Will now hold multiple league objects
     countyCup: {
         competitionId: null,
         teams: [], // All teams participating in the cup (will grow as new teams are drawn)
@@ -66,7 +41,7 @@ export let gameState = {
     messages: [],
     gamePhase: Constants.GAME_PHASE.SETUP,
     playerClubCustomized: false,
-    opponentClubsCustomized: false,
+    opponentClubsCustomized: false, // This flag will now just indicate initial club pool is set
     playerCountyData: null, 
     isProcessingWeek: false, // Flag to prevent re-entry into week processing
 };
@@ -167,17 +142,24 @@ export function updateUI() { // Renamed from updateGameAndUI for clarity
                 renderers.renderFinancesScreen(gameState.playerClub.finances);
                 break;
             case 'leagueScreen':
-                const currentLeague = gameState.leagues[0];
-                const allClubsInCurrentLeague = currentLeague ? currentLeague.allClubsData : [];
+                // Find the league the player's club is currently in
+                const playerCurrentLeague = gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId);
+                const allClubsInPlayerLeague = playerCurrentLeague ? playerCurrentLeague.allClubsData : [];
                 renderers.renderLeagueScreen(
-                    currentLeague?.name, // Pass the league name here
-                    leagueData.getLeagueTable(currentLeague?.id, allClubsInCurrentLeague)
+                    playerCurrentLeague?.name, // Pass the league name here
+                    leagueData.getLeagueTable(playerCurrentLeague?.id, allClubsInPlayerLeague)
                 );
                 break;
             case 'fixturesScreen':
                 // Combine league and cup fixtures, then sort by week
+                // Get fixtures for all leagues, flatten, and combine with cup fixtures
+                const allLeagueFixtures = [];
+                gameState.leagues.forEach(league => {
+                    allLeagueFixtures.push(...leagueData.getFixtures(gameState.leagues, league.id));
+                });
+
                 const allFixtures = [
-                    ...leagueData.getFixtures(gameState.leagues, gameState.leagues[0]?.id),
+                    ...allLeagueFixtures,
                     ...gameState.countyCup.fixtures
                 ].sort((a, b) => a.week - b.week); // Sort chronologically by week
 
@@ -188,6 +170,9 @@ export function updateUI() { // Renamed from updateGameAndUI for clarity
                 break;
             case 'historyScreen':
                 renderers.renderHistoryScreen(gameState.clubHistory);
+                break;
+            case 'editScreen': // NEW: Handle edit screen rendering
+                renderers.renderEditScreen(gameState);
                 break;
             default:
                 console.warn(`DEBUG: No specific renderer case for screen in updateUI: ${screenId}`);
@@ -233,7 +218,7 @@ export function saveGame(showMessage = true) { // Exported for gameLoop to call
 function _triggerProcessRemainingWeekEvents(gs, dismissalContext) {
     // This function will be called by modal actions
     // It safely calls gameLoop.processRemainingWeekEvents
-    gameLoop.processRemainingWeekEvents(gs, dismissalContext);
+    gameLoop.processRemainingWeekEvents(gs, dismissalContext, getUpdateUICallbacks()); // Pass updateUICallbacks explicitly
 }
 
 /**
@@ -244,7 +229,7 @@ export function getUpdateUICallbacks() {
     return {
         updateUI: updateUI,
         saveGame: saveGame,
-        finalizeWeekProcessing: gameLoop.finalizeWeekProcessing, // Reference to gameLoop's finalizer
+        finalizeWeekProcessing: (gs, context) => gameLoop.finalizeWeekProcessing(gs, context, getUpdateUICallbacks()), // Pass uic
         processRemainingWeekEvents: _triggerProcessRemainingWeekEvents, // <--- CHANGED THIS LINE
         renderHomeScreen: () => renderers.renderGameScreen('homeScreen') // Example, if needed
     };
@@ -256,91 +241,111 @@ export function getUpdateUICallbacks() {
  * Attempts to load a saved game; otherwise, starts the new game setup process.
  */
 function initGame() {
-    console.log("DEBUG: initGame() called.");
+    console.log("DEBUG: initGame() called."); // Added log to confirm entry
 
-    // Set up global UI event listeners first
-    console.log("DEBUG: Calling eventHandlers.initGlobalListeners()...");
-    eventHandlers.initGlobalListeners();
-    console.log("DEBUG: eventHandlers.initGlobalListeners() returned.");
+    try { // Wrap the entire initGame logic in a try-catch
+        // Set up global UI event listeners first
+        console.log("DEBUG: Calling eventHandlers.initGlobalListeners()...");
+        eventHandlers.initGlobalListeners();
+        console.log("DEBUG: eventHandlers.initGlobalListeners() returned.");
 
-    console.log("DEBUG: Attempting to load game...");
-    renderers.showLoadingScreen();
-    const loadedState = localStorageManager.loadGame();
-    const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
-
-    if (loadedState) {
-        gameState = loadedState;
-        // FIX: Action directly updates UI and navigates home
-        renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
-            renderers.hideModal(); // Hide modal
-            renderers.renderGameScreen('homeScreen'); // Go to home screen
-            uic.updateUI(); // Update UI for loaded state
-        }, isPrimary: true }], gameState, updateUICallbacks, 'game_loaded'); // Pass gameState and callbacks
-        if (gameState.playerClub) {
-            playerData.setSquad(gameState.playerClub.squad || []);
-            clubData.setCommittee(gameState.playerClub.committee || []);
-            // Ensure playerCountyData is loaded if available
-            if (loadedState.playerCountyData) {
-                gameState.playerCountyData = loadedState.playerCountyData;
-            } else {
-                // Fallback for old saves or if not set, try to derive from playerClub.location if it's a known town
-                // Or set a default
-                console.warn("playerCountyData not found in loaded state. Attempting to derive or set default.");
-                gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF'); // Try postcode or default
-            }
-
-            // --- CRITICAL FIX START: Ensure allClubsInGameWorld is comprehensively populated on load ---
-            let allClubsFromLoad = [];
-            // Add player club first
-            if (gameState.playerClub) {
-                allClubsFromLoad.push(gameState.playerClub);
-            }
-            // Add league clubs
-            if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                gameState.leagues[0].allClubsData.forEach(club => {
-                    if (!allClubsFromLoad.some(c => c.id === club.id)) {
-                        allClubsFromLoad.push(club);
-                    }
-                });
-            }
-
-            // Add any cup-specific teams from the loaded state that are not already in the league/player data
-            if (gameState.countyCup && gameState.countyCup.teams) {
-                gameState.countyCup.teams.forEach(cupTeam => {
-                    if (!allClubsFromLoad.some(c => c.id === cupTeam.id)) {
-                        allClubsFromLoad.push(cupTeam);
-                    }
-                });
-            }
-            
-            // Set the comprehensive list of all clubs in the game world for opponentData module
-            opponentData.setAllOpponentClubs(allClubsFromLoad);
-
-            // Now, safely update playerClub's league stats from the comprehensive list
-            const playerClubFromAllClubs = allClubsFromLoad.find(c => c.id === gameState.playerClub.id);
-            if (playerClubFromAllClubs) {
-                gameState.playerClub.leagueStats = { ...playerClubFromAllClubs.leagueStats };
-                gameState.playerClub.finalLeaguePosition = playerClubFromAllClubs.finalLeaguePosition;
-            }
-            // --- CRITICAL FIX END ---
-
-            applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
+        console.log("DEBUG: Attempting to load game...");
+        renderers.showLoadingScreen();
+        
+        let loadedState = null;
+        try {
+            loadedState = localStorageManager.loadGame();
+        } catch (e) {
+            console.error("ERROR: Failed to load game from local storage during init:", e);
+            // Do not alert here, let the flow continue to new game setup
         }
 
-        renderers.hideLoadingScreen();
-    } else {
-        console.log("DEBUG: No save game found. Rendering new game modal.");
-        renderers.hideLoadingScreen();
-        renderers.renderNewGameModal();
-        // FIX: Action directly updates UI and navigates home (or stays on modal)
-        renderers.showModal('Welcome, Chairman!', 'Please set up your club and begin your Non-League Journey.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
-            renderers.hideModal(); // Hide this modal
-            // No screen change here, newGameModal is already displayed
-        }, isPrimary: true }], gameState, updateUICallbacks, 'welcome_new_game'); // Pass gameState and callbacks
-        gameState.gamePhase = Constants.GAME_PHASE.SETUP;
-        applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
+        const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
+
+        if (loadedState) {
+            gameState = loadedState;
+            // FIX: Action directly updates UI and navigates home
+            renderers.showModal('Game Loaded!', 'Continue your journey to glory.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
+                renderers.hideModal(); // Hide modal
+                renderers.renderGameScreen('homeScreen'); // Go to home screen
+                uic.updateUI(); // Update UI for loaded state
+            }, isPrimary: true }], gameState, updateUICallbacks, 'game_loaded'); // Pass gameState and callbacks
+            if (gameState.playerClub) {
+                playerData.setSquad(gameState.playerClub.squad || []);
+                clubData.setCommittee(gameState.playerClub.committee || []);
+                // Ensure playerCountyData is loaded if available
+                if (loadedState.playerCountyData) {
+                    gameState.playerCountyData = loadedState.playerCountyData;
+                } else {
+                    // Fallback for old saves or if not set, try to derive from playerClub.location if it's a known town
+                    // Or set a default
+                    console.warn("playerCountyData not found in loaded state. Attempting to derive or set default.");
+                    // Ensure UK_COUNTIES_DATA is imported for this fallback
+                    gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF') || UK_COUNTIES_DATA[0];
+                }
+
+                // --- CRITICAL FIX START: Ensure allClubsInGameWorld is comprehensively populated on load ---
+                let allClubsFromLoad = [];
+                // Add player club first
+                if (gameState.playerClub) {
+                    allClubsFromLoad.push(gameState.playerClub);
+                }
+                // Add all clubs from all leagues
+                if (gameState.leagues && gameState.leagues.length > 0) {
+                    gameState.leagues.forEach(league => {
+                        if (league.allClubsData) {
+                            league.allClubsData.forEach(club => {
+                                if (!allClubsFromLoad.some(c => c.id === club.id)) {
+                                    allClubsFromLoad.push(club);
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // Add any cup-specific teams from the loaded state that are not already in the league/player data
+                if (gameState.countyCup && gameState.countyCup.teams) {
+                    gameState.countyCup.teams.forEach(cupTeam => {
+                        if (!allClubsFromLoad.some(c => c.id === cupTeam.id)) {
+                            allClubsFromLoad.push(cupTeam);
+                        }
+                    });
+                }
+                
+                // Set the comprehensive list of all clubs in the game world for opponentData module
+                opponentData.setAllOpponentClubs(allClubsFromLoad);
+
+                // Now, safely update playerClub's league stats from the comprehensive list
+                const playerClubFromAllClubs = allClubsFromLoad.find(c => c.id === gameState.playerClub.id);
+                if (playerClubFromAllClubs) {
+                    gameState.playerClub.leagueStats = { ...playerClubFromAllClubs.leagueStats };
+                    gameState.playerClub.finalLeaguePosition = playerClubFromAllClubs.finalLeaguePosition;
+                    gameState.playerClub.currentLeagueId = playerClubFromAllClubs.currentLeagueId; // Ensure currentLeagueId is loaded
+                }
+                // --- CRITICAL FIX END ---
+
+                applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
+            }
+
+            renderers.hideLoadingScreen();
+        } else {
+            console.log("DEBUG: No save game found. Rendering new game modal.");
+            renderers.hideLoadingScreen();
+            renderers.renderNewGameModal();
+            // FIX: Action directly updates UI and navigates home (or stays on modal)
+            renderers.showModal('Welcome, Chairman!', 'Please set up your club and begin your Non-League Journey.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
+                renderers.hideModal(); // Hide this modal
+                // No screen change here, newGameModal is already displayed
+            }, isPrimary: true }], gameState, updateUICallbacks, 'welcome_new_game'); // Pass gameState and callbacks
+            gameState.gamePhase = Constants.GAME_PHASE.SETUP;
+            applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
+        }
+        console.log("DEBUG: initGame() finished.");
+    } catch (error) {
+        console.error("CRITICAL ERROR: initGame() failed:", error);
+        // Display a fallback message if initGame completely fails
+        renderers.showModal('Game Initialization Error', 'An unexpected error occurred during game setup. Please refresh the page. Check console for details.', [{ text: 'OK', action: () => {} }]);
     }
-    console.log("DEBUG: initGame() finished.");
 }
 
 /**
@@ -359,12 +364,14 @@ export function startNewGame(playerClubDetails) {
     // Fallback if no county data was found (e.g., invalid postcode)
     if (!gameState.playerCountyData) {
         console.warn("No county data found for provided postcode. Falling back to default Leicestershire data for opponent generation.");
-        gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode('LE12 7TF'); // Default to Sileby's area
+        // Use a default county data if none found
+        gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode('LE12 7TF') || UK_COUNTIES_DATA[0]; 
     }
 
 
-    // 1. Initialize Player's Club
-    gameState.playerClub = clubData.createPlayerClub({
+    // 1. Initialize Player's Club (template for the full pool)
+    const playerClubTemplate = {
+        id: dataGenerator.generateUniqueId('PC'), // Generate ID here
         hometown: playerClubDetails.hometown,
         groundPostcode: playerClubDetails.groundPostcode,
         county: gameState.playerCountyData.county,
@@ -372,97 +379,75 @@ export function startNewGame(playerClubDetails) {
         nickname: playerClubDetails.nickname,
         primaryColor: playerClubDetails.primaryColor,
         secondaryColor: playerClubDetails.secondaryColor
-    });
-    gameState.playerClubCustomized = true;
+    };
+
+    // 2. Generate the entire regional club pool (60 clubs, including player's)
+    const allRegionalClubs = dataGenerator.generateRegionalClubPool(gameState.playerCountyData, playerClubTemplate);
+
+    // Find the player's actual club object from the generated pool (it now has overallTeamQuality, initialSeedQuality etc.)
+    gameState.playerClub = allRegionalClubs.find(club => club.id === playerClubTemplate.id);
+    // Initialize facilities, committee, and squad for the player's club
+    gameState.playerClub.facilities = clubData.createInitialFacilities(); // New function in clubData
+    gameState.playerClub.committee = clubData.createInitialCommittee(); // New function in clubData
+    const initialSquad = playerData.initializePlayerSquad(gameState.playerClub.id);
+    gameState.playerClub.squad = initialSquad;
+    playerData.setSquad(initialSquad); // Set internal squad for playerData module
+    gameState.playerClub.finances = { balance: Constants.DEFAULT_STARTING_BALANCE, transactions: [] }; // Initial finances
+    gameState.playerClub.reputation = 10;
+    gameState.playerClub.fanbase = 0;
+    gameState.playerClub.customizationHistory = { nameChanges: 0, colorChanges: 0 };
+    gameState.playerClub.leagueStats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
+    gameState.playerClub.finalLeaguePosition = null;
 
     applyThemeColors(playerClubDetails.primaryColor, playerClubDetails.secondaryColor);
 
-    // 2. Initialize Player Squad and attach to playerClub
-    const initialSquad = playerData.initializePlayerSquad(gameState.playerClub.id);
-    gameState.playerClub.squad = initialSquad;
-    playerData.setSquad(initialSquad);
-
-    // 3. Generate initial league structure and opponent clubs
-    const { leagues, clubs } = leagueData.generateInitialLeagues(
+    // 3. Generate tiered league structure and distribute clubs
+    const { leagues, clubs: updatedAllRegionalClubs } = leagueData.generateInitialLeagues(
         gameState.playerCountyData,
-        gameState.playerClub.id,
-        gameState.playerClub.name
+        allRegionalClubs // Pass the entire generated pool
     );
     gameState.leagues = leagues;
-    
-    // Initialize county cup for the first season
+    // Update opponentData's internal list with the clubs that now have league assignments
+    opponentData.setAllOpponentClubs(updatedAllRegionalClubs);
+
+    // Update playerClub in gameState with its assigned league ID
+    const playerClubInLeagues = updatedAllRegionalClubs.find(c => c.id === gameState.playerClub.id);
+    if (playerClubInLeagues) {
+        gameState.playerClub.currentLeagueId = playerClubInLeagues.currentLeagueId;
+        gameState.playerClub.potentialLeagueLevel = playerClubInLeagues.potentialLeagueLevel;
+    }
+
+
+    // 4. Initialize county cup for the first season
     gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
-    // Start with league teams in the cup pool
-    gameState.countyCup.teams = [...gameState.leagues[0].allClubsData]; 
-    
-    // Generate a larger, initial pool of potential cup teams (external to league)
-    for (let i = 0; i < Constants.INITIAL_CUP_POOL_SIZE; i++) {
-        const newOpponent = opponentData.generateSingleOpponentClub(gameState.playerCountyData, dataGenerator.getRandomInt(8, 20)); // Wider quality range
-        // Only add if not already in the league teams (which are in countyCup.teams)
-        if (!gameState.countyCup.teams.some(team => team.id === newOpponent.id)) {
-            newOpponent.inCup = true;
-            newOpponent.eliminatedFromCup = false;
-            gameState.countyCup.teams.push(newOpponent);
-        }
-    }
-    
-    // Ensure uniqueness in countyCup.teams (in case of overlap or re-generation)
-    gameState.countyCup.teams = Array.from(new Map(gameState.countyCup.teams.map(team => [team.id, team])).values());
-
-    // --- CRITICAL FIX START: Build comprehensive allClubsInGameWorld for new game ---
-    let allClubsForNewGame = [];
-    allClubsForNewGame.push(gameState.playerClub); // Add player club
-    
-    // Add all league clubs
-    if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-        gameState.leagues[0].allClubsData.forEach(club => {
-            if (!allClubsForNewGame.some(c => c.id === club.id)) {
-                allClubsForNewGame.push(club);
-            }
-        });
-    }
-
-    // Add all cup teams (ensuring uniqueness) - now includes the larger pool
-    if (gameState.countyCup && gameState.countyCup.teams) {
-        gameState.countyCup.teams.forEach(cupTeam => {
-            if (!allClubsForNewGame.some(c => c.id === cupTeam.id)) {
-                allClubsForNewGame.push(cupTeam);
-            }
-        });
-    }
-    opponentData.setAllOpponentClubs(allClubsForNewGame);
-    // --- CRITICAL FIX END ---
-
-
-    gameState.countyCup.playerTeamStatus = 'Active';
+    // Start with all regional clubs in the cup pool
+    gameState.countyCup.teams = [...updatedAllRegionalClubs];
+    gameState.countyCup.fixtures = [];
     gameState.countyCup.currentRound = 0;
+    gameState.countyCup.playerTeamStatus = 'Active';
+    gameState.countyCup.opponentToCustomize = null;
 
-    // 4. Set Initial Game State & Phase
     gameState.currentSeason = 1;
     gameState.currentWeek = 1;
     gameState.availableHours = Constants.WEEKLY_BASE_HOURS;
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
     gameState.clubHistory = [];
     gameState.messages = [{ week: 0, text: 'Welcome to your Non-League Journey!' }];
-    gameState.gamePhase = Constants.GAME_PHASE.OPPONENT_CUSTOMIZATION;
+    gameState.gamePhase = Constants.GAME_PHASE.PRE_SEASON_PLANNING; // Directly to pre-season
 
-    // Save initial game state before opponent customization
+    // Save initial game state
     saveGame(false);
 
-    // Render opponent customization modal
     renderers.hideLoadingScreen();
     renderers.hideModal(); // Hide new game modal
-    // Pass 'league_start' context to the customization modal
-    renderers.renderOpponentCustomizationModal(
-        opponentData.getAllOpponentClubs(gameState.playerClub.id),
-        'league_start' // NEW: Pass context
-    );
-    // Fix: Explicit action for showModal
-    renderers.showModal('Your club is born!', 'Now, customize your league rivals before the season kicks off.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
+    // No opponent customization modal for league rivals now.
+    
+    // Show a welcoming modal and transition to home screen
+    renderers.showModal('Your Journey Begins!', `Welcome to Season ${gameState.currentSeason}! Your club, ${gameState.playerClub.name}, is ready to start in the ${gameState.leagues.find(l => l.id === gameState.playerClub.currentLeagueId)?.name || 'local league'}.`, [{ text: 'Continue', action: (gs, uic, context) => {
         renderers.hideModal();
-        renderers.renderGameScreen('homeScreen'); // Go to home screen
-        uic.updateUI(); // Update UI for the home screen
-    }, isPrimary: true }], gameState, updateUICallbacks, 'club_born');
+        renderers.renderGameScreen('homeScreen');
+        uic.updateUI();
+    }, isPrimary: true }], gameState, updateUICallbacks, 'new_game_start_welcome');
     console.log("DEBUG: startNewGame() finished.");
 }
 
@@ -478,57 +463,45 @@ export function applyOpponentCustomization(customizedOpponents) {
     renderers.showLoadingScreen();
     const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
 
-    // Update the league's allClubsData with customized opponent details
-    const currentLeague = gameState.leagues[0];
-    if (currentLeague && currentLeague.allClubsData) {
-        currentLeague.allClubsData.forEach(club => {
+    // Update the allClubsInGameWorld with customized opponent details
+    const allClubs = opponentData.getAllOpponentClubs(null); // Get the mutable array
+    customizedOpponents.forEach(custom => {
+        const clubToUpdate = allClubs.find(c => c.id === custom.id);
+        if (clubToUpdate) {
+            Object.assign(clubToUpdate, {
+                name: custom.name,
+                nickname: custom.nickname,
+                kitColors: custom.kitColors
+            });
+        }
+    });
+    opponentData.setAllOpponentClubs(allClubs); // Re-set the updated array
+
+    // Also update the specific league and cup data if these clubs are in them
+    gameState.leagues.forEach(league => {
+        league.allClubsData.forEach(club => {
             const custom = customizedOpponents.find(c => c.id === club.id);
-            if (custom) {
-                Object.assign(club, {
-                    name: custom.name,
-                    nickname: custom.nickname,
-                    kitColors: custom.kitColors
-                });
-            }
+            if (custom) Object.assign(club, { name: custom.name, nickname: custom.nickname, kitColors: custom.kitColors });
         });
-        
-        // Also update the county cup teams with customized names
-        gameState.countyCup.teams.forEach(cupTeam => {
-            const custom = customizedOpponents.find(c => c.id === cupTeam.id);
-            if (custom) {
-                Object.assign(cupTeam, {
-                    name: custom.name,
-                    nickname: custom.nickname,
-                    kitColors: custom.kitColors
-                });
-            }
-        });
-        // After updating countyCup.teams, ensure opponentData's global list is also updated
-        // with any customizations that might have been applied to cup-only teams during the customization modal.
-        // This is important because the customization modal can show teams not in the league.
-        const allClubsAfterCustomization = Array.from(new Map([
-            ...currentLeague.allClubsData.map(c => [c.id, c]),
-            ...gameState.countyCup.teams.map(c => [c.id, c])
-        ]).values());
-        opponentData.setAllOpponentClubs(allClubsAfterCustomization);
+    });
+    gameState.countyCup.teams.forEach(cupTeam => {
+        const custom = customizedOpponents.find(c => c.id === cupTeam.id);
+        if (custom) Object.assign(cupTeam, { name: custom.name, nickname: custom.nickname, kitColors: custom.kitColors });
+    });
 
-    }
 
+    // This flag is now less about "customized" and more about "initial setup complete"
     gameState.opponentClubsCustomized = true;
-    gameState.gamePhase = Constants.GAME_PHASE.PRE_SEASON_PLANNING;
+    // The game phase should already be PRE_SEASON_PLANNING or WEEKLY_PLANNING if this is a cup customization
 
     gameState.weeklyTasks = dataGenerator.generateWeeklyTasks(gameState.playerClub.facilities, gameState.playerClub.committee);
 
     renderers.hideLoadingScreen();
     renderers.hideOpponentCustomizationModal();
-    // Fix: Explicit action for showModal
-    renderers.showModal('Rivals Customized!', 'Your league opponents are now set for the journey ahead. Welcome to pre-season!', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
-        renderers.hideModal();
-        renderers.renderGameScreen('homeScreen'); // Go to home screen
-        uic.updateUI(); // Update UI for the home screen
-    }, isPrimary: true }], gameState, updateUICallbacks, 'rivals_customized');
-    saveGame(false);
-    console.log("DEBUG: applyOpponentCustomization() finished.");
+    // The next modal in the chain (from gameLoop.js handleCountyCupAnnouncement) will handle the final message and week advance.
+    // So, this function doesn't need to show a modal or change phase directly anymore.
+    // The modal that called this (from handleCountyCupAnnouncement) will have its callback fired.
+    console.log("DEBUG: applyOpponentCustomization() finished. Control will return to the calling modal's action.");
 }
 
 /**
@@ -561,7 +534,7 @@ export function loadGame() {
                 // Fallback for old saves or if not set, try to derive from playerClub.location if it's a known town
                 // Or set a default
                 console.warn("playerCountyData not found in loaded state. Attempting to derive or set default.");
-                gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF'); // Try postcode or default
+                gameState.playerCountyData = dataGenerator.getCountyDataFromPostcode(gameState.playerClub.groundPostcode || 'LE12 7TF') || UK_COUNTIES_DATA[0];
             }
 
             // --- CRITICAL FIX START: Ensure allClubsInGameWorld is comprehensively populated on load ---
@@ -570,11 +543,15 @@ export function loadGame() {
             if (gameState.playerClub) {
                 allClubsFromLoad.push(gameState.playerClub);
             }
-            // Add league clubs
-            if (gameState.leagues && gameState.leagues.length > 0 && gameState.leagues[0].allClubsData) {
-                gameState.leagues[0].allClubsData.forEach(club => {
-                    if (!allClubsFromLoad.some(c => c.id === club.id)) {
-                        allClubsFromLoad.push(club);
+            // Add all clubs from all leagues
+            if (gameState.leagues && gameState.leagues.length > 0) {
+                gameState.leagues.forEach(league => {
+                    if (league.allClubsData) {
+                        league.allClubsData.forEach(club => {
+                            if (!allClubsFromLoad.some(c => c.id === club.id)) {
+                                allClubsFromLoad.push(club);
+                            }
+                        });
                     }
                 });
             }
@@ -596,6 +573,7 @@ export function loadGame() {
             if (playerClubFromAllClubs) {
                 gameState.playerClub.leagueStats = { ...playerClubFromAllClubs.leagueStats };
                 gameState.playerClub.finalLeaguePosition = playerClubFromAllClubs.finalLeaguePosition;
+                gameState.playerClub.currentLeagueId = playerClubFromAllClubs.currentLeagueId; // Ensure currentLeagueId is loaded
             }
             // --- CRITICAL FIX END ---
 
@@ -609,9 +587,9 @@ export function loadGame() {
         renderers.renderNewGameModal();
         // FIX: Action directly updates UI and navigates home (or stays on modal)
         renderers.showModal('Welcome, Chairman!', 'Please set up your club and begin your Non-League Journey.', [{ text: 'Continue', action: (gs, uic, context) => { // Pass gs, uic, context
-            renderers.hideModal(); // Hide this modal
-            // No screen change here, newGameModal is already displayed
-        }, isPrimary: true }], gameState, updateUICallbacks, 'welcome_new_game'); // Pass gameState and callbacks
+                renderers.hideModal(); // Hide this modal
+                // No screen change here, newGameModal is already displayed
+            }, isPrimary: true }], gameState, updateUICallbacks, 'welcome_new_game'); // Pass gameState and callbacks
         gameState.gamePhase = Constants.GAME_PHASE.SETUP;
         applyThemeColors(Constants.KIT_COLORS[0], Constants.KIT_COLORS[1]);
     }
@@ -683,7 +661,7 @@ export function advanceWeek() {
         // Fix: Explicit actions for showModal, including week advancement logic
         renderers.showModal('Allocate More Time!', 'You still have a lot of available hours. Consider completing more tasks before advancing the week!', [{ text: 'Advance Anyway', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal(); // Hide this modal
-            gameLoop.advanceWeek(gs); // Call gameLoop directly with correct gameState
+            gameLoop.advanceWeek(gs, 0, uic); // Pass uic
         }, isPrimary: true },
         { text: 'Allocate More', action: (gs, uic, context) => { // Pass gs, uic, context
             renderers.hideModal(); // Hide modal, stay on current week
@@ -693,13 +671,7 @@ export function advanceWeek() {
         return; // Stop execution, await user choice
     }
 
-    gameLoop.advanceWeek(gameState); // If check passes or skipped, proceed to week logic
+    gameLoop.advanceWeek(gameState, 0, updateUICallbacks); // If check passes or skipped, proceed to week logic, pass uic
 }
 
-
-
-
-// --- Event Listener for Page Load ---
-console.log("DEBUG: Adding DOMContentLoaded listener.");
-document.addEventListener('DOMContentLoaded', initGame);
-console.log("DEBUG: main.js finished loading.");
+initGame()

@@ -23,7 +23,13 @@ let allClubsInGameWorld = [];
  */
 export function initializeOpponentClubs(playerCountyData) {
     const generatedOpponents = [];
-    // Generate DEFAULT_LEAGUE_SIZE - 1 opponents for the player's starting league
+    // This function is now largely replaced by dataGenerator.generateRegionalClubPool
+    // and should ideally not be called directly for initial league opponents.
+    // Keeping it for compatibility if any old code paths still reference it.
+    console.warn("initializeOpponentClubs called. This function might be deprecated soon for initial league setup.");
+
+    const townsPool = [...playerCountyData.towns]; // Use towns from the selected county
+
     for (let i = 0; i < Constants.DEFAULT_LEAGUE_SIZE - 1; i++) {
         const id = dataGenerator.generateUniqueId('C');
         let identity = dataGenerator.generateClubIdentity(playerCountyData); // Pass the county data object

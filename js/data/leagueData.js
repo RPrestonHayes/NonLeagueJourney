@@ -11,62 +11,67 @@ import * as opponentData from './opponentData.js';
 import * as Main from '../main.js'; // Import Main for gameState access
 
 /**
- * Generates the initial league structure for a new game.
- * This includes the player's primary league and populates it with clubs.
+ * Generates the initial tiered league structure for a new game.
+ * Distributes all clubs (AI + Player) into their starting leagues based on seed quality.
  * @param {object} playerCountyData - The county data object for the player's chosen location.
- * @param {string} playerClubId - The ID of the player's club.
- * @param {string} playerClubName - The name of the player's club.
+ * @param {Array<object>} allClubsInRegionalPool - The array of all 60 club objects (AI + Player) with initialSeedQuality.
  * @returns {object} An object containing { leagues: Array<object>, clubs: Array<object> }
  * where 'leagues' contains the league structural data and 'clubs' contains
- * all clubs within those leagues (including player's and opponents).\
+ * all clubs within those leagues (including player's and opponents).
  */
-export function generateInitialLeagues(playerCountyData, playerClubId, playerClubName) {
-    // Pass the county data object to generateInitialLeagueName
-    const initialLeague = dataGenerator.generateInitialLeagueName(playerCountyData);
-    initialLeague.id = dataGenerator.generateUniqueId('L'); // Ensure league has a unique ID
-    initialLeague.level = 1;
-    initialLeague.numTeams = Constants.DEFAULT_LEAGUE_SIZE;
-    initialLeague.promotedTeams = 1;
-    initialLeague.relegatedTeams = 1;
-    initialLeague.currentSeasonFixtures = [];
+export function generateInitialLeagues(playerCountyData, allClubsInRegionalPool) {
+    const leagues = [];
+    const countyName = dataGenerator.getCountyNameForLeagues(playerCountyData);
 
-    const playerClubTemplate = { // Create a template for playerClub with initial leagueStats
-        id: playerClubId,
-        name: playerClubName,
-        location: playerCountyData.towns[0] || playerCountyData.county, // Use a town from the county or the county name itself
-        nickname: null, // These will be filled from actual playerClub object passed by main.js
-        kitColors: null,
-        overallTeamQuality: null, // This is player's quality, managed by playerData based on squad
-        currentLeagueId: initialLeague.id,
-        finalLeaguePosition: null,
-        leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
-    };
+    // Sort all clubs by their initialSeedQuality (1 is best, 60 is worst)
+    const sortedClubs = [...allClubsInRegionalPool].sort((a, b) => a.initialSeedQuality - b.initialSeedQuality);
 
-    // Pass the county data object to initializeOpponentClubs
-    const initialOpponents = opponentData.initializeOpponentClubs(playerCountyData);
+    // Create league objects and distribute clubs
+    for (const tierKey in Constants.LEAGUE_TIERS) {
+        const tierConfig = Constants.LEAGUE_TIERS[tierKey];
+        const leagueId = dataGenerator.generateUniqueId('L');
+        const leagueName = `${countyName} ${tierConfig.nameSuffix}`;
 
-    // Combine player club and opponent clubs for the league
-    // Initialize leagueStats for all clubs if not already present
-    const allLeagueClubsData = [playerClubTemplate, ...initialOpponents].map(club => ({
-        ...club,
-        currentLeagueId: initialLeague.id,
-        // Ensure leagueStats are always initialized
-        leagueStats: club.leagueStats || { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 }
-    }));
+        const newLeague = {
+            id: leagueId,
+            name: leagueName,
+            level: tierConfig.level,
+            numTeams: tierConfig.numTeams,
+            promotedTeams: tierConfig.promotedTeams,
+            relegatedTeams: tierConfig.relegatedTeams,
+            currentSeasonFixtures: [],
+            clubs: [], // Will store club IDs
+            allClubsData: [] // Will store full club objects for this league
+        };
 
-    // Generate league fixtures using the new algorithm
-    initialLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
-        playerClubId,
-        allLeagueClubsData,
-        1, // Season 1
-        Constants.COMPETITION_TYPE.LEAGUE // Specify competition type
-    );
+        // Distribute clubs based on seed range
+        const clubsForThisLeague = sortedClubs.filter(club =>
+            club.initialSeedQuality >= tierConfig.seedRange.min &&
+            club.initialSeedQuality <= tierConfig.seedRange.max
+        );
 
-    initialLeague.clubs = allLeagueClubsData.map(c => c.id); // Store only IDs
-    initialLeague.allClubsData = allLeagueClubsData; // Store full data for internal league use
+        // Assign clubs to this league and update their currentLeagueId
+        clubsForThisLeague.forEach(club => {
+            club.currentLeagueId = newLeague.id;
+            club.potentialLeagueLevel = newLeague.level; // Set potential league level
+            newLeague.clubs.push(club.id);
+            newLeague.allClubsData.push(club);
+        });
 
-    console.log("Initial league structure generated:", initialLeague);
-    return { leagues: [initialLeague], clubs: allLeagueClubsData }; // Return array of leagues and all clubs
+        // Generate fixtures for this league
+        newLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
+            Main.gameState.playerClub.id, // Pass player club ID for fixture generation
+            newLeague.allClubsData,
+            1, // Season 1
+            Constants.COMPETITION_TYPE.LEAGUE
+        );
+
+        leagues.push(newLeague);
+    }
+
+    console.log("Initial tiered league structure generated:", leagues);
+    // Return all leagues and the modified (with currentLeagueId) full list of clubs
+    return { leagues: leagues, clubs: sortedClubs };
 }
 
 /**
@@ -89,9 +94,15 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
     }
 
     // Filter out league teams for potential external opponents
-    const leagueTeamIds = new Set(Main.gameState.leagues[0].allClubsData.map(c => c.id));
-    let externalTeamsInPool = availableTeamsForDraw.filter(team => !leagueTeamIds.has(team.id));
-    let leagueTeamsInPool = availableTeamsForDraw.filter(team => leagueTeamIds.has(team.id));
+    // Now, league teams are any team in Main.gameState.leagues[X].allClubsData
+    const allLeagueClubIds = new Set();
+    Main.gameState.leagues.forEach(league => {
+        league.allClubsData.forEach(club => allLeagueClubIds.add(club.id));
+    });
+    
+    let externalTeamsInPool = availableTeamsForDraw.filter(team => !allLeagueClubIds.has(team.id));
+    let leagueTeamsInPool = availableTeamsForDraw.filter(team => allLeagueClubIds.has(team.id));
+
 
     // Determine the target number of teams for a full draw (next power of 2)
     let currentPoolSize = availableTeamsForDraw.length;
@@ -186,7 +197,8 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
 
         const isHomePlayer = homeTeam.id === playerClubId;
         const isAwayPlayer = awayTeam.id === playerClubId;
-        const currentLeagueClubIdsMap = new Set(Main.gameState.leagues[0].allClubsData.map(c => c.id));
+        // Check against all league club IDs, not just the first league
+        const currentLeagueClubIdsMap = allLeagueClubIds;
 
         // --- FIX: Ensure player always draws an external team in Round 1 if possible ---
         if (isRoundOne && (isHomePlayer || isAwayPlayer)) {
@@ -255,17 +267,18 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
  * Reschedules a player's league match from its original week to a new week.
  * This is used when a cup match takes precedence.
  * @param {Array<object>} currentLeagues - The current array of league objects (from gameState.leagues).
- * @param {string} playerClubId - The ID of the player's club.
+ * @param {string} homeClubId - The ID of the home club in the match.
+ * @param {string} awayClubId - The ID of the away club in the match.
  * @param {number} originalAbsoluteGameWeek - The original absolute game week number of the match to reschedule.
  * @param {number} newAbsoluteGameWeek - The new absolute game week number to move the match to.
  * @returns {Array<object>|null} A new array of league objects with the match rescheduled, or null if not found.
  */
-export function rescheduleLeagueMatch(currentLeagues, playerClubId, originalAbsoluteGameWeek, newAbsoluteGameWeek) {
+export function rescheduleLeagueMatch(currentLeagues, homeClubId, awayClubId, originalAbsoluteGameWeek, newAbsoluteGameWeek) {
     const updatedLeagues = JSON.parse(JSON.stringify(currentLeagues));
-    const league = updatedLeagues[0]; // Assuming only one league for now
+    const league = updatedLeagues.find(l => l.allClubsData.some(c => c.id === homeClubId || c.id === awayClubId)); // Find league by club participation
 
     if (!league || !league.currentSeasonFixtures) {
-        console.warn("Cannot reschedule: League or fixtures not found.");
+        console.warn("Cannot reschedule: League or fixtures not found for clubs:", homeClubId, awayClubId);
         return null;
     }
 
@@ -278,21 +291,16 @@ export function rescheduleLeagueMatch(currentLeagues, playerClubId, originalAbso
 
     if (originalWeekBlock) {
         originalMatchIndex = originalWeekBlock.matches.findIndex(m => 
-            (m.homeTeamId === playerClubId || m.awayTeamId === playerClubId) && !m.played
+            (m.homeTeamId === homeClubId && m.awayTeamId === awayClubId) ||
+            (m.homeTeamId === awayClubId && m.awayTeamId === homeClubId)
         );
-        // If player's match is not found, try to find *any* match between the given home/away IDs
-        if (originalMatchIndex === -1) {
-             originalMatchIndex = originalWeekBlock.matches.findIndex(m => 
-                (m.homeTeamId === playerClubId || m.awayTeamId === playerClubId) && !m.played
-             );
-        }
         if (originalMatchIndex !== -1) {
             matchToReschedule = { ...originalWeekBlock.matches[originalMatchIndex] };
         }
     }
 
     if (!matchToReschedule) {
-        console.warn(`No unplayed player league match found in absolute game week ${originalAbsoluteGameWeek} to reschedule.`);
+        console.warn(`No unplayed league match found between ${homeClubId} and ${awayClubId} in absolute game week ${originalAbsoluteGameWeek} to reschedule.`);
         return null;
     }
 
@@ -331,8 +339,10 @@ export function rescheduleLeagueMatch(currentLeagues, playerClubId, originalAbso
  * @returns {number} The absolute game week number of the next available slot.
  */
 export function findNextAvailableLeagueWeek(currentLeagues, playerClubId, startAbsoluteGameWeek) {
-    const league = currentLeagues[0];
-    if (!league || !league.currentSeasonFixtures) {
+    // Find the league the player is in
+    const playerLeague = currentLeagues.find(l => l.allClubsData.some(c => c.id === playerClubId));
+
+    if (!playerLeague || !playerLeague.currentSeasonFixtures) {
         return Constants.TOTAL_LEAGUE_WEEKS + 1; // Fallback to immediately after season if no fixtures
     }
 
@@ -341,22 +351,17 @@ export function findNextAvailableLeagueWeek(currentLeagues, playerClubId, startA
 
     // Search for an empty slot within the existing fixture weeks and beyond season end
     for (let i = startAbsoluteGameWeek; i <= Constants.TOTAL_LEAGUE_WEEKS + 10; i++) { // Search a few weeks beyond season end
-        const leagueWeekBlock = league.currentSeasonFixtures.find(wb => wb.week === i && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
-        const cupWeekBlock = Main.gameState.countyCup.fixtures.find(wb => wb.week === i && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
-        
-        let playerHasLeagueMatchThisWeek = false;
-        if (leagueWeekBlock) {
-            playerHasLeagueMatchThisWeek = leagueWeekBlock.matches.some(match => 
-                (match.homeTeamId === playerClubId || match.awayTeamId === playerClubId) && !match.played
-            );
-        }
+        // Check if player has a league match in this potential week
+        const playerHasLeagueMatchThisWeek = playerLeague.currentSeasonFixtures.some(wb =>
+            wb.week === i && wb.competition === Constants.COMPETITION_TYPE.LEAGUE &&
+            wb.matches.some(match => (match.homeTeamId === playerClubId || match.awayTeamId === playerClubId) && !match.played)
+        );
 
-        let playerHasCupMatchThisWeek = false;
-        if (cupWeekBlock) {
-            playerHasCupMatchThisWeek = cupWeekBlock.matches.some(match => 
-                (match.homeTeamId === playerClubId || match.awayTeamId === playerClubId) && !match.played && match.awayTeamId !== 'BYE'
-            );
-        }
+        // Check if player has a cup match in this potential week
+        const playerHasCupMatchThisWeek = Main.gameState.countyCup.fixtures.some(wb =>
+            wb.week === i && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP &&
+            wb.matches.some(match => (match.homeTeamId === playerClubId || match.awayTeamId === playerClubId) && match.awayTeamId !== 'BYE' && !match.played)
+        );
 
         if (!playerHasLeagueMatchThisWeek && !playerHasCupMatchThisWeek) {
             nextAvailableWeek = i;
@@ -370,7 +375,7 @@ export function findNextAvailableLeagueWeek(currentLeagues, playerClubId, startA
         // Fallback: If no slot found within existing range, append to the very end
         nextAvailableWeek = Constants.TOTAL_LEAGUE_WEEKS + 1;
         // Find the highest week number currently in fixtures and add 1
-        const maxExistingWeek = league.currentSeasonFixtures.reduce((max, wb) => Math.max(max, wb.week), 0);
+        const maxExistingWeek = playerLeague.currentSeasonFixtures.reduce((max, wb) => Math.max(max, wb.week), 0);
         nextAvailableWeek = Math.max(nextAvailableWeek, maxExistingWeek + 1);
     }
     
