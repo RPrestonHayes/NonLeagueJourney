@@ -171,9 +171,7 @@ export function preMatchBriefing(gameState, playerMatch) {
         renderers.showModal('Match Error', 'Could not find opponent details for this match. Skipping match.', [{ text: 'Continue', action: (gs, uic, context) => {
             renderers.hideModal();
             // This will attempt to process the rest of the week's events, including AI matches.
-            const currentWeekBlock = gs.leagues[0]?.currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE) ||
-                                     gs.countyCup.fixtures.find(wb => wb.week === gs.currentWeek && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
-            gameLoop.processAIMatchesAndFinalizeWeek(gs, currentWeekBlock, playerMatch.id);
+            gameLoop.processAIMatchesAndFinalizeWeek(gs, playerMatch.id); // Pass playerMatch.id
         }}], gameState, Main.getUpdateUICallbacks(), 'opponent_not_found_pre_match');
         return;
     }
@@ -519,11 +517,8 @@ function simulateSecondHalf(matchState, performanceBonus = 0, gameState, updateU
         [{ text: 'Continue', action: (gs, uic, context) => {
             renderers.hideModal();
             // After match report, process AI matches for this week, then finalize the week.
-            // Pass the correct week block (league or cup) to processAIMatchesAndFinalizeWeek
-            const currentWeekBlock = gs.leagues[0]?.currentSeasonFixtures.find(wb => wb.week === (gs.currentWeek - Constants.PRE_SEASON_WEEKS) && wb.competition === Constants.COMPETITION_TYPE.LEAGUE) ||
-                                     gs.countyCup.fixtures.find(wb => wb.week === gs.currentWeek && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
-            
-            gameLoop.processAIMatchesAndFinalizeWeek(gs, currentWeekBlock, matchId);
+            // Call processAIMatchesAndFinalizeWeek without currentWeekBlock, it will now fetch its own
+            gameLoop.processAIMatchesAndFinalizeWeek(gs, matchId); // Pass playerMatchId
         }, isPrimary: true }],
         gameState,
         updateUICallbacks,

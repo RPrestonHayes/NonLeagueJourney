@@ -385,16 +385,16 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // If it's a regular league week and not a cup match week, simulate league matches.
     if (resumeStep <= 4 && renderers.getModalDisplayStatus() === 'none' && isLeagueMatchCalendarWeek && !isCupMatchWeek && currentLeague) {
         const currentAbsoluteGameWeek = gameState.currentWeek;
-        let currentWeekBlock = currentLeague.currentSeasonFixtures.find(wb =>
+        let currentWeekLeagueBlock = currentLeague.currentSeasonFixtures.find(wb =>
             wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE
         );
 
-        if (currentWeekBlock && currentWeekBlock.matches.length > 0) {
+        if (currentWeekLeagueBlock && currentWeekLeagueBlock.matches.length > 0) {
             const matchesToProcess = [];
             const matchesToReschedule = [];
 
             // Iterate over a copy of the matches to avoid issues with modification during iteration
-            for (const match of [...currentWeekBlock.matches]) {
+            for (const match of [...currentWeekLeagueBlock.matches]) {
                 const homeTeamHasCupMatch = hasCupMatchThisWeek(match.homeTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures);
                 const awayTeamHasCupMatch = hasCupMatchThisWeek(match.awayTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures);
 
@@ -411,21 +411,21 @@ export function advanceWeek(gameState, resumeStep = 0) {
                     if (rescheduled) {
                         gameState.leagues = rescheduled;
                         gameState.messages.push({ week: gameState.currentWeek, text: `League match between ${match.homeTeamName} and ${match.awayTeamName} rescheduled due to cup clash.` });
-                        matchesToReschedule.push(match.id); // Mark for removal from currentWeekBlock
+                        matchesToReschedule.push(match.id); // Mark for removal from currentWeekLeagueBlock
                     }
                 } else {
                     matchesToProcess.push(match);
                 }
             }
 
-            // Update currentWeekBlock.matches by filtering out rescheduled ones
+            // Update currentWeekLeagueBlock.matches by filtering out rescheduled ones
             if (matchesToReschedule.length > 0) {
-                currentWeekBlock.matches = currentWeekBlock.matches.filter(match => !matchesToReschedule.includes(match.id));
-                // IMPORTANT: Since we modified currentWeekBlock.matches, we need to update the league's fixtures array
+                currentWeekLeagueBlock.matches = currentWeekLeagueBlock.matches.filter(match => !matchesToReschedule.includes(match.id));
+                // IMPORTANT: Since we modified currentWeekLeagueBlock.matches, we need to update the league's fixtures array
                 // with this new version of the week block. Otherwise, the original fixtures object still contains the rescheduled matches.
                 const leagueFixtureBlockIndex = currentLeague.currentSeasonFixtures.findIndex(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
                 if (leagueFixtureBlockIndex !== -1) {
-                    currentLeague.currentSeasonFixtures[leagueFixtureBlockIndex] = { ...currentWeekBlock };
+                    currentLeague.currentSeasonFixtures[leagueFixtureBlockIndex] = { ...currentWeekLeagueBlock };
                 }
             }
 
@@ -437,8 +437,8 @@ export function advanceWeek(gameState, resumeStep = 0) {
                 if (!gameState.playerClub.facilities[Constants.FACILITIES.PITCH].isUsable && playerMatch.homeTeamId === gameState.playerClub.id && renderers.getModalDisplayStatus() === 'none') {
                     renderers.showModal('Match Postponed!', `Your pitch is unplayable! The home match against ${playerMatch.awayTeamName} has been postponed.`, [{ text: 'Drat!', action: (gs, uic, context) => {
                         renderers.hideModal();
-                        // Pass the modified currentWeekBlock (with rescheduled matches removed) to processAIMatchesAndFinalizeWeek
-                        processAIMatchesAndFinalizeWeek(gs, currentWeekBlock, playerMatch.id);
+                        // Pass the modified currentWeekLeagueBlock (with rescheduled matches removed) to processAIMatchesAndFinalizeWeek
+                        processAIMatchesAndFinalizeWeek(gs, playerMatch.id); // No currentWeekBlock passed directly
                     } }], gameState, updateUICallbacks, 'match_postponed');
                     gameState.messages.push({ week: gameState.currentWeek, text: `Home match against ${playerMatch.awayTeamName} postponed due to unplayable pitch.` });
                     playerMatch.result = "P-P";
@@ -450,8 +450,8 @@ export function advanceWeek(gameState, resumeStep = 0) {
                 }
             } else if (matchesToProcess.length > 0) {
                 // If no player match, but there are AI league matches that didn't clash, process them
-                // Pass the modified currentWeekBlock (with rescheduled matches removed) to processAIMatchesAndFinalizeWeek
-                processAIMatchesAndFinalizeWeek(gameState, { ...currentWeekBlock, matches: matchesToProcess }, null);
+                // Pass the modified currentWeekLeagueBlock (with rescheduled matches removed) to processAIMatchesAndFinalizeWeek
+                processAIMatchesAndFinalizeWeek(gameState, null); // No player match, no specific block to pass
                 return true; // This will show a modal if AI matches were played, or finalize if not.
             }
         }
@@ -460,9 +460,36 @@ export function advanceWeek(gameState, resumeStep = 0) {
     // Step 5: Quiet Week (Fallback if no other major event/match happened)
     // Only show if no other modal is currently active.
     if (resumeStep <= 5 && renderers.getModalDisplayStatus() === 'none') {
-        renderers.showModal('Quiet Week', 'Nothing major happened this week. Focus on building your club!', [], gameState, updateUICallbacks, 'quiet_week');
-        console.log(gameState.currentWeek)
-        gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
+        // Collect all AI matches for this week (both league and cup)
+        const currentAbsoluteGameWeek = gameState.currentWeek;
+        const currentLeague = gameState.leagues[0];
+        const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+        const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentAbsoluteGameWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
+
+        let allAIMatchesForWeek = [];
+        if (leagueWeekBlock && leagueWeekBlock.matches.length > 0) {
+            allAIMatchesForWeek.push(...leagueWeekBlock.matches.filter(match =>
+                !match.played && match.result === null && // Only unplayed matches
+                !hasCupMatchThisWeek(match.homeTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) && // Home team not in cup
+                !hasCupMatchThisWeek(match.awayTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) // Away team not in cup
+            ));
+        }
+        if (currentWeekCupBlock && currentWeekCupBlock.matches.length > 0) {
+            allAIMatchesForWeek.push(...currentWeekCupBlock.matches.filter(match =>
+                match.homeTeamId !== gameState.playerClub.id && match.awayTeamId !== gameState.playerClub.id &&
+                !match.played && match.awayTeamId !== 'BYE'
+            ));
+        }
+
+        if (allAIMatchesForWeek.length > 0) {
+            renderers.showModal('Quiet Week (AI Matches Played)', 'No direct events for you, but other matches were played this week.', [], gameState, updateUICallbacks, 'quiet_week');
+            processAIMatchesAndFinalizeWeek(gameState, null); // No player match, no specific block to pass
+        } else {
+            renderers.showModal('Quiet Week', 'Nothing major happened this week. Focus on building your club!', [], gameState, updateUICallbacks, 'quiet_week');
+            console.log(gameState.currentWeek)
+            gameState.messages.push({ week: gameState.currentWeek, text: `A quiet week in the season.` });
+            finalizeWeekProcessing(gameState, 'quiet_week'); // Directly finalize if truly quiet
+        }
         return true;
     }
 
@@ -567,28 +594,48 @@ export function processRemainingWeekEvents(gameState, dismissalContext) { // EXP
 
 /**
  * Handles the simulation of AI-only matches for the current week and then finalizes the week processing.
- * This is called by modal actions after a player's interactive match (or if player has no match).
+ * This function now *always* retrieves the relevant matches for the current week from gameState.
  * @param {object} gameState - The current mutable gameState.
- * @param {object} currentWeekBlock - The fixture block for this week (can be league or cup).
  * @param {string|null} playerMatchId - The ID of the player's match for the week, or null if none.
  */
-export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, playerMatchId) { // EXPORTED
-    console.log(`DEBUG: processAIMatchesAndFinalizeWeek called for ${currentWeekBlock?.competition || 'Unknown'} matches. Simulating AI matches if any.`);
-    // Log the currentWeekBlock and its matches to see what's actually being processed
-    console.log("DEBUG: currentWeekBlock in processAIMatchesAndFinalizeWeek:", JSON.stringify(currentWeekBlock, null, 2));
-
+export function processAIMatchesAndFinalizeWeek(gameState, playerMatchId) { // currentWeekBlock parameter removed
+    console.log(`DEBUG: processAIMatchesAndFinalizeWeek called. Simulating AI matches for Week ${gameState.currentWeek}.`);
+    
     let aiMatchesPlayed = false;
     const updateUICallbacks = Main.getUpdateUICallbacks();
 
-    // Ensure currentWeekBlock.matches is an array before filtering
-    const matchesToSimulate = (currentWeekBlock?.matches || []).filter(match =>
-        match.id !== playerMatchId && !match.played && match.awayTeamId !== 'BYE' // Exclude BYE matches from simulation
-    );
+    const currentAbsoluteGameWeek = gameState.currentWeek;
+    const currentLeague = gameState.leagues[0];
+    const leagueWeekBlock = currentLeague?.currentSeasonFixtures.find(wb => wb.week === currentAbsoluteGameWeek && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+    const currentWeekCupBlock = gameState.countyCup.fixtures.find(block => block.week === currentAbsoluteGameWeek && block.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
 
-    console.log("DEBUG: Matches identified for AI simulation:", matchesToSimulate.map(m => `${m.homeTeamName} vs ${m.awayTeamName}`));
+    let allAIMatchesForWeek = [];
+
+    // Collect AI league matches that should be played this week
+    if (leagueWeekBlock && leagueWeekBlock.matches.length > 0) {
+        const nonRescheduledLeagueMatches = leagueWeekBlock.matches.filter(match =>
+            match.id !== playerMatchId && // Exclude player's match if it was passed
+            !match.played && match.result === null && // Only unplayed matches
+            !hasCupMatchThisWeek(match.homeTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) && // Home team not in cup
+            !hasCupMatchThisWeek(match.awayTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) // Away team not in cup
+        );
+        allAIMatchesForWeek.push(...nonRescheduledLeagueMatches);
+    }
+
+    // Collect AI cup matches that should be played this week
+    if (currentWeekCupBlock && currentWeekCupBlock.matches.length > 0) {
+        const aiCupMatches = currentWeekCupBlock.matches.filter(match =>
+            match.id !== playerMatchId && // Exclude player's match if it was passed
+            match.homeTeamId !== gameState.playerClub.id && match.awayTeamId !== gameState.playerClub.id && // Ensure it's an AI match
+            !match.played && match.awayTeamId !== 'BYE' // Only unplayed and not BYE matches
+        );
+        allAIMatchesForWeek.push(...aiCupMatches);
+    }
+
+    console.log("DEBUG: Matches identified for AI simulation:", allAIMatchesForWeek.map(m => `${m.homeTeamName} vs ${m.awayTeamName} (${m.competition})`));
 
 
-    for (const match of matchesToSimulate) {
+    for (const match of allAIMatchesForWeek) {
         const matchResult = matchLogic.simulateMatch(
             match.homeTeamId,
             match.awayTeamId,
@@ -597,8 +644,17 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
             playerData.getSquad()
         );
 
-        if (currentWeekBlock.competition === Constants.COMPETITION_TYPE.LEAGUE) {
-            gameState.leagues = leagueData.updateLeagueTable(
+        // Update the specific fixture block for the simulated match
+        if (match.competition === Constants.COMPETITION_TYPE.LEAGUE) {
+            const targetLeagueBlock = gameState.leagues[0]?.currentSeasonFixtures.find(wb => wb.week === match.week && wb.competition === Constants.COMPETITION_TYPE.LEAGUE);
+            if (targetLeagueBlock) {
+                const matchIndexInBlock = targetLeagueBlock.matches.findIndex(m => m.id === match.id);
+                if (matchIndexInBlock !== -1) {
+                    targetLeagueBlock.matches[matchIndexInBlock].result = `${matchResult.homeScore}-${matchResult.awayScore}`;
+                    targetLeagueBlock.matches[matchIndexInBlock].played = true;
+                }
+            }
+            gameState.leagues = leagueData.updateLeagueTable( // Update league table stats
                 gameState.leagues,
                 gameState.leagues[0].id,
                 match.homeTeamId,
@@ -606,13 +662,15 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
                 matchResult.homeScore,
                 matchResult.awayScore
             );
-            gameState.leagues = leagueData.updateMatchResult(
-                gameState.leagues,
-                gameState.leagues[0].id,
-                match.id,
-                `${matchResult.homeScore}-${matchResult.awayScore}`
-            );
-        } else if (currentWeekBlock.competition === Constants.COMPETITION_TYPE.COUNTY_CUP) {
+        } else if (match.competition === Constants.COMPETITION_TYPE.COUNTY_CUP) {
+            const targetCupBlock = gameState.countyCup.fixtures.find(wb => wb.week === match.week && wb.competition === Constants.COMPETITION_TYPE.COUNTY_CUP);
+            if (targetCupBlock) {
+                const matchIndexInBlock = targetCupBlock.matches.findIndex(m => m.id === match.id);
+                if (matchIndexInBlock !== -1) {
+                    targetCupBlock.matches[matchIndexInBlock].result = `${matchResult.homeScore}-${matchResult.awayScore}`;
+                    targetCupBlock.matches[matchIndexInBlock].played = true;
+                }
+            }
             // Determine winner/loser for cup progression
             const homeTeamWon = matchResult.homeScore > matchResult.awayScore;
             const awayTeamWon = matchResult.awayScore > matchResult.homeScore;
@@ -627,22 +685,12 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
                 }
                 return team;
             });
-            
-            const cupMatchIndex = gameState.countyCup.fixtures.findIndex(fixtureBlock => fixtureBlock.week === currentWeekBlock.week); // FIX: Corrected variable name
-            if (cupMatchIndex !== -1) {
-                const matchInFixtureBlockIndex = gameState.countyCup.fixtures[cupMatchIndex].matches.findIndex(m => m.id === match.id);
-                if (matchInFixtureBlockIndex !== -1) {
-                    gameState.countyCup.fixtures[cupMatchIndex].matches[matchInFixtureBlockIndex].result = `${matchResult.homeScore}-${matchResult.awayScore}`;
-                    gameState.countyCup.fixtures[cupMatchIndex].matches[matchInFixtureBlockIndex].played = true;
-                }
-            }
         }
-        console.log(`DEBUG: AI match simulated: ${matchResult.homeTeamName} ${matchResult.homeScore}-${matchResult.awayScore} ${matchResult.awayTeamName} (${currentWeekBlock.competition})`);
+        console.log(`DEBUG: AI match simulated: ${matchResult.homeTeamName} ${matchResult.homeScore}-${matchResult.awayScore} ${matchResult.awayTeamName} (${match.competition})`);
         aiMatchesPlayed = true;
     }
 
-    // Instead, ensure opponentData's global list is updated with the latest state of all clubs
-    // (league and cup teams) after AI matches are processed.
+    // Ensure opponentData's global list is updated with the latest state of all clubs
     const allClubsAfterAIMatches = Array.from(new Map([
         ...(gameState.leagues[0]?.allClubsData || []).map(c => [c.id, c]),
         ...(gameState.countyCup?.teams || []).map(c => [c.id, c]),
@@ -661,8 +709,8 @@ export function processAIMatchesAndFinalizeWeek(gameState, currentWeekBlock, pla
     Main.updateUI();
 
     if (aiMatchesPlayed && renderers.getModalDisplayStatus() === 'none') {
-        renderers.showModal('Matches Played', `Other ${currentWeekBlock?.competition || 'Unknown'} matches were played this week.`, [], gameState, updateUICallbacks, 'ai_matches_summary');
-        gameState.messages.push({ week: gameState.currentWeek, text: `Other ${currentWeekBlock?.competition || 'Unknown'} matches played this week.` });
+        renderers.showModal('Matches Played', `Other matches were played this week.`, [], gameState, updateUICallbacks, 'ai_matches_summary');
+        gameState.messages.push({ week: gameState.currentWeek, text: `Other matches played this week.` });
     } else {
         finalizeWeekProcessing(gameState, 'no_ai_matches_or_modal_active');
     }
@@ -833,9 +881,9 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
     // Add AI league matches that are not rescheduled
     if (leagueWeekBlock && leagueWeekBlock.matches.length > 0) {
         const nonRescheduledLeagueMatches = leagueWeekBlock.matches.filter(match =>
-            !match.played && match.result === null &&
-            !hasCupMatchThisWeek(match.homeTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) &&
-            !hasCupMatchThisWeek(match.awayTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures)
+            !match.played && match.result === null && // Only unplayed matches
+            !hasCupMatchThisWeek(match.homeTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) && // Home team not in cup
+            !hasCupMatchThisWeek(match.awayTeamId, currentAbsoluteGameWeek, gameState.countyCup.fixtures) // Away team not in cup
         );
         allAIMatchesForWeek.push(...nonRescheduledLeagueMatches);
     }
@@ -859,7 +907,8 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
         
         // Process combined AI matches if any, then finalize
         if (allAIMatchesForWeek.length > 0) {
-            processAIMatchesAndFinalizeWeek(gameState, { week: currentAbsoluteGameWeek, competition: 'Combined', matches: allAIMatchesForWeek }, null);
+            // Create a dummy currentWeekBlock for processAIMatchesAndFinalizeWeek
+            processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
         } else {
             finalizeWeekProcessing(gameState, 'cup_match_none_or_eliminated');
         }
@@ -875,7 +924,7 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
             renderers.showModal('County Cup', `You have a BYE this County Cup round.`, [], gameState, updateUICallbacks, 'cup_match_bye_player');
             // Process combined AI matches if any, then finalize
             if (allAIMatchesForWeek.length > 0) {
-                processAIMatchesAndFinalizeWeek(gameState, { week: currentAbsoluteGameWeek, competition: 'Combined', matches: allAIMatchesForWeek }, null);
+                processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
             } else {
                 finalizeWeekProcessing(gameState, 'cup_match_bye_player');
             }
@@ -890,7 +939,7 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
             renderers.showModal('County Cup', `You were expected to play, but your cup status is ${gameState.countyCup.playerTeamStatus}. This is a week off.`, [], gameState, updateUICallbacks, 'cup_match_unexpected_status');
             // Process combined AI matches if any, then finalize
             if (allAIMatchesForWeek.length > 0) {
-                processAIMatchesAndFinalizeWeek(gameState, { week: currentAbsoluteGameWeek, competition: 'Combined', matches: allAIMatchesForWeek }, null);
+                processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
             } else {
                 finalizeWeekProcessing(gameState, 'cup_match_unexpected_status');
             }
@@ -905,7 +954,7 @@ export function handleCountyCupMatch(gameState) { // EXPORTED
         }
         // Process combined AI matches if any, then finalize
         if (allAIMatchesForWeek.length > 0) {
-            processAIMatchesAndFinalizeWeek(gameState, { week: currentAbsoluteGameWeek, competition: 'Combined', matches: allAIMatchesForWeek }, null);
+            processAIMatchesAndFinalizeWeek(gameState, null); // Pass null for playerMatchId
         } else {
             finalizeWeekProcessing(gameState, 'cup_match_no_player_match_ai_only');
         }
