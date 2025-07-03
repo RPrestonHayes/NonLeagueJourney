@@ -251,8 +251,8 @@ export function renderNewGameModal() {
 export function renderOpponentCustomizationModal(opponentClubs, context) {
     opponentListCustomization.innerHTML = '';
 
-    let titleText = 'Customize Your Rivals';
-    let introText = 'You can adjust the names and colors of your league opponents. This is a one-time change for personalization.';
+    let titleText = '';
+    let introText = '';
 
     if (context === 'cup_opponent') {
         titleText = 'Customize Cup Opponent';
@@ -260,10 +260,19 @@ export function renderOpponentCustomizationModal(opponentClubs, context) {
     } else if (context === 'league_start') {
         titleText = 'Customize Your Rivals (One Time!)';
         introText = 'You can adjust the names and colors of your league opponents. This is a one-time change for personalization.';
+    } else {
+        // Fallback for any other unexpected context
+        titleText = 'Customize Opponents';
+        introText = 'Adjust the names and colors of these clubs.';
     }
 
-    opponentCustomizationModalTitle.textContent = titleText;
-    opponentCustomizationModalText.textContent = introText;
+    // Update the text content of the modal's title and introductory paragraph
+    if (opponentCustomizationModalTitle) {
+        opponentCustomizationModalTitle.textContent = titleText;
+    }
+    if (opponentCustomizationModalText) {
+        opponentCustomizationModalText.textContent = introText;
+    }
 
 
     opponentClubs.forEach(club => {
