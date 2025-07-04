@@ -9,7 +9,7 @@
 import * as Constants from '../utils/constants.js';
 import * as gameLoop from '../logic/gameLoop.js';
 import * as Main from '../main.js'; // Import Main to access gameState and other functions
-import { getCalendarWeekString } from '../main.js'; // Import getCalendarWeekString for fixtures display
+import { getCalendarWeekString } from '../utils/../utils/dataGenerator.js'; // Import getCalendarWeekString for fixtures display
 
 // --- DOM Element References (Cache for performance and correct ID access) ---
 const gameScreens = document.querySelectorAll('.game-screen');

@@ -9,7 +9,6 @@ import * as Constants from '../utils/constants.js';
 import * as clubData from '../data/clubData.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
-// REMOVED: import * as Main from '../main.js'; // Removed circular dependency
 import * as gameLoop from './gameLoop.js'; // Import gameLoop to call processRemainingWeekEvents
 import * as dataGenerator from '../utils/dataGenerator.js';
 // REMOVED: import * as playerInteractionLogic from './playerInteractionLogic.js'; // Removed direct import
@@ -20,10 +19,11 @@ import * as dataGenerator from '../utils/dataGenerator.js';
  * @param {object} gameState - The mutable gameState object.
  * @param {number} eventChanceMultiplier - Multiplier for event chance (e.g., from December conditions).
  * @param {object} updateUICallbacks - Callbacks from Main module.
- * @param {object} playerInteractionModule - The playerInteractionLogic module passed from gameLoop. // NEW: Added playerInteractionModule
+ * @param {function} startRecruitmentDialogueCallback - Callback function for starting recruitment dialogue. // NEW
+ * @param {function} startPlayerConversationCallback - Callback function for starting player conversation. // NEW
  * @returns {object|null} The triggered event object if an event occurs, otherwise null.
  */
-export function triggerRandomEvent(gameState, eventChanceMultiplier = 1, updateUICallbacks, playerInteractionModule) { // NEW: Added playerInteractionModule
+export function triggerRandomEvent(gameState, eventChanceMultiplier = 1, updateUICallbacks, startRecruitmentDialogueCallback, startPlayerConversationCallback) { // NEW params
     const eventRoll = dataGenerator.getRandomInt(1, 100);
     const baseEventChancePercent = 30; // Base chance
     const actualEventChance = baseEventChancePercent * eventChanceMultiplier; // Apply multiplier
@@ -152,8 +152,8 @@ export function triggerRandomEvent(gameState, eventChanceMultiplier = 1, updateU
                 choices: [
                     { text: 'Invite to Training (Recruit)', action: (gs, uic, context) => {
                         renderers.hideModal();
-                        // Use the passed playerInteractionModule
-                        playerInteractionModule.startRecruitmentDialogue(gs, newYouthPlayer, uic); // Pass uic
+                        // Use the passed callback function directly
+                        startRecruitmentDialogueCallback(gs, newYouthPlayer, uic); // Pass uic
                     }, isPrimary: true },
                     { text: 'Ignore (Miss Opportunity)', action: (gs, uic, context) => {
                         renderers.hideModal();

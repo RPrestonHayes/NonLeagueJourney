@@ -207,47 +207,45 @@ export function generateClubIdentity(baseLocationRegion) {
 }
 
 /**
- * Generates the initial pool of all regional clubs (AI + Player) with assigned seed qualities.
+ * Generates the initial pool of all REGIONAL clubs (AI + Player) with assigned seed qualities.
+ * This function now generates exactly Constants.NUM_REGIONAL_CLUBS (60) clubs.
  * @param {object} playerCountyData - The county data object for the player's chosen location.
  * @param {object} playerClubDetails - Details of the player's club (id, name, nickname, kitColors).
- * @returns {Array<object>} An array of all 60 club objects, including the player's, with seed qualities.
+ * @returns {Array<object>} An array of all 60 regional club objects, including the player's, with seed qualities.
  */
 export function generateRegionalClubPool(playerCountyData, playerClubDetails) {
-    const allClubs = [];
+    const allRegionalClubs = [];
     const townsPool = [...playerCountyData.towns];
 
-    // Create AI clubs first, assign seeds 1 to 59 (or 60 for 64 total clubs)
-    for (let i = 0; i < Constants.NUM_REGIONAL_CLUBS - 1; i++) { // Loop for all AI clubs
+    // Create AI clubs for the regional pyramid (59 clubs)
+    for (let i = 0; i < Constants.NUM_REGIONAL_CLUBS - 1; i++) { // Loop for 59 AI clubs
         const id = generateUniqueId('C');
         let identity = generateClubIdentity(playerCountyData);
         let name = identity.name;
         let nickname = identity.nickname;
-        const kitColors = generateKitColors();
+        const kitColors = generateKitColors(); // Generate random colors for AI clubs
 
-        // Assign initialSeedQuality (1 is best, NUM_REGIONAL_CLUBS-1 is worst AI)
-        const initialSeedQuality = i + 1; // 1 to 63 for 64 clubs total
+        // Assign initialSeedQuality (1 is best, 59 is worst AI regional)
+        const initialSeedQuality = i + 1; 
 
         let overallTeamQuality;
         let potentialLeagueLevel;
 
-        // Determine quality and potentialLeagueLevel based on seed for all 63 AI clubs
+        // Determine quality and potentialLeagueLevel based on seed for regional AI clubs
         if (initialSeedQuality <= Constants.LEAGUE_TIERS.PREMIER.seedRange.max) { // Seeds 1-20 (Premier)
             overallTeamQuality = getRandomInt(15, 20); // High quality
             potentialLeagueLevel = Constants.LEAGUE_TIERS.PREMIER.level;
         } else if (initialSeedQuality <= Constants.LEAGUE_TIERS.DIV1.seedRange.max) { // Seeds 21-40 (Div 1)
             overallTeamQuality = getRandomInt(10, 14); // Medium quality
             potentialLeagueLevel = Constants.LEAGUE_TIERS.DIV1.level;
-        } else if (initialSeedQuality <= Constants.LEAGUE_TIERS.DIV2.seedRange.max) { // Seeds 41-60 (Div 2)
+        } else if (initialSeedQuality <= Constants.LEAGUE_TIERS.DIV2.seedRange.max) { // Seeds 41-59 (Div 2, excluding player's seed 60)
             overallTeamQuality = getRandomInt(5, 9); // Low quality
             potentialLeagueLevel = Constants.LEAGUE_TIERS.DIV2.level;
-        } else { // Seeds 61-64 (Higher tier external teams)
-            overallTeamQuality = getRandomInt(18, 20); // Very high quality
-            potentialLeagueLevel = Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_DIV.level; // Level 4
         }
 
 
         // Add a chance for "reserve" teams from major towns in the region
-        if (getRandomInt(1, 100) < 30 && townsPool.length > 0) {
+        if (getRandomInt(1, 100) < 30 && townsPool.length > 0 && potentialLeagueLevel < Constants.LEAGUE_TIERS.PREMIER.level) { // Only for lower league teams
             const majorTownCandidates = townsPool.filter(t => t.length > 7 || ['Leicester', 'Nottingham', 'Derby', 'Birmingham', 'Sheffield', 'Manchester', 'Liverpool', 'Leeds', 'Bristol', 'Newcastle'].includes(t));
             const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : townsPool);
             
@@ -256,39 +254,105 @@ export function generateRegionalClubPool(playerCountyData, playerClubDetails) {
             }
         }
 
-        allClubs.push({
+        allRegionalClubs.push({
             id: id, name: name, location: getRandomElement(townsPool), nickname: nickname, kitColors: kitColors,
             overallTeamQuality: overallTeamQuality,
             currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
             leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
-            inCup: true, // Assume all initial clubs are eligible for the cup
+            inCup: true, // Assume all regional clubs are eligible for the cup
             eliminatedFromCup: false,
             initialSeedQuality: initialSeedQuality, // Store the seed for sorting into leagues
             potentialLeagueLevel: potentialLeagueLevel, // Set potential league level
-            customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED // NEW: Default to not customized
+            customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED // Default to not customized
         });
     }
 
-    // Add Player's Club as the lowest seed (NUM_REGIONAL_CLUBS)
-    allClubs.push({
+    // Add Player's Club as the lowest seed (60)
+    allRegionalClubs.push({
         id: playerClubDetails.id,
         name: playerClubDetails.clubName,
         location: playerClubDetails.hometown,
         nickname: playerClubDetails.nickname,
-        kitColors: playerClubDetails.kitColors,
+        kitColors: playerClubDetails.kitColors, // Use provided kitColors for player's club
         overallTeamQuality: getRandomInt(1, 5), // Player club starts at lowest quality
         currentLeagueId: null,
         finalLeaguePosition: null,
         leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
         inCup: true,
         eliminatedFromCup: false,
-        initialSeedQuality: Constants.NUM_REGIONAL_CLUBS, // Player is the last seed (64)
+        initialSeedQuality: Constants.NUM_REGIONAL_CLUBS, // Player is the last seed (60)
         potentialLeagueLevel: Constants.LEAGUE_TIERS.DIV2.level, // Player starts in lowest league (Div 2)
-        customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.CUSTOMIZED_ONCE // NEW: Player's club is customized by default
+        customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.CUSTOMIZED_ONCE // Player's club is customized by default
     });
 
-    console.log(`Generated ${allClubs.length} regional clubs.`);
-    return allClubs;
+    console.log(`Generated ${allRegionalClubs.length} regional clubs for leagues.`);
+    return allRegionalClubs;
+}
+
+
+/**
+ * Generates a single new opponent club. Useful for cup draws or new league teams.
+ * This is now specifically for higher-tier external teams generated for cup.
+ * @param {object} playerCountyData - The county data object for the player's chosen location.
+ * @param {number} qualityTier - The base quality tier for player generation for this club.
+ * @returns {object} A single opponent club structural data object.
+ */
+export function generateSingleOpponentClub(playerCountyData, qualityTier = 18) { // Default quality higher
+    const id = generateUniqueId('C');
+    let identity = generateClubIdentity(playerCountyData); // Use generic identity generation first
+    let name = identity.name;
+    let nickname = identity.nickname;
+    const kitColors = generateKitColors(); // Generate random colors for these external teams
+
+    // Force higher-tier names and quality for these specific clubs
+    name = `${getRandomElement(playerCountyData.towns)} ${getRandomElement(['City', 'United', 'Rovers', 'Athletic'])}`;
+    if (getRandomInt(1,100) < 50) { // Some might be "FC"
+        name += ' FC';
+    }
+    nickname = getRandomElement(['The Blues', 'The Reds', 'The Lions', 'The Eagles', 'The Wanderers', 'The Towners']);
+
+
+    return {
+        id: id, name: name, location: getRandomElement(playerCountyData.towns), nickname: nickname, kitColors: kitColors,
+        overallTeamQuality: getRandomInt(qualityTier - 2, qualityTier + 2), // Vary quality around the tier
+        currentLeagueId: null, finalLeaguePosition: null, // These clubs are not in regional leagues
+        leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+        inCup: true, // New teams are assumed to be in cup
+        eliminatedFromCup: false,
+        potentialLeagueLevel: Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.level, // Mark as higher tier
+        customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED // Default to not customized
+    };
+}
+
+// --- Helper for Calendar Conversion (MOVED HERE) ---
+export function getCalendarWeekString(weekNum) { // Exported for renderers.js and gameLoop.js
+    if (weekNum <= 0) { return "Invalid Week"; }
+
+    let cumulativeWeeks = 0;
+    for (let i = 0; i < Constants.GAME_WEEK_TO_MONTH_MAP.length; i++) {
+        const monthBlock = Constants.GAME_WEEK_TO_MONTH_MAP[i];
+        const monthStartWeekAbsolute = monthBlock.startWeek;
+        const monthEndWeekAbsolute = monthBlock.startWeek + monthBlock.weeks - 1;
+
+        if (weekNum >= monthStartWeekAbsolute && weekNum <= monthEndWeekAbsolute) {
+            const weekInMonthBlock = weekNum - monthStartWeekAbsolute + 1;
+            const currentMonthName = Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12];
+            let weekString = `${currentMonthName} (Week ${weekInMonthBlock})`;
+
+            if (monthBlock.isPreSeason) {
+                weekString += ' - Pre-Season';
+            } else if (monthBlock.isSpecialMonth && currentMonthName === 'December') {
+                 weekString += ' - Special Conditions (Winter)';
+            }
+            return weekString;
+        }
+    }
+    
+    if (weekNum > Constants.TOTAL_LEAGUE_WEEKS) {
+        return `Off-Season Week ${weekNum - Constants.TOTAL_LEAGUE_WEEKS}`;
+    }
+
+    return `Unknown Period Week ${weekNum}`;
 }
 
 
@@ -401,7 +465,7 @@ export function generateWeeklyTasks(clubFacilities, committeeMembers) {
 export function generateMatchSchedule(playerClubId, allTeamsData, season, competitionType) {
     const numTeams = allTeamsData.length;
     if (numTeams < 2) {
-        console.warn("Not enough teams to generate a match schedule.");
+        console.warn("Not enough teams to generate a match schedule for competition type:", competitionType);
         return [];
     }
 

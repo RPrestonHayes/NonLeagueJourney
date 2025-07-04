@@ -13,7 +13,7 @@ import * as leagueData from '../data/leagueData.js';
 import * as dataGenerator from '../utils/dataGenerator.js';
 import * as matchLogic from './matchLogic.js';
 import * as eventLogic from './eventLogic.js';
-import * as playerInteractionLogic from './playerInteractionLogic.js'; // Keep import here, pass it down
+import * as playerInteractionLogic from './playerInteractionLogic.js'; // Keep import here to access the function
 import * as committeeLogic from './committeeLogic.js'; // Correct path
 import * as renderers from '../ui/renderers.js';
 // REMOVED: import * as Main from '../main.js'; // This caused circular dependency
@@ -377,8 +377,14 @@ export function advanceWeek(gameState, resumeStep = 0, updateUICallbacks) { // N
     // Step 2: Random Event
     if (resumeStep <= 2 && (gameState.currentWeek > Constants.PRE_SEASON_WEEKS || gameState.gamePhase === Constants.GAME_PHASE.PRE_SEASON_PLANNING) && renderers.getModalDisplayStatus() === 'none') {
         const eventMultiplier = (currentMonthName === 'December') ? Constants.DECEMBER_BAD_EVENT_CHANCE_MULTIPLIER : 1;
-        // Pass playerInteractionLogic to eventLogic.triggerRandomEvent
-        const triggeredEvent = eventLogic.triggerRandomEvent(gameState, eventMultiplier, updateUICallbacks, playerInteractionLogic); // Pass updateUICallbacks, playerInteractionLogic
+        // Pass playerInteractionLogic.startRecruitmentDialogue and playerInteractionLogic.startPlayerConversation
+        const triggeredEvent = eventLogic.triggerRandomEvent(
+            gameState,
+            eventMultiplier,
+            updateUICallbacks,
+            playerInteractionLogic.startRecruitmentDialogue, // Pass the function directly
+            playerInteractionLogic.startPlayerConversation // Pass the function directly
+        );
         if (triggeredEvent) {
             gameState.messages.push({ week: gameState.currentWeek, text: `${triggeredEvent.title}: ${triggeredEvent.description}` });
             return true; // Modal shown, execution stops here
@@ -866,7 +872,7 @@ export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // N
                         
                         renderers.hideOpponentCustomizationModal();
                         // Show final confirmation modal after customization, then finalize week.
-                        renderers.showModal('Opponent Customized!', `You've customized ${customizedOpponent.name}. Your County Cup match against them is scheduled for ${Main.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => {
+                        renderers.showModal('Opponent Customized!', `You've customized ${customizedOpponent.name}. Your County Cup match against them is scheduled for ${dataGenerator.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => { // Use dataGenerator.getCalendarWeekString
                             renderers.hideModal();
                             console.log("DEBUG: Final customization modal 'Continue' clicked. Calling finalizeWeekProcessing with 'cup_opponent_customized_final'.");
                             gameLoop.finalizeWeekProcessing(gsFinal, 'cup_opponent_customized_final', uicFinal); // Pass new context, uicFinal
@@ -878,7 +884,7 @@ export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // N
                     renderers.hideModal();
                     // Show final confirmation modal when skipping customization, then finalize week.
                     const opponentName = playerMatch.homeTeamId === gs.playerClub?.id ? playerMatch.awayTeamName : playerMatch.homeTeamName; // Optional chaining
-                    renderers.showModal('County Cup Draw Confirmed!', `Your County Cup match against ${opponentName} is scheduled for ${Main.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => {
+                    renderers.showModal('County Cup Draw Confirmed!', `Your County Cup match against ${opponentName} is scheduled for ${dataGenerator.getCalendarWeekString(matchWeekForThisRound)}.`, [{ text: 'Continue', action: (gsFinal, uicFinal, contextFinal) => { // Use dataGenerator.getCalendarWeekString
                         renderers.hideModal();
                         console.log("DEBUG: Skip customization modal 'Continue' clicked. Calling finalizeWeekProcessing with 'cup_draw_normal'.");
                         gameLoop.finalizeWeekProcessing(gsFinal, 'cup_draw_normal', uicFinal); // Pass context, uicFinal
@@ -886,13 +892,13 @@ export function handleCountyCupAnnouncement(gameState, updateUICallbacks) { // N
                 } }
             ], gameState, updateUICallbacks, 'cup_draw_with_customization');
         } else { // No external opponent, or BYE
-            drawMessage += `\n\nSee the Fixtures screen for the full draw. Your match is scheduled for ${Main.getCalendarWeekString(matchWeekForThisRound)}.`;
+            drawMessage += `\n\nSee the Fixtures screen for the full draw. Your match is scheduled for ${dataGenerator.getCalendarWeekString(matchWeekForThisRound)}.`; // Use dataGenerator.getCalendarWeekString
             renderers.showModal('County Cup Draw!', drawMessage, [], gameState, updateUICallbacks, 'cup_draw_normal');
         }
         // --- FIX END ---
     } else {
         drawMessage += `You have a BYE this round!\n\n`;
-        drawMessage += `See the Fixtures screen for other matches. Your BYE is for the week of ${Main.getCalendarWeekString(matchWeekForThisRound)}.`;
+        drawMessage += `See the Fixtures screen for other matches. Your BYE is for the week of ${dataGenerator.getCalendarWeekString(matchWeekForThisRound)}.`; // Use dataGenerator.getCalendarWeekString
         renderers.showModal('County Cup Draw!', drawMessage, [], gameState, updateUICallbacks, 'cup_draw_bye');
     }
 

@@ -66,25 +66,24 @@ export const GAME_WEEK_TO_MONTH_MAP = [
 
 
 // County Cup Schedule (Absolute gameState.currentWeek values)
-// Recalculated based on the new 52-week calendar structure
 export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [
     10, // August Week 2 (Game Week 10)
     15, // September Week 2 (Game Week 15)
     19, // October Week 2 (Game Week 19)
-    24, // November Week 3 (Game Week 24) - Adjusted for 5-week Nov
+    24, // November Week 3 (Game Week 24)
     32, // January Week 2 (Game Week 32)
     37, // February Week 2 (Game Week 37)
-    42, // March Week 3 (Game Week 42) - Adjusted for 5-week March
+    42, // March Week 3 (Game Week 42)
     46  // April Week 2 (Game Week 46 - Final Announcement)
 ];
 export const COUNTY_CUP_MATCH_WEEKS = [
     12, // August Week 4 (Game Week 12)
     17, // September Week 4 (Game Week 17)
     21, // October Week 4 (Game Week 21)
-    26, // November Week 5 (Game Week 26) - Adjusted for 5-week Nov
-    35, // January Week 5 (Game Week 35) - Adjusted for 5-week Jan
+    26, // November Week 5 (Game Week 26)
+    35, // January Week 5 (Game Week 35)
     39, // February Week 4 (Game Week 39)
-    44, // March Week 5 (Game Week 44) - Adjusted for 5-week March
+    44, // March Week 5 (Game Week 44)
     48  // April Week 4 (Game Week 48 - Final)
 ];
 
@@ -190,7 +189,7 @@ export const ATTRIBUTE_MIN = 1;
 export const ATTRIBUTE_MAX = 20;
 
 // --- Regional Pyramid Structure ---
-export const NUM_REGIONAL_CLUBS = 64; // Increased to 64 for more external cup teams
+export const NUM_REGIONAL_CLUBS = 60; // Back to 60 for regional leagues (20 per division)
 
 export const LEAGUE_TIERS = {
     PREMIER: {
@@ -199,8 +198,8 @@ export const LEAGUE_TIERS = {
         numTeams: 20,
         promotedTeams: 2, // Teams promoted to a higher, non-regional league (e.g., National League System Step 6)
         relegatedTeams: 2,
-        // Seed range for this league (inclusive, 1 is best)
-        seedRange: { min: 1, max: 20 }
+        seedRange: { min: 1, max: 20 }, // Seeds 1-20
+        isRegionalLeague: true // This is a league that will be generated
     },
     DIV1: {
         level: 2,
@@ -208,7 +207,8 @@ export const LEAGUE_TIERS = {
         numTeams: 20,
         promotedTeams: 2,
         relegatedTeams: 2,
-        seedRange: { min: 21, max: 40 }
+        seedRange: { min: 21, max: 40 }, // Seeds 21-40
+        isRegionalLeague: true // This is a league that will be generated
     },
     DIV2: {
         level: 1, // Lowest tier
@@ -216,19 +216,25 @@ export const LEAGUE_TIERS = {
         numTeams: 20,
         promotedTeams: 2,
         relegatedTeams: 0, // No relegation from bottom tier
-        seedRange: { min: 41, max: 60 } // Player's club will be seed 60
+        seedRange: { min: 41, max: 60 }, // Seeds 41-60 (Player's club is seed 60)
+        isRegionalLeague: true // This is a league that will be generated
     },
-    // NEW: Placeholder for higher-tier external teams (levels 4 and 5)
-    EXTERNAL_HIGHER_DIV: {
+    // NEW: Conceptual tier for higher-level external clubs.
+    // These clubs are NOT part of the 'leagues' array that generates fixtures.
+    // They are only generated for the overall club pool and cup draws.
+    EXTERNAL_HIGHER_TIER: {
         level: 4, // Higher than regional Premier
-        nameSuffix: 'External Higher Division',
-        seedRange: { min: 61, max: 64 } // Seeds for the new 4 external teams
+        nameSuffix: 'External Higher Tier', // Just a descriptive name
+        // These seeds are generated *on demand* for the cup, not part of initial 60
+        // Their quality will be higher.
+        overallTeamQuality: { min: 18, max: 20 }, // Define quality range for these
+        isRegionalLeague: false // Crucial flag - NOT a league for fixture generation
     }
 };
 
 // Initial pool size for County Cup teams generated at game start
-// Now that we have 60 clubs, the INITIAL_CUP_POOL_SIZE can be 0,
-// as the cup draw will pull from the existing 60 clubs + generate new ones as needed.
+// This is now 0, as the 60 regional clubs are generated, and the 4 higher-tier
+// clubs are generated specifically for the cup draw.
 export const INITIAL_CUP_POOL_SIZE = 0;
 
 // Kit Colors (for generation)

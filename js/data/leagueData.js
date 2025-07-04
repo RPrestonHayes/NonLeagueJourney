@@ -14,7 +14,7 @@ import * as Main from '../main.js'; // Import Main for gameState access
  * Generates the initial tiered league structure for a new game.
  * Distributes all clubs (AI + Player) into their starting leagues based on seed quality.
  * @param {object} playerCountyData - The county data object for the player's chosen location.
- * @param {Array<object>} allClubsInRegionalPool - The array of all 60 club objects (AI + Player) with initialSeedQuality.
+ * @param {Array<object>} allClubsInRegionalPool - The array of all 60 regional club objects (AI + Player) with initialSeedQuality.
  * @returns {object} An object containing { leagues: Array<object>, clubs: Array<object> }
  * where 'leagues' contains the league structural data and 'clubs' contains
  * all clubs within those leagues (including player's and opponents).
@@ -23,55 +23,64 @@ export function generateInitialLeagues(playerCountyData, allClubsInRegionalPool)
     const leagues = [];
     const countyName = dataGenerator.getCountyNameForLeagues(playerCountyData);
 
-    // Sort all clubs by their initialSeedQuality (1 is best, 60 is worst)
-    const sortedClubs = [...allClubsInRegionalPool].sort((a, b) => a.initialSeedQuality - b.initialSeedQuality);
+    // Sort all regional clubs by their initialSeedQuality (1 is best, 60 is worst)
+    const sortedRegionalClubs = [...allClubsInRegionalPool].sort((a, b) => a.initialSeedQuality - b.initialSeedQuality);
 
-    // Create league objects and distribute clubs
+    // Create league objects and distribute clubs for REGIONAL LEAGUES ONLY
     for (const tierKey in Constants.LEAGUE_TIERS) {
         const tierConfig = Constants.LEAGUE_TIERS[tierKey];
-        const leagueId = dataGenerator.generateUniqueId('L');
-        const leagueName = `${countyName} ${tierConfig.nameSuffix}`;
 
-        const newLeague = {
-            id: leagueId,
-            name: leagueName,
-            level: tierConfig.level,
-            numTeams: tierConfig.numTeams,
-            promotedTeams: tierConfig.promotedTeams,
-            relegatedTeams: tierConfig.relegatedTeams,
-            currentSeasonFixtures: [],
-            clubs: [], // Will store club IDs
-            allClubsData: [] // Will store full club objects for this league
-        };
+        // Only create league objects for tiers marked as 'isRegionalLeague'
+        if (tierConfig.isRegionalLeague) {
+            const leagueId = dataGenerator.generateUniqueId('L');
+            const leagueName = `${countyName} ${tierConfig.nameSuffix}`;
 
-        // Distribute clubs based on seed range
-        const clubsForThisLeague = sortedClubs.filter(club =>
-            club.initialSeedQuality >= tierConfig.seedRange.min &&
-            club.initialSeedQuality <= tierConfig.seedRange.max
-        );
+            const newLeague = {
+                id: leagueId,
+                name: leagueName,
+                level: tierConfig.level,
+                numTeams: tierConfig.numTeams,
+                promotedTeams: tierConfig.promotedTeams,
+                relegatedTeams: tierConfig.relegatedTeams,
+                currentSeasonFixtures: [],
+                clubs: [], // Will store club IDs
+                allClubsData: [] // Will store full club objects for this league
+            };
 
-        // Assign clubs to this league and update their currentLeagueId
-        clubsForThisLeague.forEach(club => {
-            club.currentLeagueId = newLeague.id;
-            club.potentialLeagueLevel = newLeague.level; // Set potential league level
-            newLeague.clubs.push(club.id);
-            newLeague.allClubsData.push(club);
-        });
+            // Distribute clubs based on seed range for this league
+            const clubsForThisLeague = sortedRegionalClubs.filter(club =>
+                club.initialSeedQuality >= tierConfig.seedRange.min &&
+                club.initialSeedQuality <= tierConfig.seedRange.max
+            );
 
-        // Generate fixtures for this league
-        newLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
-            Main.gameState.playerClub.id, // Pass player club ID for fixture generation
-            newLeague.allClubsData,
-            1, // Season 1
-            Constants.COMPETITION_TYPE.LEAGUE
-        );
+            // Assign clubs to this league and update their currentLeagueId
+            clubsForThisLeague.forEach(club => {
+                club.currentLeagueId = newLeague.id;
+                // potentialLeagueLevel is already set in dataGenerator.generateRegionalClubPool
+                newLeague.clubs.push(club.id);
+                newLeague.allClubsData.push(club);
+            });
 
-        leagues.push(newLeague);
+            // Generate fixtures for this league
+            newLeague.currentSeasonFixtures = dataGenerator.generateMatchSchedule(
+                Main.gameState.playerClub.id, // Pass player club ID for fixture generation
+                newLeague.allClubsData,
+                1, // Season 1
+                Constants.COMPETITION_TYPE.LEAGUE
+            );
+
+            leagues.push(newLeague);
+        }
     }
 
+    // After creating leagues, ensure the sortedRegionalClubs (all 60) have their currentLeagueId set correctly.
+    // The player's club will have its currentLeagueId updated here.
+    // No need to explicitly handle EXTERNAL_HIGHER_TIER clubs here, as they are not part of this initial league setup.
+
+
     console.log("Initial tiered league structure generated:", leagues);
-    // Return all leagues and the modified (with currentLeagueId) full list of clubs
-    return { leagues: leagues, clubs: sortedClubs };
+    // Return all leagues and the modified (with currentLeagueId) full list of regional clubs
+    return { leagues: leagues, clubs: sortedRegionalClubs };
 }
 
 /**
@@ -93,80 +102,71 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
         availableTeamsForDraw.push(Main.gameState.playerClub);
     }
 
-    // Filter out league teams for potential external opponents
-    // Now, league teams are any team in Main.gameState.leagues[X].allClubsData
-    const allLeagueClubIds = new Set();
+    // Identify regional league club IDs for comparison
+    const allRegionalLeagueClubIds = new Set();
     Main.gameState.leagues.forEach(league => {
-        league.allClubsData.forEach(club => allLeagueClubIds.add(club.id));
+        if (league.isRegionalLeague) { // Only consider regional leagues
+            league.allClubsData.forEach(club => allRegionalLeagueClubIds.add(club.id));
+        }
     });
     
-    let externalTeamsInPool = availableTeamsForDraw.filter(team => !allLeagueClubIds.has(team.id));
-    let leagueTeamsInPool = availableTeamsForDraw.filter(team => allLeagueClubIds.has(team.id));
+    // Separate regional league teams from other (potentially external) teams in the current pool
+    let externalTeamsInPool = availableTeamsForDraw.filter(team => !allRegionalLeagueClubIds.has(team.id));
+    let regionalLeagueTeamsInPool = availableTeamsForDraw.filter(team => allRegionalLeagueClubIds.has(team.id));
 
 
-    // Determine the target number of teams for a full draw (next power of 2)
-    let currentPoolSize = availableTeamsForDraw.length;
-    let targetDrawSize = 2;
-    while (targetDrawSize < currentPoolSize) {
-        targetDrawSize *= 2;
-    }
-    if (currentPoolSize === 0) targetDrawSize = 0; // No teams, no draw
-    else if (currentPoolSize === 1) targetDrawSize = 2; // If only one team, need one more for a match
-
-    // --- FIX START: Adjust numTeamsToGenerate for Round 1 to ensure ~24 teams ---
+    // --- FIX START: Generate 4 higher-tier external teams for Round 1 if needed ---
     const isRoundOne = Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(week) === 0;
-    let numTeamsToGenerate = targetDrawSize - currentPoolSize;
+    const desiredExternalHigherTierTeams = 4; // We want 4 of these
+    let newlyGeneratedHigherTierTeams = [];
 
     if (isRoundOne) {
-        const desiredTotalTeams = 24; // 12 league teams + 12 new
-        const currentLeagueTeamsCount = leagueTeamsInPool.length;
-        const currentExternalTeamsCount = externalTeamsInPool.length;
-        
-        // Calculate how many *new* external teams are needed to reach desiredTotalTeams
-        // This is (desiredTotalTeams - currentLeagueTeamsCount - currentExternalTeamsCount)
-        numTeamsToGenerate = Math.max(0, desiredTotalTeams - currentLeagueTeamsCount - currentExternalTeamsCount);
+        const existingHigherTierTeams = externalTeamsInPool.filter(team => team.potentialLeagueLevel === Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.level);
+        const numToGenerate = Math.max(0, desiredExternalHigherTierTeams - existingHigherTierTeams.length);
 
-        // Ensure targetDrawSize is at least desiredTotalTeams if it's Round 1
-        targetDrawSize = Math.max(targetDrawSize, desiredTotalTeams);
-    }
-    // --- FIX END ---
-
-    let playerOpponent = null;
-    let newlyGeneratedTeams = [];
-
-    // Prioritize generating a new external opponent for the player's match if it's Round 1
-    // and if there aren't enough external teams already in the pool.
-    if (isRoundOne && externalTeamsInPool.length === 0 && numTeamsToGenerate > 0) {
-        playerOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(10, 20)); // High quality for initial cup opponent
-        playerOpponent.inCup = true;
-        playerOpponent.eliminatedFromCup = false;
-        newlyGeneratedTeams.push(playerOpponent);
-        // Add to global list immediately
-        opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), playerOpponent]);
-        Main.gameState.countyCup.teams.push(playerOpponent); // Add to persistent cup teams
-        externalTeamsInPool.push(playerOpponent); // Add to current external pool for draw
-        numTeamsToGenerate--; // Decrement as one team is generated
-    }
-
-    // Generate remaining new teams if needed to reach targetDrawSize
-    for (let i = 0; i < numTeamsToGenerate; i++) { // Loop based on adjusted numTeamsToGenerate
-        const newTeamQuality = dataGenerator.getRandomInt(8, 18);
-        const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, newTeamQuality);
-        
-        const isAlreadyInAnyPool = availableTeamsForDraw.some(team => team.id === newOpponent.id) || newlyGeneratedTeams.some(team => team.id === newOpponent.id);
-
-        if (newOpponent && !isAlreadyInAnyPool) {
-            newOpponent.inCup = true;
-            newOpponent.eliminatedFromCup = false;
-            newlyGeneratedTeams.push(newOpponent);
-            opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
-            Main.gameState.countyCup.teams.push(newOpponent);
-            externalTeamsInPool.push(newOpponent); // Add to current external pool for draw
+        for (let i = 0; i < numToGenerate; i++) {
+            // Use generateSingleOpponentClub to create these higher-tier teams
+            const newOpponent = dataGenerator.generateSingleOpponentClub(
+                Main.gameState.playerCountyData, // Pass player county data
+                dataGenerator.getRandomInt(Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.overallTeamQuality.min, Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.overallTeamQuality.max)
+            );
+            
+            // Ensure uniqueness and add to lists
+            const isAlreadyInAnyPool = availableTeamsForDraw.some(team => team.id === newOpponent.id) || newlyGeneratedHigherTierTeams.some(team => team.id === newOpponent.id);
+            if (newOpponent && !isAlreadyInAnyPool) {
+                newOpponent.inCup = true;
+                newOpponent.eliminatedFromCup = false;
+                newlyGeneratedHigherTierTeams.push(newOpponent);
+                opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]); // Add to global list
+                Main.gameState.countyCup.teams.push(newOpponent); // Add to persistent cup teams
+            }
         }
     }
+    // Add newly generated higher-tier teams to the external pool for this draw
+    externalTeamsInPool.push(...newlyGeneratedHigherTierTeams);
 
-    // Reconstruct availableTeamsForDraw with newly generated teams
-    availableTeamsForDraw = [...leagueTeamsInPool, ...externalTeamsInPool];
+    // Reconstruct availableTeamsForDraw with all relevant teams (regional + external)
+    availableTeamsForDraw = [...regionalLeagueTeamsInPool, ...externalTeamsInPool];
+
+    // Ensure the total pool size is a power of 2 for the draw, if not, add BYE teams
+    let finalPoolSize = availableTeamsForDraw.length;
+    if (finalPoolSize > 0 && (finalPoolSize & (finalPoolSize - 1)) !== 0) { // Check if not a power of 2
+        let nextPowerOf2 = 1;
+        while (nextPowerOf2 < finalPoolSize) {
+            nextPowerOf2 <<= 1; // Multiply by 2
+        }
+        const numByesNeeded = nextPowerOf2 - finalPoolSize;
+        for (let i = 0; i < numByesNeeded; i++) {
+            // Create a dummy BYE team. This BYE team won't be a real club, but a placeholder.
+            availableTeamsForDraw.push({
+                id: `BYE_TEAM_${dataGenerator.generateUniqueId('')}`,
+                name: 'BYE', nickname: 'BYE',
+                inCup: false, eliminatedFromCup: true, // Mark as eliminated for consistency
+                isBye: true // Custom flag for BYE teams
+            });
+        }
+        console.log(`DEBUG: Added ${numByesNeeded} BYE teams to make cup draw even.`);
+    }
 
     // Shuffle teams to ensure random draw
     for (let i = availableTeamsForDraw.length - 1; i > 0; i--) {
@@ -174,89 +174,44 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
         [availableTeamsForDraw[i], availableTeamsForDraw[j]] = [availableTeamsForDraw[j], availableTeamsForDraw[i]];
     }
 
-    // --- FIX: Logic to ensure player always has a match (no BYE) ---
-    // If after generating teams, the count is still odd, we need to add one more to avoid BYE for player
-    if (availableTeamsForDraw.length % 2 !== 0 && availableTeamsForDraw.length > 0) {
-        const newOpponent = opponentData.generateSingleOpponentClub(Main.gameState.playerCountyData, dataGenerator.getRandomInt(8, 18));
-        newOpponent.inCup = true;
-        newOpponent.eliminatedFromCup = false;
-        availableTeamsForDraw.push(newOpponent);
-        opponentData.setAllOpponentClubs([...opponentData.getAllOpponentClubs(null), newOpponent]);
-        Main.gameState.countyCup.teams.push(newOpponent);
-        console.log("DEBUG: Added extra team to make cup draw even and avoid BYE.");
-    }
-    // --- END FIX: No BYE ---
-
-
     // Pair remaining teams for matches
     for (let i = 0; i < availableTeamsForDraw.length; i += 2) {
         let homeTeam = availableTeamsForDraw[i];
         let awayTeam = availableTeamsForDraw[i + 1];
 
-        let opponentClubFromOutsideLeague = undefined; // Default to undefined
+        if (homeTeam.isBye || awayTeam.isBye) { // Handle BYE matches
+            const realTeam = homeTeam.isBye ? awayTeam : homeTeam;
+            cupMatches.push({
+                id: dataGenerator.generateUniqueId('M'), week: week, season: season,
+                homeTeamId: realTeam.id, homeTeamName: realTeam.name,
+                awayTeamId: 'BYE', awayTeamName: 'BYE', competition: Constants.COMPETITION_TYPE.COUNTY_CUP, result: 'BYE', played: true
+            });
+        } else {
+            let opponentClubFromOutsideLeague = undefined; 
+            const isHomePlayer = homeTeam.id === playerClubId;
+            const isAwayPlayer = awayTeam.id === playerClubId;
 
-        const isHomePlayer = homeTeam.id === playerClubId;
-        const isAwayPlayer = awayTeam.id === playerClubId;
-        // Check against all league club IDs, not just the first league
-        const currentLeagueClubIdsMap = allLeagueClubIds;
-
-        // --- FIX: Ensure player always draws an external team in Round 1 if possible ---
-        if (isRoundOne && (isHomePlayer || isAwayPlayer)) {
-            const playerTeam = isHomePlayer ? homeTeam : awayTeam;
-            const currentOpponent = isHomePlayer ? awayTeam : homeTeam;
-
-            // If the current opponent is a league team, try to swap it with an external one
-            if (currentLeagueClubIdsMap.has(currentOpponent.id)) {
-                const availableExternalTeams = externalTeamsInPool.filter(t => t.id !== playerOpponent?.id && t.id !== currentOpponent.id);
-                if (availableExternalTeams.length > 0) {
-                    const newExternalOpponent = dataGenerator.getRandomElement(availableExternalTeams);
-                    
-                    // Swap: newExternalOpponent takes currentOpponent's place
-                    if (isHomePlayer) {
-                        awayTeam = newExternalOpponent;
-                    } else {
-                        homeTeam = newExternalOpponent;
-                    }
-                    // Remove newExternalOpponent from externalTeamsInPool to prevent duplicate assignment
-                    externalTeamsInPool = externalTeamsInPool.filter(t => t.id !== newExternalOpponent.id);
-                    opponentClubFromOutsideLeague = newExternalOpponent; // This is the external opponent
-                    console.log(`DEBUG: Player's Round 1 opponent swapped to external team: ${newExternalOpponent.name}`);
-                } else {
-                    // Fallback: If no external teams are left, player might still face a league team, but this is less likely now.
-                    console.warn("WARNING: Could not find an external opponent for player's Round 1 match. Player might face a league team.");
-                    opponentClubFromOutsideLeague = undefined; // Not an external opponent in this case
-                }
-            } else {
-                // Opponent is already external (e.g., newly generated or from a prior round)
-                opponentClubFromOutsideLeague = currentOpponent;
+            // Determine if the opponent is from outside the regional leagues (higher tier)
+            if (homeTeam.potentialLeagueLevel === Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.level) {
+                opponentClubFromOutsideLeague = homeTeam;
+            } else if (awayTeam.potentialLeagueLevel === Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.level) {
+                opponentClubFromOutsideLeague = awayTeam;
             }
-        } else if ((isHomePlayer && !currentLeagueClubIdsMap.has(awayTeam.id)) || (isAwayPlayer && !currentLeagueClubIdsMap.has(homeTeam.id))) {
-            // For later rounds, if player draws an external team, mark it
-            const externalOpponentCandidate = isHomePlayer ? awayTeam : homeTeam;
-            opponentClubFromOutsideLeague = opponentData.getOpponentClub(externalOpponentCandidate.id);
-            if (!opponentClubFromOutsideLeague) {
-                console.warn(`WARNING: External opponent ${externalOpponentCandidate.id} not found in global list. Using direct object.`);
-                opponentClubFromOutsideLeague = externalOpponentCandidate;
-            }
+            
+            cupMatches.push({
+                id: dataGenerator.generateUniqueId('M'),
+                week: week,
+                season: season,
+                homeTeamId: homeTeam.id,
+                homeTeamName: homeTeam.name,
+                awayTeamId: awayTeam.id,
+                awayTeamName: awayTeam.name,
+                competition: Constants.COMPETITION_TYPE.COUNTY_CUP,
+                result: null,
+                played: false,
+                opponentClubFromOutsideLeague: opponentClubFromOutsideLeague
+            });
         }
-        // --- END FIX: Player always draws external team ---
-
-
-        cupMatches.push({
-            id: dataGenerator.generateUniqueId('M'),
-            week: week, // This is the absolute game week (e.g., 12 for August Week 4)
-            season: season,
-            homeTeamId: homeTeam.id,
-            homeTeamName: homeTeam.name,
-            awayTeamId: awayTeam.id,
-            awayTeamName: awayTeam.name,
-            competition: Constants.COMPETITION_TYPE.COUNTY_CUP,
-            result: null,
-            played: false,
-            // Only attach opponentClubFromOutsideLeague if it's actually an external opponent
-            // This ensures the customization modal condition in gameLoop.js works.
-            opponentClubFromOutsideLeague: opponentClubFromOutsideLeague // Will be undefined if not external
-        });
     }
     console.log(`Generated ${cupMatches.length} cup matches for week ${week}.`);
     return cupMatches;
@@ -275,7 +230,11 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
  */
 export function rescheduleLeagueMatch(currentLeagues, homeClubId, awayClubId, originalAbsoluteGameWeek, newAbsoluteGameWeek) {
     const updatedLeagues = JSON.parse(JSON.stringify(currentLeagues));
-    const league = updatedLeagues.find(l => l.allClubsData.some(c => c.id === homeClubId || c.id === awayClubId)); // Find league by club participation
+    // Find the specific league this match belongs to
+    const leagueToUpdateIndex = updatedLeagues.findIndex(l => 
+        l.allClubsData.some(c => c.id === homeClubId) || l.allClubsData.some(c => c.id === awayClubId)
+    );
+    const league = updatedLeagues[leagueToUpdateIndex];
 
     if (!league || !league.currentSeasonFixtures) {
         console.warn("Cannot reschedule: League or fixtures not found for clubs:", homeClubId, awayClubId);

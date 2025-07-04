@@ -18,9 +18,9 @@ import { getRandomInt, getRandomElement, getRandomName } from '../utils/dataGene
  * @param {object} gameState - The current mutable gameState object.
  * @param {object} player - The player object to interact with.
  * @param {string} interactionType - The type of interaction (e.g., 'motivate', 'ask_commitment', 'address_form').
- * @param {object} updateUICallbacks - Callbacks from Main module. // NEW: Added updateUICallbacks
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  */
-export function startPlayerConversation(gameState, player, interactionType, updateUICallbacks) { // NEW: Added updateUICallbacks
+export function startPlayerConversation(gameState, player, interactionType, updateUICallbacks) {
     console.log(`DEBUG: playerInteractionLogic.startPlayerConversation called for ${player.name}, type: ${interactionType}`);
     let title = `Talking to ${player.name}`;
     let message = '';
@@ -32,28 +32,29 @@ export function startPlayerConversation(gameState, player, interactionType, upda
             choices = [
                 {
                     text: 'Focus on recent performance',
-                    action: () => {
-                        renderers.hideModal(); // Hide choice modal
-                        let outcomeMessage = '';
+                    action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
+                        renderers.hideModal();
+                        let outcomeMessage = ''; // Initialize
                         let moraleChange = 0;
-                        if (player.currentSeasonStats.averageRating < 6.0) {
+                        // Check if player.currentSeasonStats and averageRating exist
+                        if (player.currentSeasonStats && typeof player.currentSeasonStats.averageRating !== 'undefined' && player.currentSeasonStats.averageRating < 6.0) {
                             moraleChange = getRandomInt(5, 10);
                             outcomeMessage = `${player.name} seems to respond well to your directness. Morale increased!`;
                         } else {
                             moraleChange = getRandomInt(1, 3);
                             outcomeMessage = `${player.name} acknowledges your words. Morale slightly increased.`;
                         }
-                        gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.showModal('Conversation Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                        gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
+                        renderers.showModal('Conversation Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uic.processRemainingWeekEvents(gs, 'player_conversation'); // Pass uic
-                        }}], gameState, updateUICallbacks, 'player_conversation'); // Pass updateUICallbacks
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                        }}], gs, uic, context); // Pass gs, uic, context to nested modal
                     }
                 },
                 {
                     text: 'Emphasize team spirit',
-                    action: () => {
-                        renderers.hideModal(); // Hide choice modal
+                    action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
+                        renderers.hideModal();
                         let outcomeMessage = '';
                         let moraleChange = 0;
                         if (player.traits.loyalty > 10) {
@@ -63,53 +64,54 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                             moraleChange = getRandomInt(2, 5);
                             outcomeMessage = `${player.name} nods. Morale slightly increased.`;
                         }
-                        gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.showModal('Conversation Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                        gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
+                        renderers.showModal('Conversation Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uic.processRemainingWeekEvents(gs, 'player_conversation'); // Pass uic
-                        }}], gameState, updateUICallbacks, 'player_conversation'); // Pass updateUICallbacks
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                        }}], gs, uic, context); // Pass gs, uic, context to nested modal
                     }
                 }
             ];
             break;
-        // Other interaction types (ask_commitment, address_form, etc.) would follow a similar pattern
         case 'ask_commitment':
             message = `You ask ${player.name} about his future at the club. "We're building something special here, and we want you to be a part of it long-term."`;
             choices = [
                 {
                     text: 'Offer new contract (if available)',
-                    action: () => {
+                    action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                         renderers.hideModal();
-                        let outcomeMessage = '';
-                        // Implement contract offer logic here
-                        // For now, assume a simple outcome
-                        if (player.age < 25 && player.overallRating > 10 && gameState.playerClub.finances.balance > 100) {
+                        let outcomeMessage = ''; // Initialize
+                        // Check if player.overallRating exists before using it
+                        const playerOverallRating = player.overallRating || 1; // Default to 1 if undefined
+                        if (player.age < 25 && playerOverallRating > 10 && gs.playerClub.finances.balance > 100) { // Use gs.playerClub
                             outcomeMessage = `${player.name} is happy to discuss terms. He's keen to stay! (Contract negotiation to be implemented)`;
                             // Trigger a follow-up task/event for contract negotiation
                         } else {
                             outcomeMessage = `${player.name} isn't interested in a new deal right now.`;
                         }
-                        renderers.showModal('Commitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                        renderers.showModal('Commitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uic.processRemainingWeekEvents(gs, 'player_conversation'); // Pass uic
-                        }}], gameState, updateUICallbacks, 'player_conversation'); // Pass updateUICallbacks
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                        }}], gs, uic, context); // Pass gs, uic, context to nested modal
                     }
                 },
                 {
                     text: 'Emphasize club vision',
-                    action: () => {
+                    action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                         renderers.hideModal();
-                        let outcomeMessage = '';
+                        let outcomeMessage = ''; // Initialize
                         if (player.traits.ambition < 10 && player.traits.loyalty > 15) {
                             outcomeMessage = `${player.name} is swayed by the club's long-term vision. His commitment has deepened.`;
                             player.traits.commitmentLevel = 'High'; // Direct change for now
                         } else {
                             outcomeMessage = `${player.name} listens politely, but remains non-committal.`;
                         }
-                        renderers.showModal('Commitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                        // Morale change for this path as well
+                        gs.playerClub.squad = playerData.updatePlayerMorale(player.id, getRandomInt(-2, 2)); // Use gs.playerClub
+                        renderers.showModal('Commitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uic.processRemainingWeekEvents(gs, 'player_conversation'); // Pass uic
-                        }}], gameState, updateUICallbacks, 'player_conversation'); // Pass updateUICallbacks
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                        }}], gs, uic, context);
                     }
                 }
             ];
@@ -119,9 +121,9 @@ export function startPlayerConversation(gameState, player, interactionType, upda
             choices = [
                 {
                     text: 'Offer extra training',
-                    action: () => {
+                    action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                         renderers.hideModal();
-                        let outcomeMessage = '';
+                        let outcomeMessage = ''; // Initialize
                         let moraleChange = 0;
                         if (player.traits.professionalism > 10) {
                             outcomeMessage = `${player.name} accepts the challenge. His form should improve.`;
@@ -131,16 +133,16 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                             outcomeMessage = `${player.name} seems unenthusiastic. No immediate change.`;
                             moraleChange = getRandomInt(-2, 0);
                         }
-                        gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.showModal('Form Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                        gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
+                        renderers.showModal('Form Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uic.processRemainingWeekEvents(gs, 'player_conversation'); // Pass uic
-                        }}], gameState, updateUICallbacks, 'player_conversation'); // Pass updateUICallbacks
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                        }}], gs, uic, context);
                     }
                 },
                 {
                     text: 'Suggest a break',
-                    action: () => {
+                    action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                         renderers.hideModal();
                         let outcomeMessage = '';
                         let moraleChange = 0;
@@ -152,20 +154,20 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                             outcomeMessage = `${player.name} is confused by the suggestion. Morale slightly dipped.`;
                             moraleChange = getRandomInt(-3, -1);
                         }
-                        gameState.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange);
-                        renderers.showModal('Form Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                        gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
+                        renderers.showModal('Form Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uic.processRemainingWeekEvents(gs, 'player_conversation'); // Pass uic
-                        }}], gameState, updateUICallbacks, 'player_conversation'); // Pass updateUICallbacks
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                        }}], gs, uic, context);
                     }
                 }
             ];
             break;
         default:
             message = `You had a general chat with ${player.name}.`;
-            choices = [{ text: 'OK', action: (gs, uic, context) => {
+            choices = [{ text: 'OK', action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                 renderers.hideModal();
-                uic.processRemainingWeekEvents(gs, 'player_conversation'); // Pass uic
+                uic.processRemainingWeekEvents(gs, 'player_conversation');
             }}]; // Default action
             break;
     }
@@ -177,63 +179,65 @@ export function startPlayerConversation(gameState, player, interactionType, upda
  * Initiates a recruitment dialogue with a new player who has expressed interest.
  * @param {object} gameState - The current mutable gameState object.
  * @param {object} newPlayer - The player object to recruit.
- * @param {object} updateUICallbacks - Callbacks from Main module. // NEW: Added updateUICallbacks
+ * @param {object} updateUICallbacks - Callbacks from Main module.
  */
-export function startRecruitmentDialogue(gameState, newPlayer, updateUICallbacks) { // NEW: Added updateUICallbacks
+export function startRecruitmentDialogue(gameState, newPlayer, updateUICallbacks) {
     console.log(`DEBUG: playerInteractionLogic.startRecruitmentDialogue called for ${newPlayer.name}`);
     const title = `Recruiting ${newPlayer.name}`;
     const message = `Young talent ${newPlayer.name} (${newPlayer.age}, ${newPlayer.preferredPosition}) is interested in joining. How do you convince them?`;
-    const successChance = 50 + (newPlayer.traits.ambition < 10 ? 10 : 0) + (newPlayer.overallRating < 10 ? 10 : 0); // Easier to recruit less ambitious/lower rated
+    // Ensure newPlayer.overallRating exists or default it for the chance calculation
+    const playerOverallRating = newPlayer.overallRating || 1; // Default to 1 if undefined
+    const successChance = 50 + (newPlayer.traits.ambition < 10 ? 10 : 0) + (playerOverallRating < 10 ? 10 : 0); // Easier to recruit less ambitious/lower rated
 
     const choices = [
         {
             text: 'Promise regular first-team football',
-            action: () => {
+            action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                 renderers.hideModal(); // Hide choice modal
-                let outcomeMessage = '';
+                let outcomeMessage = ''; // Initialize
                 let actualChance = successChance;
-                if (newPlayer.overallRating < 8) actualChance += getRandomInt(5, 10);
+                if (playerOverallRating < 8) actualChance += getRandomInt(5, 10); // Use playerOverallRating
 
                 if (getRandomInt(1, 100) < actualChance) {
-                    gameState.playerClub.squad = playerData.addPlayer(newPlayer, gameState.playerClub.id); // Use gameState.playerClub.id
+                    gs.playerClub.squad = playerData.addPlayer(newPlayer, gs.playerClub.id);
                     outcomeMessage = `SUCCESS! ${newPlayer.name} is convinced by the promise of game time and joins the club!`;
-                    gameState.messages.push({ week: gameState.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
-                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                    gs.messages.push({ week: gs.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uic.processRemainingWeekEvents(gs, 'recruitment_outcome'); // Pass uic
-                    }}], gameState, updateUICallbacks, 'recruitment_outcome'); // Pass updateUICallbacks
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                    }}], gs, uic, context);
                 } else {
                     outcomeMessage = `FAILED. ${newPlayer.name} isn't convinced by your promises and looks elsewhere.`;
-                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uic.processRemainingWeekEvents(gs, 'recruitment_outcome'); // Pass uic
-                    }}], gameState, updateUICallbacks, 'recruitment_outcome'); // Pass updateUICallbacks
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                    }}], gs, uic, context);
                 }
             },
             isPrimary: true
         },
         {
             text: 'Emphasize local camaraderie',
-            action: () => {
+            action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                 renderers.hideModal(); // Hide choice modal
-                let outcomeMessage = '';
+                let outcomeMessage = ''; // Initialize
                 let actualChance = successChance;
                 if (newPlayer.traits.loyalty > 15) actualChance += getRandomInt(2, 5);
 
                 if (getRandomInt(1, 100) < actualChance) {
-                    gameState.playerClub.squad = playerData.addPlayer(newPlayer, gameState.playerClub.id); // Use gameState.playerClub.id
+                    gs.playerClub.squad = playerData.addPlayer(newPlayer, gs.playerClub.id);
                     outcomeMessage = `SUCCESS! ${newPlayer.name} is swayed by the promise of local camaraderie and joins the club!`;
-                    gameState.messages.push({ week: gameState.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
-                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                    gs.messages.push({ week: gs.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uic.processRemainingWeekEvents(gs, 'recruitment_outcome'); // Pass uic
-                    }}], gameState, updateUICallbacks, 'recruitment_outcome'); // Pass updateUICallbacks
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                    }}], gs, uic, context);
                 } else {
                     outcomeMessage = `FAILED. ${newPlayer.name} thanks you but prefers to stay with his current setup.`;
-                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gs, uic, context) => {
+                    renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uic.processRemainingWeekEvents(gs, 'recruitment_outcome'); // Pass uic
-                    }}], gameState, updateUICallbacks, 'recruitment_outcome'); // Pass updateUICallbacks
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                    }}], gs, uic, context);
                 }
             }
         }

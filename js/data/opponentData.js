@@ -39,8 +39,8 @@ export function initializeOpponentClubs(playerCountyData) {
 
         // Add a chance for "reserve" teams from major towns in the region
         if (getRandomInt(1, 100) < 30) {
-            const majorTownCandidates = playerCountyData.towns.filter(t => t.length > 7 || ['Leicester', 'Nottingham', 'Derby', 'Birmingham', 'Sheffield', 'Manchester', 'Liverpool', 'Leeds', 'Bristol', 'Newcastle'].includes(t));
-            const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : playerCountyData.towns);
+            const majorTownCandidates = townsPool.filter(t => t.length > 7 || ['Leicester', 'Nottingham', 'Derby', 'Birmingham', 'Sheffield', 'Manchester', 'Liverpool', 'Leeds', 'Bristol', 'Newcastle'].includes(t));
+            const majorTown = getRandomElement(majorTownCandidates.length > 0 ? majorTownCandidates : townsPool);
             
             if (majorTown) {
                 name = `${majorTown} ${getRandomElement(['Reserves', 'U23s', 'Development Squad'])}`;
@@ -49,7 +49,7 @@ export function initializeOpponentClubs(playerCountyData) {
         }
 
         generatedOpponents.push({
-            id: id, name: name, location: getRandomElement(playerCountyData.towns), nickname: nickname, kitColors: kitColors,
+            id: id, name: name, location: getRandomElement(townsPool), nickname: nickname, kitColors: kitColors,
             overallTeamQuality: getRandomInt(5, 10), // Initial league opponents are lower quality
             currentLeagueId: null, finalLeaguePosition: null, // These will be set by leagueData
             leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
@@ -64,47 +64,35 @@ export function initializeOpponentClubs(playerCountyData) {
 
 /**
  * Generates a single new opponent club. Useful for cup draws or new league teams.
+ * This is now specifically for higher-tier external teams generated for cup.
  * @param {object} playerCountyData - The county data object for the player's chosen location.
- * @param {number} qualityTier - The base quality tier for player generation for this club (e.g., 8-15 for cup).
+ * @param {number} qualityTier - The base quality tier for player generation for this club.
  * @returns {object} A single opponent club structural data object.
  */
-export function generateSingleOpponentClub(playerCountyData, qualityTier = 10) {
+export function generateSingleOpponentClub(playerCountyData, qualityTier = 18) { // Default quality higher
     const id = dataGenerator.generateUniqueId('C');
-    let identity = dataGenerator.generateClubIdentity(playerCountyData);
+    let identity = dataGenerator.generateClubIdentity(playerCountyData); // Use generic identity generation first
     let name = identity.name;
     let nickname = identity.nickname;
     const kitColors = dataGenerator.generateKitColors();
 
-    // Chance for a higher quality team to be a "City" or "United" type
-    if (qualityTier > 12 && getRandomInt(1, 100) < 50) {
-        name = `${getRandomElement(playerCountyData.towns.filter(t => t.length > 5))} ${getRandomElement(['City', 'United', 'Athletic'])}`;
-    } else if (qualityTier > 8 && getRandomInt(1, 100) < 20) {
-        name = `${getRandomElement(playerCountyData.towns)} ${getRandomElement(['Rovers', 'Wanderers'])}`;
+    // Force higher-tier names and quality for these specific clubs
+    name = `${getRandomElement(playerCountyData.towns)} ${getRandomElement(['City', 'United', 'Rovers', 'Athletic'])}`;
+    if (getRandomInt(1,100) < 50) { // Some might be "FC"
+        name += ' FC';
     }
-
-    // Determine potentialLeagueLevel based on qualityTier
-    let potentialLeagueLevel;
-    if (qualityTier >= 18) {
-        potentialLeagueLevel = 1; // Top tier non-league (e.g., National League)
-    } else if (qualityTier >= 15) {
-        potentialLeagueLevel = 2; // High non-league (e.g., NPL Premier)
-    } else if (qualityTier >= 12) {
-        potentialLeagueLevel = 3; // Mid non-league (e.g., NPL Division 1)
-    } else if (qualityTier >= 9) {
-        potentialLeagueLevel = 4; // Lower non-league (e.g., County League Premier)
-    } else {
-        potentialLeagueLevel = 5; // Grassroots/Local Leagues
-    }
+    nickname = getRandomElement(['The Blues', 'The Reds', 'The Lions', 'The Eagles', 'The Wanderers', 'The Towners']);
 
 
     return {
         id: id, name: name, location: getRandomElement(playerCountyData.towns), nickname: nickname, kitColors: kitColors,
-        overallTeamQuality: getRandomInt(qualityTier - 3, qualityTier + 3), // Vary quality around the tier
-        currentLeagueId: null, finalLeaguePosition: null,
+        overallTeamQuality: getRandomInt(qualityTier - 2, qualityTier + 2), // Vary quality around the tier
+        currentLeagueId: null, finalLeaguePosition: null, // These clubs are not in regional leagues
         leagueStats: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
         inCup: true, // New teams are assumed to be in cup
         eliminatedFromCup: false,
-        potentialLeagueLevel: potentialLeagueLevel // NEW: Store the potential league level
+        potentialLeagueLevel: Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.level, // Mark as higher tier
+        customizationStatus: Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED // Default to not customized
     };
 }
 

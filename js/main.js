@@ -16,6 +16,7 @@ import * as gameLoop from './logic/gameLoop.js';
 import * as Constants from './utils/constants.js';
 import { getContrastingTextColor } from './utils/coloursUtils.js';
 import { UK_COUNTIES_DATA } from './data/CountiesData.js'; // MOVED: Ensure this is imported early
+import * as playerInteractionLogic from './logic/playerInteractionLogic.js'; // NEW: Import playerInteractionLogic here
 
 
 console.log("DEBUG: All modules attempted import.");
@@ -49,40 +50,14 @@ export let gameState = {
 console.log("DEBUG: gameState object initialized.");
 
 
-// --- Helper for Calendar Conversion ---
-export function getCalendarWeekString(weekNum) { // Exported for renderers.js
+// --- Helper for Calendar Conversion (Now in dataGenerator.js) ---
+// This function is no longer defined here, it's imported from dataGenerator.js
+/*
+export function getCalendarWeekString(weekNum) {
     if (weekNum <= 0) { return "Invalid Week"; }
-
-    let cumulativeWeeks = 0;
-    for (let i = 0; i < Constants.GAME_WEEK_TO_MONTH_MAP.length; i++) {
-        const monthBlock = Constants.GAME_WEEK_TO_MONTH_MAP[i];
-        const monthStartWeekAbsolute = monthBlock.startWeek; // Use the absolute startWeek from constants
-        const monthEndWeekAbsolute = monthBlock.startWeek + monthBlock.weeks - 1;
-
-        if (weekNum >= monthStartWeekAbsolute && weekNum <= monthEndWeekAbsolute) {
-            const weekInMonthBlock = weekNum - monthStartWeekAbsolute + 1; // Corrected calculation for week within month
-            const currentMonthName = Constants.MONTH_NAMES[(Constants.SEASON_START_MONTH_INDEX + monthBlock.monthIdxOffset) % 12];
-            let weekString = `${currentMonthName} (Week ${weekInMonthBlock})`;
-
-            if (monthBlock.isPreSeason) {
-                weekString += ' - Pre-Season';
-            } else if (monthBlock.isSpecialMonth && currentMonthName === 'December') {
-                 weekString += ' - Special Conditions (Winter)';
-            }
-            // IMPORTANT: Do NOT add cup announcement/match text to the main header string here.
-            // This text is only for the modal dialogs.
-
-            return weekString;
-        }
-    }
-    
-    // Handle Off-season beyond defined league weeks
-    if (weekNum > Constants.TOTAL_LEAGUE_WEEKS) {
-        return `Off-Season Week ${weekNum - Constants.TOTAL_LEAGUE_WEEKS}`;
-    }
-
-    return `Unknown Period Week ${weekNum}`;
+    // ... rest of function
 }
+*/
 
 /**
  * Applies the club's primary and secondary kit colors to CSS variables,
@@ -114,7 +89,7 @@ export function updateUI() { // Renamed from updateGameAndUI for clarity
     }
 
     // Convert week to month/week string
-    const calendarWeekString = getCalendarWeekString(gameState.currentWeek);
+    const calendarWeekString = dataGenerator.getCalendarWeekString(gameState.currentWeek); // Use dataGenerator.getCalendarWeekString
     renderers.updateTopBarStats(
         gameState.currentSeason,
         calendarWeekString,
@@ -281,6 +256,7 @@ function initGame() {
                 // This is where we ensure loadedState has all expected new properties
                 if (gameState.playerClub) {
                     console.log("DEBUG: Player club found in loaded state. Validating properties.");
+                    console.log(gameState.playerClub)
                     // Ensure new properties exist on loaded playerClub
                     if (typeof gameState.playerClub.customizationHistory === 'undefined') {
                         console.warn("DEBUG: playerClub.customizationHistory missing, adding default.");
@@ -487,7 +463,9 @@ export function startNewGame(playerClubDetails) {
     gameState.playerClub.customizationHistory = { nameChanges: 0, colorChanges: 0 };
     gameState.playerClub.leagueStats = { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 };
     gameState.playerClub.finalLeaguePosition = null;
+    gameState.playerClub.kitColors = { primary: playerClubDetails.primaryColor, secondary: playerClubDetails.secondaryColor };
 
+    // Apply theme colors immediately after playerClub is fully set up
     applyThemeColors(playerClubDetails.primaryColor, playerClubDetails.secondaryColor);
 
     // 3. Generate tiered league structure and distribute clubs
@@ -509,8 +487,8 @@ export function startNewGame(playerClubDetails) {
 
     // 4. Initialize county cup for the first season
     gameState.countyCup.competitionId = dataGenerator.generateUniqueId('CUP');
-    // Start with all regional clubs in the cup pool
-    gameState.countyCup.teams = [...updatedAllRegionalClubs];
+    // Start with all regional clubs in the cup pool (only the 60 regional clubs initially)
+    gameState.countyCup.teams = [...updatedAllRegionalClubs]; 
     gameState.countyCup.fixtures = [];
     gameState.countyCup.currentRound = 0;
     gameState.countyCup.playerTeamStatus = 'Active';
@@ -598,7 +576,7 @@ export function applyOpponentCustomization(customizedOpponents) {
  * This function should ideally be called once during initGame.
  */
 export function loadGame() {
-    console.log("DEBUG: Attempting to load game...");
+    console.log("DEBUG: Attempting to load game here...");
     renderers.showLoadingScreen();
     const loadedState = localStorageManager.loadGame();
     const updateUICallbacks = getUpdateUICallbacks(); // Get callbacks here
@@ -672,7 +650,8 @@ export function loadGame() {
                 gameState.playerClub.potentialLeagueLevel = playerClubFromAllClubs.potentialLeagueLevel; // Ensure potentialLeagueLevel is loaded
             }
             // --- CRITICAL FIX END ---
-
+            console.log("651")
+        console.log(gameState)
             applyThemeColors(gameState.playerClub.kitColors.primary, gameState.playerClub.kitColors.secondary);
         }
 

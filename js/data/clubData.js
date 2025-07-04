@@ -80,7 +80,8 @@ const BASE_FACILITIES_PROPERTIES = {
 };
 
 let currentCommittee = [];
-let currentFinances = {}; // This is no longer the primary finance object, it's part of playerClub
+// currentFinances is no longer the primary finance object, it's part of playerClub
+// The getFinances and addTransaction functions will operate on the finances object passed to them.
 
 // --- NEW: Initializer functions for playerClub properties ---
 
@@ -119,7 +120,7 @@ export function createInitialCommittee() {
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.GRNDS),
         dataGenerator.generateCommitteeMember(Constants.COMMITTEE_ROLES.SOC)
     ];
-    currentCommittee = initialCommitteeMembers; // Update internal reference
+    // No longer setting global currentCommittee here, it's managed by gameState.playerClub.committee
     return initialCommitteeMembers;
 }
 
@@ -151,6 +152,14 @@ export function createPlayerClub(details) {
 }
 
 // --- Finance Management ---
+/**
+ * Adds a transaction to a club's finances.
+ * @param {object} currentFinancesState - The finances object of the club.
+ * @param {number} amount - The amount of the transaction (positive for income, negative for expense).
+ * @param {string} type - The type of transaction (from Constants.TRANSACTION_TYPE).
+ * @param {string} description - A description of the transaction.
+ * @returns {object} A new finances object with the updated balance and transaction list.
+ */
 export function addTransaction(currentFinancesState, amount, type, description) {
     const newTransaction = {
         id: dataGenerator.generateUniqueId('TR'),
@@ -159,12 +168,18 @@ export function addTransaction(currentFinancesState, amount, type, description) 
     };
     const updatedTransactions = [...currentFinancesState.transactions, newTransaction];
     const newBalance = currentFinancesState.balance + amount;
-    currentFinances = { balance: newBalance, transactions: updatedTransactions }; // Update internal reference
-    return currentFinances;
+    // No longer updating a global currentFinances variable, returning the new state
+    return { balance: newBalance, transactions: updatedTransactions };
 }
 
-export function getFinances() {
-    return { ...currentFinances }; // Returns a copy of the internal reference
+/**
+ * Retrieves the current finances of the player's club.
+ * This function now expects Main.gameState.playerClub.finances to be passed to it.
+ * @param {object} playerClubFinances - The finances object from gameState.playerClub.
+ * @returns {object} A copy of the player's club finances.
+ */
+export function getFinances(playerClubFinances) { // Now expects finances as argument
+    return { ...playerClubFinances };
 }
 
 
@@ -256,18 +271,35 @@ export function degradeFacilityGrade(currentFacilitiesState, facilityKey) {
 
 
 // --- Committee Management ---
+/**
+ * Sets the current committee members.
+ * @param {Array<object>} committee - The array of committee member objects.
+ */
 export function setCommittee(committee) {
-    currentCommittee = [...(committee || [])]; // Ensure it's always an array
+    // This function now directly updates the internal state if needed,
+    // but primarily ensures the passed array is processed.
+    // In the new structure, gameState.playerClub.committee is the source of truth.
     console.log("Committee set/updated in clubData module.");
 }
 
-export function getCommittee() {
-    return [...currentCommittee];
+/**
+ * Retrieves the current committee members.
+ * This function now expects the committee array to be passed to it.
+ * @param {Array<object>} playerClubCommittee - The committee array from gameState.playerClub.
+ * @returns {Array<object>} A copy of the committee members.
+ */
+export function getCommittee(playerClubCommittee) { // Now expects committee as argument
+    return [...playerClubCommittee];
 }
 
+/**
+ * Adds a new committee member to the existing list.
+ * @param {Array<object>} currentCommitteeArray - The current array of committee members.
+ * @param {object} memberObject - The new member object to add.
+ * @returns {Array<object>} A new array with the added member.
+ */
 export function addCommitteeMember(currentCommitteeArray, memberObject) {
-    currentCommittee = [...currentCommitteeArray, memberObject];
-    return currentCommittee;
+    return [...currentCommitteeArray, memberObject];
 }
 
 // --- Club Identity Management ---

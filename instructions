@@ -1,10 +1,66 @@
-Okay I'm actually gonna plan a radical change to the way customisation and data generation in the game works throughout.
-
-
-
-So instead of being able to customise our league opponents at the start of the game we will just generate them. We will also generate up to 59 clubs  at the start of the game, these will be randomly given a seed so that they are ordered 1-59, the players club will be seed 60. Then the league generated for us will be called 
-
-COUNTYNAME DIVISION 2, the division above will be COUNTYNAME DIVISION 1, and the top division will be COUNTY PREMIER DIVISION. 
-
-
-index
+DEBUG: main.js started execution.
+DEBUG: All modules attempted import.
+DEBUG: gameState object initialized.
+DEBUG: initGame() called.
+DEBUG: Calling eventHandlers.initGlobalListeners()...
+Initializing global event listeners...
+DEBUG: eventHandlers.initGlobalListeners() returned.
+DEBUG: Attempting to load game...
+DEBUG: Calling localStorageManager.loadGame()...
+Game state loaded successfully.
+DEBUG: localStorageManager.loadGame() returned.
+DEBUG: Loaded state found. Attempting to assign to gameState.
+DEBUG: gameState assigned. Current gameState summary: Object { currentSeason: 1, currentWeek: 1, playerClubId: "PC1751651042987964", numLeagues: 3, numClubsInGameWorld: 0 }
+DEBUG: Player club found in loaded state. Validating properties.
+Object { id: "PC1751651042987964", name: "Sileby", location: "Sileby", nickname: "The Sileby", overallTeamQuality: 2, … }
+committee: Array(4)
+currentLeagueId: "L3"
+customizationHistory: Object
+colorChanges: 0
+nameChanges: 0
+__proto__: Object
+customizationStatus: "customized_once"
+eliminatedFromCup: false
+facilities: Object
+fanbase: 0
+finalLeaguePosition: null
+finances: Object
+id: "PC1751651042987964"
+inCup: true
+initialSeedQuality: 60
+leagueStats: Object
+drawn: 0
+goalDifference: 0
+goalsAgainst: 0
+goalsFor: 0
+lost: 0
+played: 0
+points: 0
+won: 0
+__proto__: Object
+location: "Sileby"
+name: "Sileby"
+nickname: "The Sileby"
+overallTeamQuality: 2
+potentialLeagueLevel: 1
+reputation: 10
+squad: Array(15)
+0: Object
+1: Object
+2: Object
+3: Object
+4: Object
+5: Object
+6: Object
+7: Object
+8: Object
+9: Object
+10: Object
+11: Object
+12: Object
+13: Object
+14: Object
+length: 15
+__proto__: Array
+__proto__: Object
+DEBUG: playerClub.kitColors missing, setting default.
