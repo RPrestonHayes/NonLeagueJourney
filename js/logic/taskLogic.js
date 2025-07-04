@@ -8,9 +8,9 @@ import * as Constants from '../utils/constants.js';
 import * as clubData from '../data/clubData.js';
 import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
-import * as Main from '../main.js';
+// REMOVED: import * as Main from '../main.js'; // Removed circular dependency
 import * as dataGenerator from '../utils/dataGenerator.js';
-import * as playerInteractionLogic from './playerInteractionLogic.js';
+import * as playerInteractionLogic from './playerInteractionLogic.js'; // Removed direct import
 
 
 /**
@@ -19,8 +19,10 @@ import * as playerInteractionLogic from './playerInteractionLogic.js';
  * and the modal's action button(s) will be responsible for hiding it.
  * @param {object} gameState - The mutable gameState object.
  * @param {object} task - The task object that was completed.
+ * @param {object} updateUICallbacks - Callbacks from Main module.
+ * @param {object} playerInteractionModule - The playerInteractionLogic module passed from gameLoop. // NEW: Added playerInteractionModule
  */
-export function handleCompletedTaskOutcome(gameState, task) {
+export function handleCompletedTaskOutcome(gameState, task, updateUICallbacks, playerInteractionModule) { // NEW params
     console.log(`DEBUG: taskLogic.handleCompletedTaskOutcome called for task type: ${task.type}`);
     let title = task.description;
     let message = '';
@@ -33,89 +35,145 @@ export function handleCompletedTaskOutcome(gameState, task) {
         renderers.hideModal();
     }
 
-
     switch (task.type) {
-        case Constants.WEEKLY_TASK_TYPES.PITCH_MAINT:
-            const pitchImprovementBase = task.baseHours * 2;
-            let pitchImprovementBonus = 0;
-            const groundsman = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.GRNDS);
-            if (groundsman) { pitchImprovementBonus = Math.round(groundsman.skills.groundsKeepingSkill / 2); }
-            const totalPitchImprovement = pitchImprovementBase + pitchImprovementBonus;
-
-            gameState.playerClub.facilities = clubData.updateFacilityCondition(gameState.playerClub.facilities, Constants.FACILITIES.PITCH, totalPitchImprovement);
-            success = true;
-            message = `You spent ${task.baseHours} hours on general pitch maintenance. Condition improved by ${totalPitchImprovement}%. Pitch condition: ${gameState.playerClub.facilities[Constants.FACILITIES.PITCH].condition}%.`;
-            title = 'Pitch Maintained';
-            break;
-
-        case Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE:
-            const repairAmountBase = task.baseHours * 3;
-            let repairAmountBonus = 0;
-            const groundsmanForRepair = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.GRNDS);
-            if (groundsmanForRepair) { repairAmountBonus = Math.round(groundsmanForRepair.skills.groundsKeepingSkill * 1.5); }
-            const totalRepairAmount = repairAmountBase + repairAmountBonus;
-
-            gameState.playerClub.facilities = clubData.updateFacilityCondition(gameState.playerClub.facilities, Constants.FACILITIES.PITCH, totalRepairAmount);
-            success = true;
-            message = `You focused on repairing specific pitch damage. Condition improved by ${totalRepairAmount}%. Pitch condition: ${gameState.playerClub.facilities[Constants.FACILITIES.PITCH].condition}%.`;
-            title = 'Pitch Damage Repaired';
-            break;
-
-        case Constants.WEEKLY_TASK_TYPES.CLEAN_CHGRMS_SPECIFIC:
-            const cleanAmountBase = task.baseHours * 4;
-            let cleanAmountBonus = 0;
-            const suitableVolunteer = gameState.playerClub.committee.find(c => c.role === Constants.COMMITTEE_ROLES.SOC || c.role === Constants.COMMITTEE_ROLES.V_COORD);
-            if (suitableVolunteer) { cleanAmountBonus = Math.round(suitableVolunteer.skills.workEthic); }
-            const totalCleanAmount = cleanAmountBase + cleanAmountBonus;
-
-            gameState.playerClub.facilities = clubData.updateFacilityCondition(gameState.playerClub.facilities, Constants.FACILITIES.CHGRMS, totalCleanAmount);
-            success = true;
-            message = `You gave the changing rooms a deep clean. Condition improved by ${totalCleanAmount}%. Changing Rooms condition: ${gameState.playerClub.facilities[Constants.FACILITIES.CHGRMS].condition}%.`;
-            title = 'Changing Rooms Cleaned';
-            break;
-
         case Constants.WEEKLY_TASK_TYPES.PLAYER_CONVO:
-            const playerToTalkTo = dataGenerator.getRandomElement(playerData.getSquad().filter(p => p.status.morale < 80) || playerData.getSquad());
+            const eligiblePlayers = gameState.playerClub.squad.filter(p => p.status.morale < 70 || (p.currentSeasonStats && p.currentSeasonStats.averageRating < 6.5)); // Added check for currentSeasonStats
+            const playerToTalkTo = eligiblePlayers.length > 0 ? dataGenerator.getRandomElement(eligiblePlayers) : dataGenerator.getRandomElement(gameState.playerClub.squad);
+
             if (playerToTalkTo) {
-                playerInteractionLogic.startPlayerConversation(playerToTalkTo, 'motivate');
+                const conversationTypes = ['motivate', 'ask_commitment', 'address_form'];
+                const chosenConversationType = dataGenerator.getRandomElement(conversationTypes);
+                
+                // Pass updateUICallbacks to playerInteractionModule functions
+                playerInteractionModule.startPlayerConversation(gameState, playerToTalkTo, chosenConversationType, updateUICallbacks); // Pass updateUICallbacks
                 specificModalOpened = true;
+                success = true; // Task successfully initiated
             } else {
+                message = `You wanted to talk to a player, but couldn't find a suitable one this week.`;
                 title = 'Player Conversation';
-                message = `You spent time trying to talk to players, but couldn't find anyone needing a chat.`;
-                success = true;
+                success = false;
             }
             break;
 
         case Constants.WEEKLY_TASK_TYPES.RECRUIT_PLYR:
-            const potentialPlayer = dataGenerator.generatePlayer(null, dataGenerator.getRandomInt(1, 2));
-            playerInteractionLogic.attemptRecruitment(potentialPlayer, gameState.playerClub.id);
+            const newPlayer = dataGenerator.generatePlayer(dataGenerator.getRandomElement(Object.values(Constants.PLAYER_POSITIONS)), dataGenerator.getRandomInt(1, 10)); // Generate a new player
+            newPlayer.currentClubId = null; // Ensure they are free agents
+            
+            // Pass updateUICallbacks to playerInteractionModule functions
+            playerInteractionModule.startRecruitmentDialogue(gameState, newPlayer, updateUICallbacks); // Pass updateUICallbacks
             specificModalOpened = true;
+            success = true; // Task successfully initiated
             break;
 
         case Constants.WEEKLY_TASK_TYPES.PLAN_FUNDRAISE:
-            message = `You put in ${task.baseHours} hours planning a fundraising event. It's set for next month!`;
-            title = 'Fundraiser Planned';
+            const fundraisingSuccessChance = 60; // Base chance
+            const socialSec = gameState.playerClub.committee.find(cm => cm.role === Constants.COMMITTEE_ROLES.SOC);
+            const socialSecBonus = socialSec ? socialSec.skills.communityRelations : 0;
+            const actualFundraisingChance = fundraisingSuccessChance + socialSecBonus;
+
+            if (dataGenerator.getRandomInt(1, 100) < actualFundraisingChance) {
+                const fundsRaised = dataGenerator.getRandomInt(100, 500);
+                gameState.playerClub.finances = clubData.addTransaction(
+                    gameState.playerClub.finances,
+                    fundsRaised,
+                    Constants.TRANSACTION_TYPE.FUNDRAISE_IN,
+                    'Community Fundraiser'
+                );
+                message = `Your fundraising event was a success, bringing in £${fundsRaised.toFixed(2)}!`;
+                title = 'Fundraiser Success!';
+                success = true;
+            } else {
+                message = `Despite your best efforts, the fundraising event didn't attract much interest. Better luck next time.`;
+                title = 'Fundraiser Disappointment';
+                success = false;
+            }
+            break;
+
+        case Constants.WEEKLY_TASK_TYPES.COMM_ENGAGE:
+            message = `You spent time engaging with various committee members. Their satisfaction and loyalty to you increased slightly.`;
+            // Implement actual committee member morale/loyalty changes here
+            gameState.playerClub.committee.forEach(member => {
+                // Example: Increase loyalty by a small random amount
+                member.personality.loyaltyToYou = Math.min(20, member.personality.loyaltyToYou + dataGenerator.getRandomInt(1, 3));
+                member.personality.currentSatisfaction = Math.min(100, member.personality.currentSatisfaction + dataGenerator.getRandomInt(1, 5));
+            });
+            title = 'Committee Engagement';
             success = true;
             break;
 
         case Constants.WEEKLY_TASK_TYPES.ADMIN_WORK:
-            message = `You diligently handled club administration for ${task.baseHours} hours. All paperwork is up to date.`;
-            title = 'Admin Duties Completed';
+            message = `You tackled the club's administrative backlog. Everything is now up-to-date.`;
+            title = 'Admin Work Completed';
             success = true;
             break;
 
         case Constants.WEEKLY_TASK_TYPES.FAC_CHECK:
-            message = `You thoroughly checked the club's facilities for ${task.baseHours} hours. All appears to be in order for now.`;
-            title = 'Facilities Checked';
+            message = `You performed a general check of all facilities. Minor improvements to condition across the board.`;
+            for (const key in gameState.playerClub.facilities) {
+                const facility = gameState.playerClub.facilities[key];
+                if (facility.level > 0) {
+                    gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                        gameState.playerClub.facilities, key, 5
+                    );
+                }
+            }
+            title = 'Facility Check';
             success = true;
             break;
 
+        case Constants.WEEKLY_TASK_TYPES.PITCH_MAINT:
+        case Constants.WEEKLY_TASK_TYPES.FIX_PITCH_DAMAGE:
+            const pitch = gameState.playerClub.facilities[Constants.FACILITIES.PITCH];
+            if (pitch) {
+                const groundsmanSkill = gameState.playerClub.committee.find(cm => cm.role === Constants.COMMITTEE_ROLES.GRNDS)?.skills.groundsKeepingSkill || 0;
+                let improvementAmount = 0;
+                if (task.type === Constants.WEEKLY_TASK_TYPES.PITCH_MAINT) {
+                    improvementAmount = Math.min(pitch.maxCondition - pitch.condition, 6 + Math.round(groundsmanSkill / 2));
+                    message = `You performed general maintenance on the pitch. Condition improved by ${improvementAmount}%.`;
+                } else { // FIX_PITCH_DAMAGE or Urgent
+                    improvementAmount = Math.min(pitch.maxCondition - pitch.condition, 8 + Math.round(groundsmanSkill * 1.5));
+                    if (pitch.condition < Constants.PITCH_UNPLAYABLE_THRESHOLD) { // Urgent repair
+                        improvementAmount = Math.min(pitch.maxCondition - pitch.condition, 10 + groundsmanSkill * 2);
+                        message = `You performed urgent repairs on the unplayable pitch. Condition improved by ${improvementAmount}%.`;
+                    } else {
+                        message = `You repaired major damage to the pitch. Condition improved by ${improvementAmount}%.`;
+                    }
+                }
+                gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, Constants.FACILITIES.PITCH, improvementAmount
+                );
+                title = 'Pitch Maintenance';
+                success = true;
+            } else {
+                message = `No pitch to maintain!`;
+                title = 'Pitch Maintenance';
+                success = false;
+            }
+            break;
+
+        case Constants.WEEKLY_TASK_TYPES.CLEAN_CHGRMS_SPECIFIC:
+            const chgrms = gameState.playerClub.facilities[Constants.FACILITIES.CHGRMS];
+            if (chgrms) {
+                const secretarySkill = gameState.playerClub.committee.find(cm => cm.role === Constants.COMMITTEE_ROLES.SEC)?.skills.administration || 0;
+                const improvementAmount = Math.min(chgrms.maxCondition - chgrms.condition, 8 + Math.round(secretarySkill / 2));
+                gameState.playerClub.facilities = clubData.updateFacilityCondition(
+                    gameState.playerClub.facilities, Constants.FACILITIES.CHGRMS, improvementAmount
+                );
+                message = `You deep cleaned the changing rooms. Condition improved by ${improvementAmount}%.`;
+                title = 'Changing Rooms Cleaned';
+                success = true;
+            } else {
+                message = `No changing rooms to clean!`;
+                title = 'Changing Rooms Cleaned';
+                success = false;
+            }
+            break;
+
         case Constants.WEEKLY_TASK_TYPES.SPONSOR_SEARCH:
-            const sponsorSearchChance = dataGenerator.getRandomInt(1, 100);
-            const baseSponsorChance = 30 + (gameState.playerClub.reputation / 2);
-            if (sponsorSearchChance <= baseSponsorChance) {
-                const sponsorAmount = dataGenerator.getRandomInt(50, 250);
-                const sponsorName = `${dataGenerator.getRandomName('last')} Corp.`;
+            const sponsorSearchSuccessChance = 50;
+            if (dataGenerator.getRandomInt(1, 100) < sponsorSearchSuccessChance) {
+                const sponsorName = `${dataGenerator.getRandomName('first')} ${dataGenerator.getRandomName('last')} Co.`;
+                const sponsorAmount = dataGenerator.getRandomInt(100, 500);
                 gameState.playerClub.finances = clubData.addTransaction(
                     gameState.playerClub.finances,
                     sponsorAmount,
@@ -141,14 +199,16 @@ export function handleCompletedTaskOutcome(gameState, task) {
     }
 
     if (success) {
-        Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${task.description} completed successfully.` });
+        gameState.messages.push({ week: gameState.currentWeek, text: `${task.description} completed successfully.` });
     } else {
-        Main.gameState.messages.push({ week: Main.gameState.currentWeek, text: `${task.description} completed with mixed results.` });
+        gameState.messages.push({ week: gameState.currentWeek, text: `${task.description} completed with mixed results.` });
     }
     
     // Only show a generic modal IF a specific modal was NOT opened by this task.
     if (!specificModalOpened) {
-        renderers.showModal(title, message, [{ text: 'Continue', action: renderers.hideModal }]);
+        renderers.showModal(title, message, [{ text: 'Continue', action: (gs, uic, context) => {
+            renderers.hideModal();
+            uic.processRemainingWeekEvents(gs, 'task_outcome', uic); // Pass uic
+        }}], gameState, updateUICallbacks, 'task_outcome'); // Pass updateUICallbacks
     }
 }
-

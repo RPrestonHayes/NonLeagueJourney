@@ -47,7 +47,7 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                         gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
                         renderers.showModal('Conversation Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation', uicInner); // Pass uicInner
                         }}], gs, uic, context); // Pass gs, uic, context to nested modal
                     }
                 },
@@ -67,7 +67,7 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                         gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
                         renderers.showModal('Conversation Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation', uicInner); // Pass uicInner
                         }}], gs, uic, context); // Pass gs, uic, context to nested modal
                     }
                 }
@@ -91,15 +91,15 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                         }
                         renderers.showModal('Commitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
-                        }}], gs, uic, context); // Pass gs, uic, context to nested modal
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation', uicInner); // Pass uicInner
+                        }}], gs, uic, context);
                     }
                 },
                 {
                     text: 'Emphasize club vision',
                     action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                         renderers.hideModal();
-                        let outcomeMessage = ''; // Initialize
+                        let outcomeMessage = '';
                         if (player.traits.ambition < 10 && player.traits.loyalty > 15) {
                             outcomeMessage = `${player.name} is swayed by the club's long-term vision. His commitment has deepened.`;
                             player.traits.commitmentLevel = 'High'; // Direct change for now
@@ -110,7 +110,7 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                         gs.playerClub.squad = playerData.updatePlayerMorale(player.id, getRandomInt(-2, 2)); // Use gs.playerClub
                         renderers.showModal('Commitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation', uicInner); // Pass uicInner
                         }}], gs, uic, context);
                     }
                 }
@@ -136,7 +136,7 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                         gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
                         renderers.showModal('Form Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation', uicInner); // Pass uicInner
                         }}], gs, uic, context);
                     }
                 },
@@ -157,7 +157,7 @@ export function startPlayerConversation(gameState, player, interactionType, upda
                         gs.playerClub.squad = playerData.updatePlayerMorale(player.id, moraleChange); // Use gs.playerClub
                         renderers.showModal('Form Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                             renderers.hideModal();
-                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation');
+                            uicInner.processRemainingWeekEvents(gsInner, 'player_conversation', uicInner); // Pass uicInner
                         }}], gs, uic, context);
                     }
                 }
@@ -167,7 +167,7 @@ export function startPlayerConversation(gameState, player, interactionType, upda
             message = `You had a general chat with ${player.name}.`;
             choices = [{ text: 'OK', action: (gs, uic, context) => { // gs and uic are passed from renderers.showModal
                 renderers.hideModal();
-                uic.processRemainingWeekEvents(gs, 'player_conversation');
+                uic.processRemainingWeekEvents(gs, 'player_conversation', uic); // Pass uic
             }}]; // Default action
             break;
     }
@@ -204,13 +204,13 @@ export function startRecruitmentDialogue(gameState, newPlayer, updateUICallbacks
                     gs.messages.push({ week: gs.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
                     renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome', uicInner); // Pass uicInner
                     }}], gs, uic, context);
                 } else {
                     outcomeMessage = `FAILED. ${newPlayer.name} isn't convinced by your promises and looks elsewhere.`;
                     renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome', uicInner); // Pass uicInner
                     }}], gs, uic, context);
                 }
             },
@@ -230,13 +230,13 @@ export function startRecruitmentDialogue(gameState, newPlayer, updateUICallbacks
                     gs.messages.push({ week: gs.currentWeek, text: `New signing: ${newPlayer.name} joins the squad!` });
                     renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome', uicInner); // Pass uicInner
                     }}], gs, uic, context);
                 } else {
                     outcomeMessage = `FAILED. ${newPlayer.name} thanks you but prefers to stay with his current setup.`;
                     renderers.showModal('Recruitment Outcome', outcomeMessage, [{ text: 'Continue', action: (gsInner, uicInner, contextInner) => {
                         renderers.hideModal();
-                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome');
+                        uicInner.processRemainingWeekEvents(gsInner, 'recruitment_outcome', uicInner); // Pass uicInner
                     }}], gs, uic, context);
                 }
             }

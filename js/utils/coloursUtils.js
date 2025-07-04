@@ -51,4 +51,3 @@ export function isColorLight(hexColor) {
 export function getContrastingTextColor(backgroundColor) {
     return isColorLight(backgroundColor) ? '#000000' : '#FFFFFF';
 }
-
