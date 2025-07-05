@@ -318,7 +318,7 @@ function halfTimeAction(matchState, actionType, gameState, updateUICallbacks, di
             if (teamMoraleAvg < 70) {
                 moraleChange = dataGenerator.getRandomInt(5, 10);
                 outcomeMessage = "You gave a rousing team talk! The players look re-energized for the second half.";
-                teamPerformanceBonus = 2; // Boost performance
+                teamPerformanceBonus = 2000000// Boost performance
             } else {
                 moraleChange = dataGenerator.getRandomInt(1, 3);
                 outcomeMessage = "The players are already motivated. You reinforced their confidence.";

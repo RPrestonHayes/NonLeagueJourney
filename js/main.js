@@ -722,7 +722,7 @@ export function advanceWeek() {
     // NEW: Prevent re-entry if already processing
     if (gameState.isProcessingWeek) {
         console.warn("DEBUG: Already processing week. Ignoring duplicate advanceWeek call.");
-        return;
+        //return;
     }
 
     const currentAvailableHours = gameState.availableHours;

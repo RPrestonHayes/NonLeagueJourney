@@ -18,7 +18,7 @@ export const GAME_PHASE = {
 };
 
 // --- Time Management ---
-export const WEEKLY_BASE_HOURS = 10;
+export const WEEKLY_BASE_HOURS = 100;
 export const DECEMBER_HOURS_REDUCTION = 5; // Hours reduced during December
 
 // --- Season Length & Calendar ---
@@ -67,20 +67,16 @@ export const GAME_WEEK_TO_MONTH_MAP = [
 
 // County Cup Schedule (Absolute gameState.currentWeek values)
 export const COUNTY_CUP_ANNOUNCEMENT_WEEKS = [
-    10, // August Week 2 (Game Week 10)
     15, // September Week 2 (Game Week 15)
     19, // October Week 2 (Game Week 19)
-    24, // November Week 3 (Game Week 24)
     32, // January Week 2 (Game Week 32)
     37, // February Week 2 (Game Week 37)
     42, // March Week 3 (Game Week 42)
     46  // April Week 2 (Game Week 46 - Final Announcement)
 ];
 export const COUNTY_CUP_MATCH_WEEKS = [
-    12, // August Week 4 (Game Week 12)
     17, // September Week 4 (Game Week 17)
     21, // October Week 4 (Game Week 21)
-    26, // November Week 5 (Game Week 26)
     35, // January Week 5 (Game Week 35)
     39, // February Week 4 (Game Week 39)
     44, // March Week 5 (Game Week 44)
@@ -88,14 +84,12 @@ export const COUNTY_CUP_MATCH_WEEKS = [
 ];
 
 export const COUNTY_CUP_ROUND_NAMES = {
-    12: 'Round 1', // Keyed by absolute game week of the match
-    17: 'Round 2',
-    21: 'Round 3',
-    26: 'Round 4',
-    35: 'Round 5',
-    39: 'Quarter-Finals',
-    44: 'Semi-Finals',
-    48: 'Final'
+    17: 'Round 1', // Keyed by absolute game week of the match //64
+    21: 'Round 2', //32
+    35: 'Round 4', //16
+    39: 'Quarter-Finals',//8
+    44: 'Semi-Finals',//4
+    48: 'Final' //2
 };
 
 export const COMMITTEE_MEETING_FREQUENCY_WEEKS = 4; // Unchanged
@@ -235,7 +229,7 @@ export const LEAGUE_TIERS = {
 // Initial pool size for County Cup teams generated at game start
 // This is now 0, as the 60 regional clubs are generated, and the 4 higher-tier
 // clubs are generated specifically for the cup draw.
-export const INITIAL_CUP_POOL_SIZE = 0;
+export const INITIAL_CUP_POOL_SIZE = 4;
 
 // Kit Colors (for generation)
 export const KIT_COLORS = [

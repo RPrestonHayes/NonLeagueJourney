@@ -9,6 +9,7 @@
 import * as Constants from '../utils/constants.js';
 import * as gameLoop from '../logic/gameLoop.js';
 import * as Main from '../main.js'; // Import Main to access gameState and other functions
+import * as opponentData from '../data/opponentData.js';
 import { getCalendarWeekString } from '../utils/../utils/dataGenerator.js'; // Import getCalendarWeekString for fixtures display
 
 // --- DOM Element References (Cache for performance and correct ID access) ---
@@ -726,7 +727,7 @@ export function renderEditScreen(gameState) {
     clubToEditSelect.innerHTML = '<option value="">-- Select a Club --</option>'; // Reset dropdown
     editClubDetailsForm.style.display = 'none'; // Hide form initially
 
-    const uncustomizedClubs = Main.opponentData.getAllOpponentClubs(gameState.playerClub.id)
+    const uncustomizedClubs = opponentData.getAllOpponentClubs(gameState.playerClub.id)
         .filter(club => club.customizationStatus === Constants.CLUB_CUSTOMIZATION_STATUS.NOT_CUSTOMIZED)
         .sort((a,b) => a.name.localeCompare(b.name)); // Sort alphabetically
 

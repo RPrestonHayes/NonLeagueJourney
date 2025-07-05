@@ -271,35 +271,18 @@ export function degradeFacilityGrade(currentFacilitiesState, facilityKey) {
 
 
 // --- Committee Management ---
-/**
- * Sets the current committee members.
- * @param {Array<object>} committee - The array of committee member objects.
- */
 export function setCommittee(committee) {
-    // This function now directly updates the internal state if needed,
-    // but primarily ensures the passed array is processed.
-    // In the new structure, gameState.playerClub.committee is the source of truth.
+    currentCommittee = [...(committee || [])]; // Ensure it's always an array
     console.log("Committee set/updated in clubData module.");
 }
 
-/**
- * Retrieves the current committee members.
- * This function now expects the committee array to be passed to it.
- * @param {Array<object>} playerClubCommittee - The committee array from gameState.playerClub.
- * @returns {Array<object>} A copy of the committee members.
- */
-export function getCommittee(playerClubCommittee) { // Now expects committee as argument
-    return [...playerClubCommittee];
+export function getCommittee() {
+    return [...currentCommittee];
 }
 
-/**
- * Adds a new committee member to the existing list.
- * @param {Array<object>} currentCommitteeArray - The current array of committee members.
- * @param {object} memberObject - The new member object to add.
- * @returns {Array<object>} A new array with the added member.
- */
 export function addCommitteeMember(currentCommitteeArray, memberObject) {
-    return [...currentCommitteeArray, memberObject];
+    currentCommittee = [...currentCommitteeArray, memberObject];
+    return currentCommittee;
 }
 
 // --- Club Identity Management ---

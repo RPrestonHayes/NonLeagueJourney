@@ -10,7 +10,7 @@ import * as playerData from '../data/playerData.js';
 import * as renderers from '../ui/renderers.js';
 // REMOVED: import * as Main from '../main.js'; // Removed circular dependency
 import * as dataGenerator from '../utils/dataGenerator.js';
-import * as playerInteractionLogic from './playerInteractionLogic.js'; // Removed direct import
+import * as  playerInteractionLogic from './playerInteractionLogic.js';
 
 
 /**
@@ -19,10 +19,8 @@ import * as playerInteractionLogic from './playerInteractionLogic.js'; // Remove
  * and the modal's action button(s) will be responsible for hiding it.
  * @param {object} gameState - The mutable gameState object.
  * @param {object} task - The task object that was completed.
- * @param {object} updateUICallbacks - Callbacks from Main module.
- * @param {object} playerInteractionModule - The playerInteractionLogic module passed from gameLoop. // NEW: Added playerInteractionModule
- */
-export function handleCompletedTaskOutcome(gameState, task, updateUICallbacks, playerInteractionModule) { // NEW params
+  */
+export function handleCompletedTaskOutcome(gameState, task) { // NEW params
     console.log(`DEBUG: taskLogic.handleCompletedTaskOutcome called for task type: ${task.type}`);
     let title = task.description;
     let message = '';
@@ -43,10 +41,9 @@ export function handleCompletedTaskOutcome(gameState, task, updateUICallbacks, p
             if (playerToTalkTo) {
                 const conversationTypes = ['motivate', 'ask_commitment', 'address_form'];
                 const chosenConversationType = dataGenerator.getRandomElement(conversationTypes);
-                
-                // Pass updateUICallbacks to playerInteractionModule functions
-                playerInteractionModule.startPlayerConversation(gameState, playerToTalkTo, chosenConversationType, updateUICallbacks); // Pass updateUICallbacks
-                specificModalOpened = true;
+                console.log(playerToTalkTo, chosenConversationType);
+                playerInteractionLogic.startPlayerConversation(playerToTalkTo, chosenConversationType); 
+                specificModalOpened = true; 
                 success = true; // Task successfully initiated
             } else {
                 message = `You wanted to talk to a player, but couldn't find a suitable one this week.`;
@@ -58,11 +55,9 @@ export function handleCompletedTaskOutcome(gameState, task, updateUICallbacks, p
         case Constants.WEEKLY_TASK_TYPES.RECRUIT_PLYR:
             const newPlayer = dataGenerator.generatePlayer(dataGenerator.getRandomElement(Object.values(Constants.PLAYER_POSITIONS)), dataGenerator.getRandomInt(1, 10)); // Generate a new player
             newPlayer.currentClubId = null; // Ensure they are free agents
-            
-            // Pass updateUICallbacks to playerInteractionModule functions
-            playerInteractionModule.startRecruitmentDialogue(gameState, newPlayer, updateUICallbacks); // Pass updateUICallbacks
+            playerInteractionLogic.startRecruitmentDialogue(gameState, newPlayer); 
             specificModalOpened = true;
-            success = true; // Task successfully initiated
+            success = true; 
             break;
 
         case Constants.WEEKLY_TASK_TYPES.PLAN_FUNDRAISE:
@@ -208,7 +203,6 @@ export function handleCompletedTaskOutcome(gameState, task, updateUICallbacks, p
     if (!specificModalOpened) {
         renderers.showModal(title, message, [{ text: 'Continue', action: (gs, uic, context) => {
             renderers.hideModal();
-            uic.processRemainingWeekEvents(gs, 'task_outcome', uic); // Pass uic
-        }}], gameState, updateUICallbacks, 'task_outcome'); // Pass updateUICallbacks
+        }}], gameState, 'task_outcome'); 
     }
 }

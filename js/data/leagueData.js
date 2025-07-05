@@ -118,12 +118,16 @@ export function generateCupFixtures(competitionId, teamsInCupPool, season, week)
     // --- FIX START: Generate 4 higher-tier external teams for Round 1 if needed ---
     const isRoundOne = Constants.COUNTY_CUP_MATCH_WEEKS.indexOf(week) === 0;
     const desiredExternalHigherTierTeams = 4; // We want 4 of these
+    console.log(desiredExternalHigherTierTeams);
     let newlyGeneratedHigherTierTeams = [];
 
     if (isRoundOne) {
         const existingHigherTierTeams = externalTeamsInPool.filter(team => team.potentialLeagueLevel === Constants.LEAGUE_TIERS.EXTERNAL_HIGHER_TIER.level);
+        if (existingHigherTierTeams.length >= desiredExternalHigherTierTeams) {
         const numToGenerate = Math.max(0, desiredExternalHigherTierTeams - existingHigherTierTeams.length);
-
+        } else {
+            const numToGenerate = desiredExternalHigherTierTeams;
+        }
         for (let i = 0; i < numToGenerate; i++) {
             // Use generateSingleOpponentClub to create these higher-tier teams
             const newOpponent = dataGenerator.generateSingleOpponentClub(
